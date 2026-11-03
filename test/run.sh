@@ -22,8 +22,8 @@ EXAMPLE_DIR="$REPO_ROOT"        # the repo root IS the desktop image build conte
 cd "$REPO_ROOT"
 
 MILESTONE="${MILESTONE:-M0}"
-BASE_IMAGE="${BASE_IMAGE:-ghcr.io/kairos-io/hadron:main}"
-AURORA_IMAGE="${AURORA_IMAGE:-quay.io/kairos/auroraboot:v0.21.0-alpha.4}"
+BASE_IMAGE="${BASE_IMAGE:-$(make -s -C "$REPO_ROOT" print-base-image)}"
+AURORA_IMAGE="${AURORA_IMAGE:-quay.io/kairos/auroraboot:v0.29.0}"
 
 # The production image already folds in the Kairos init layer (final Dockerfile
 # stage), so it is bootable on its own — no separate wrap step.

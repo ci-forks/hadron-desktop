@@ -29,8 +29,12 @@ check "theme subtitle is '$EXPECTED'" "grep -qF '$EXPECTED' $T"
 check "theme has no unsubstituted placeholder" "! grep -q '@VARIANT_SUBTITLE@' $T"
 
 G=/etc/kairos/branding/grubmenu.cfg
-check "grubmenu.cfg sets the full quiet cmdline" \
-    "grep -qF 'quiet splash loglevel=3 udev.log_level=3 systemd.show_status=false rd.systemd.show_status=false' $G"
+check "grubmenu.cfg lowers the console log level" \
+    "grep -qF 'loglevel=3 udev.log_level=3' $G"
+# kairos-init's grub.cfg owns `splash quiet` and keeps recovery verbose on
+# purpose; forcing them from extra_cmdline would put them on recovery too.
+check "grubmenu.cfg leaves splash/quiet to kairos-init" \
+    "! grep -E '^set extra_cmdline=.*(quiet|splash)' $G"
 check "grubmenu.cfg preserves any pre-existing extra_cmdline" \
     "grep -q 'set extra_cmdline=\"\${extra_cmdline}' $G"
 

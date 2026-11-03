@@ -13,36 +13,26 @@
 # Milestone M1: Sway compositor under systemd-logind, rendering on tty1 for an
 # ly-authenticated user, with a terminal (foot).
 
-ARG BASE_IMAGE=ghcr.io/kairos-io/hadron:main
+# Hadron release the desktop is built on. The base image and the toolchain MUST
+# come from the same release (same musl/GCC ABI), so both derive from this one
+# value. scripts/bump-hadron.sh rewrites it here, in Dockerfile.agent and in the
+# Makefile; .github/workflows/follow-hadron.yml runs that when Hadron tags a
+# new release.
+ARG HADRON_VERSION=v0.6.3
+ARG BASE_IMAGE=ghcr.io/kairos-io/hadron:${HADRON_VERSION}
 # Select the display server + window manager pair. Supported values: sway, i3.
 ARG DESKTOP=sway
 # GPU=vm (default): software/virtual GL only — no LLVM is built.
 # GPU=full: hardware GL (iris/radeonsi) — builds the LLVM/SPIRV stack below.
 ARG GPU=vm
-# kairos-init tool version for the bootable layer (final `kairos` stage). Global
-# ARG so it is usable in that stage's FROM.
-ARG KAIROS_INIT=v0.14.0
+# kairos-init image for the bootable layer (final `kairos` stage). kairos-init
+# now lives in the kairos-io/kairos monorepo, whose master pipeline promotes
+# this tag only after its own image tests pass. Global ARG so it is usable in
+# that stage's FROM.
+ARG KAIROS_INIT_IMAGE=ghcr.io/kairos-io/kairos/kairos-init:master
 
-FROM ghcr.io/kairos-io/hadron-toolchain:main AS toolchain
+FROM ghcr.io/kairos-io/hadron-toolchain:${HADRON_VERSION} AS toolchain
 
-# ---------------------------------------------------------------------------
-# Boot splash. A vendored C99 fork of the upstream hadron splash, rebranded for
-# hadron-desktop (Tokyo Night VGA-16 ramp, ANSI-Shadow HADRON wordmark). The
-# same binary serves BOTH the initramfs copy (baked in by the 50hadron-splash
-# dracut module) and the booted system's hadron-splash.service, so there is one
-# source of truth for the animation.
-#
-# The build-time smoke test exercises the non-tty fallback path in main(), which
-# links and runs the whole program — a segfault or a missing symbol fails the
-# build here rather than at boot, where it would be invisible behind `quiet`.
-# ---------------------------------------------------------------------------
-FROM toolchain AS hadron-splash
-COPY splash/ /build/splash/
-RUN cd /build/splash && make clean && make && ./hadron-splash | grep -q HADRON
-
-# ===========================================================================
-# Wayland display stack (shared with the doom example)
-# ===========================================================================
 
 FROM toolchain AS wayland
 ARG WAYLAND_VERSION=1.24.0
@@ -2643,8 +2633,9 @@ FROM ${DESKTOP}-config AS desktop-config
 # consuming stage.
 #
 # Deliberately NOT in the Makefile's --no-cache-filter list. That list exists
-# because the kairos stage's `dracut -f` bakes the splash into the initramfs
-# behind BuildKit's back. Here the cache key is honest: `COPY install-ui/ ./` is
+# because the kairos stage's `dracut -f` bakes the splash branding and every
+# other initramfs input behind BuildKit's back, and because it follows the
+# moving kairos-init:master tag. Here the cache key is honest: `COPY install-ui/ ./` is
 # content-addressed, so any source change invalidates the build, and the output
 # is COPYied straight into the image rather than swallowed by a later step. Busting
 # it every build would re-run `go mod download` (network) for no correctness gain.
@@ -2708,10 +2699,6 @@ COPY --from=distrobox /distrobox /
 COPY --from=firmware /firmware /
 # Shared + selected session config / launch layer
 COPY --from=desktop-config / /
-# Overwrite the base image's stock splash with our rebranded build. Must land
-# before the kairos-init stage runs `dracut -f`, so the 50hadron-splash dracut
-# module (Task 2) bakes THIS binary into the initramfs rather than the stock one.
-COPY --from=hadron-splash /build/splash/hadron-splash /usr/bin/hadron-splash
 
 # System setup. NOTE: no user is created here — the desktop user is defined at
 # install time via a Kairos cloud-config (see cloud-config.yaml) and lives on
@@ -2783,11 +2770,6 @@ RUN chmod 1777 /tmp; \
     systemctl disable docker.socket docker.service 2>/dev/null || true; \
     rm -f /etc/systemd/system/sockets.target.wants/docker.socket \
       /etc/systemd/system/multi-user.target.wants/docker.service; \
-    # Boot splash: the base image ships /usr/bin/hadron-splash (animated "HADRON"
-    # ASCII, self-limits to ~5s). Pull it into multi-user.target like ly; the unit
-    # is ordered Before=ly@tty1.service so it renders on tty1 before the login.
-    systemctl enable hadron-splash.service 2>/dev/null || true; \
-    ln -sf /usr/lib/systemd/system/hadron-splash.service /etc/systemd/system/multi-user.target.wants/hadron-splash.service; \
     # Flatpak's fusermount helpers must be setuid-root (revokefs-fuse + the
     # document portal). Docker is rootful, so no newuidmap/newgidmap setuid here.
     for h in /usr/bin/fusermount3 /usr/bin/fusermount; do \
@@ -2817,7 +2799,7 @@ COPY --from=install-ui-build /out/hadron-install-ui /usr/bin/hadron-install-ui
 # AuroraBoot can turn straight into an ISO. Build `--target default` for the
 # bare desktop image without this layer.
 # ===========================================================================
-FROM quay.io/kairos/kairos-init:${KAIROS_INIT} AS kairos-init
+FROM ${KAIROS_INIT_IMAGE} AS kairos-init
 
 FROM default AS kairos
 ARG MODEL=generic

@@ -18,8 +18,11 @@
 
 DESKTOP      ?= sway
 IMAGE        ?= $(DESKTOP)-desktop:dev
-BASE_IMAGE   ?= ghcr.io/kairos-io/hadron:main
-AURORA_IMAGE ?= quay.io/kairos/auroraboot:v0.21.0-alpha.4
+# Hadron release to build on. scripts/bump-hadron.sh rewrites this line together
+# with the HADRON_VERSION defaults in the Dockerfiles.
+HADRON_VERSION ?= v0.6.3
+BASE_IMAGE   ?= ghcr.io/kairos-io/hadron:$(HADRON_VERSION)
+AURORA_IMAGE ?= quay.io/kairos/auroraboot:v0.29.0
 AGENT_BASE_IMAGE ?= i3-desktop:dev
 AGENT_IMAGE      ?= agent-desktop:dev
 AGENT_WORK       := build/agent-desktop
@@ -38,7 +41,7 @@ ISO_DIR := $(WORK)/iso
 
 # Optional build args, only passed when set (otherwise the Dockerfile defaults
 # apply: GPU=vm, FIRMWARE=false, VERSION=v0.0.0).
-BUILD_ARGS := --build-arg BASE_IMAGE=$(BASE_IMAGE) --build-arg DESKTOP=$(DESKTOP)
+BUILD_ARGS := --build-arg HADRON_VERSION=$(HADRON_VERSION) --build-arg BASE_IMAGE=$(BASE_IMAGE) --build-arg DESKTOP=$(DESKTOP)
 ifdef GPU
 BUILD_ARGS += --build-arg GPU=$(GPU)
 endif
@@ -51,18 +54,19 @@ endif
 
 export DOCKER_BUILDKIT := 1
 
-.PHONY: all image images iso agent-image agent-iso vm vm-install check-boot-ux clean
+.PHONY: all image images iso agent-image agent-iso vm vm-install check-boot-ux print-base-image clean
 
 all: iso
 
 # The desktop image, with the Kairos init layer folded in as the final stage
 # (build `--target default` for the bare desktop image without it).
-# --no-cache-filter on hadron-splash and kairos: the kairos stage runs
-# kairos-init's `dracut -f`, which bakes the splash into /boot/initrd. BuildKit
-# happily caches that step even when splash/main.c changed, silently shipping a
-# stale initramfs splash. Busting both stages keeps the initramfs honest.
+# --no-cache-filter on kairos: that stage runs kairos-init's `dracut -f`, which
+# bakes the splash branding and everything else into /boot/initrd, and it
+# follows the moving kairos-init:master tag. BuildKit happily caches the step
+# anyway, silently shipping a stale initramfs. Busting it keeps the initramfs
+# honest; it is the cheap stage at the very end.
 image:
-	docker build $(BUILD_ARGS) --no-cache-filter hadron-splash,kairos -t $(IMAGE) .
+	docker build $(BUILD_ARGS) --no-cache-filter kairos -t $(IMAGE) .
 
 images:
 	$(MAKE) DESKTOP=sway image
@@ -72,6 +76,7 @@ agent-image:
 	$(MAKE) DESKTOP=i3 IMAGE=$(AGENT_BASE_IMAGE) $(if $(VERSION),VERSION=$(VERSION),) image
 	docker build -f Dockerfile.agent --target agent \
 	  --build-arg BASE_IMAGE=$(AGENT_BASE_IMAGE) \
+	  --build-arg HADRON_VERSION=$(HADRON_VERSION) \
 	  $(if $(VERSION),--build-arg VERSION=$(VERSION),) \
 	  -t $(AGENT_IMAGE) .
 
@@ -122,6 +127,10 @@ check-boot-ux:
 	  echo "check-boot-ux: no variant image built; run 'make image' first" >&2; exit 1; \
 	fi; \
 	exit $$fail
+
+# The resolved base reference, for CI steps that pull it before the build.
+print-base-image:
+	@echo $(BASE_IMAGE)
 
 clean:
 	rm -rf $(WORK) $(AGENT_WORK)

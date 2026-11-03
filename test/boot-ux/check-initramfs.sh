@@ -1,26 +1,20 @@
 #!/usr/bin/env bash
-# Assert the splash is baked into the image's initramfs.
+# Assert the splash, with our branding, is baked into the image's initramfs.
 #
 #   test/boot-ux/check-initramfs.sh [IMAGE]
 #
-# The overlay-file checks are cheap sanity; the initramfs content checks are the
-# ones that matter. Three known failure modes make the module silently no-op:
-#   1. the splash binary landing in the image AFTER kairos-init runs `dracut -f`
-#      -> initramfs has no splash at all
-#   2. buildx caching the kairos-init stage with the module absent
-#      -> initramfs has no splash at all
-#   3. buildx serving a CACHED kairos stage built against an OLDER splash binary
-#      -> initramfs has a splash, at the right path, that is the wrong build
-# (1) and (2) leave the overlay files present and the initramfs without the
-# splash, and a path grep catches them. (3) is invisible to any path-based check:
-# every such check still passes while the shipped animation is stale. That is the
-# failure the Makefile's `--no-cache-filter hadron-splash,kairos` guards against,
-# so it is checked here by content — the sha256 of the initramfs copy must equal
-# the sha256 of the binary in the image.
+# kairos-init's 50kairos-splash dracut module copies /usr/bin/kairos-splash and
+# every file in /etc/kairos/branding/splash into the initramfs. Two failure
+# modes leave every image-side check green:
+#   1. BuildKit serving a cached kairos stage, so the initramfs carries older
+#      artwork than the image (the Makefile's --no-cache-filter guards this);
+#   2. the module's check() refusing (no /usr/bin/kairos-splash), so the
+#      initramfs has no splash at all.
+# Both are caught here by looking inside /boot/initrd, the second by content.
 #
-# NOTE: the chroot-based exec check below requires root INSIDE the container. It
-# will fail under `docker run --user` or on a rootless / userns-remapped daemon,
-# where chroot(2) is not permitted. That is an environment limitation, not a
+# NOTE: the chroot-based exec check requires root INSIDE the container. It fails
+# under `docker run --user` or on a rootless / userns-remapped daemon, where
+# chroot(2) is not permitted. That is an environment limitation, not a
 # regression in the image.
 set -euo pipefail
 IMAGE="${1:-sway-desktop:dev}"
@@ -34,38 +28,33 @@ check() {
     fi
 }
 
-M=/usr/lib/dracut/modules.d/50hadron-splash
-check "dracut conf.d drop-in present"   "test -f /etc/dracut.conf.d/50-hadron-splash.conf"
-check "module-setup.sh present and executable" "test -x $M/module-setup.sh"
-check "initramfs unit present"          "test -f $M/hadron-splash.service"
-check "immucore quiet drop-in present"  "test -f $M/immucore-quiet.conf"
-check "initrd exists"                   "test -f /boot/initrd"
+B=etc/kairos/branding/splash
+check "initrd exists" "test -f /boot/initrd"
 check "splash baked into the initramfs" \
-    "lsinitrd /boot/initrd 2>/dev/null | grep -q 'usr/bin/hadron-splash'"
+    "lsinitrd /boot/initrd 2>/dev/null | grep -q 'usr/bin/kairos-splash'"
+check "branding baked into the initramfs" \
+    "lsinitrd /boot/initrd 2>/dev/null | grep -q '$B/wordmark'"
 # .wants, not .requires: a failed splash must not be able to stall initrd.target.
-# See the rationale in the dracut module's install().
 check "initramfs unit activated via initrd.target.wants" \
-    "lsinitrd /boot/initrd 2>/dev/null | grep -q 'initrd.target.wants/hadron-splash.service'"
+    "lsinitrd /boot/initrd 2>/dev/null | grep -q 'initrd.target.wants/kairos-splash.service'"
 check "initramfs unit NOT wired as a hard initrd.target.requires dependency" \
-    "! lsinitrd /boot/initrd 2>/dev/null | grep -q 'initrd.target.requires/hadron-splash.service'"
-# Failure mode (3) from the header: a cached kairos stage ships a stale splash at
-# the correct path. Only comparing content catches it.
-check "initramfs splash is the same build as the image's (not a stale cached one)" \
-    "mkdir -p /tmp/ird-sha && cd /tmp/ird-sha && lsinitrd --unpack /boot/initrd && \
-     a=\$(sha256sum /usr/bin/hadron-splash | cut -d' ' -f1) && \
-     b=\$(sha256sum /tmp/ird-sha/usr/bin/hadron-splash | cut -d' ' -f1) && \
-     echo \"image : \$a\" && echo \"initrd: \$b\" && [ \"\$a\" = \"\$b\" ]"
-# The splash is a DYNAMICALLY linked musl binary: without its loader in the
-# initramfs it cannot exec at all, and `quiet` hides the failure entirely (it
-# would surface only as "no animation" on a real boot). The module uses
-# inst_multiple precisely so dracut resolves the ELF's deps. A plain grep for
-# the loader is not proof — the base initramfs already carries musl for
-# immucore — so unpack the initramfs and actually exec the splash inside it via
-# chroot. With stdout not a tty the splash prints its version banner and exits 0,
-# which only happens if the loader and libc resolved.
-check "splash execs inside the unpacked initramfs (musl loader + libc resolve)" \
-    "mkdir -p /tmp/ird && cd /tmp/ird && lsinitrd --unpack /boot/initrd && chroot . /usr/bin/hadron-splash | grep -q HADRON"
+    "! lsinitrd /boot/initrd 2>/dev/null | grep -q 'initrd.target.requires/kairos-splash.service'"
 check "immucore quiet drop-in baked into the initramfs" \
     "lsinitrd /boot/initrd 2>/dev/null | grep -q 'immucore.service.d/10-quiet.conf'"
+check "no leftover hadron-splash in the initramfs" \
+    "! lsinitrd /boot/initrd 2>/dev/null | grep -q 'hadron-splash'"
+# Failure mode (1): stale artwork at the right path. Only content catches it.
+# sha256sum, not cmp: the image has no diffutils, and a missing tool would read
+# as a mismatch.
+check "initramfs branding matches the image's (not a stale cached build)" \
+    "mkdir -p /tmp/ird-sha && cd /tmp/ird-sha && lsinitrd --unpack /boot/initrd && \
+     for f in wordmark tagline palette name; do \
+       a=\$(sha256sum < /$B/\$f) && b=\$(sha256sum < /tmp/ird-sha/$B/\$f) && \
+       [ \"\$a\" = \"\$b\" ] || exit 1; \
+     done"
+# Exec it inside the unpacked initramfs: proves the multi-call binary and its
+# loader resolve there AND that the branding it reads there is ours.
+check "splash execs inside the unpacked initramfs and paints our name" \
+    "mkdir -p /tmp/ird && cd /tmp/ird && lsinitrd --unpack /boot/initrd && chroot . /usr/bin/kairos-splash 2>/dev/null | grep -q 'HADRON DESKTOP'"
 
 exit "$fail"

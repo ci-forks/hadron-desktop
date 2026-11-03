@@ -84,7 +84,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          base_ref="$(grep -oP '^BASE_IMAGE\s*\?=\s*\K\S+' Makefile)"
+          base_ref="$(make -s print-base-image)"
           [ -n "$base_ref" ] || { echo "could not read BASE_IMAGE from the Makefile" >&2; exit 1; }
           docker pull "$base_ref"
 
@@ -222,7 +222,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          base_ref="$(grep -oP '^BASE_IMAGE\s*\?=\s*\K\S+' Makefile)"
+          base_ref="$(make -s print-base-image)"
           [ -n "$base_ref" ] || { echo "could not read BASE_IMAGE from the Makefile" >&2; exit 1; }
           docker pull "$base_ref"
 

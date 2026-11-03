@@ -1,7 +1,9 @@
 ARG BASE_IMAGE=hadron-agent:compat
+# Same Hadron release as the image under test; scripts/bump-hadron.sh keeps it in step.
+ARG HADRON_VERSION=v0.6.3
 FROM ${BASE_IMAGE} AS fixture-runtime
 
-FROM ghcr.io/kairos-io/hadron-toolchain:main AS fixture-build
+FROM ghcr.io/kairos-io/hadron-toolchain:${HADRON_VERSION} AS fixture-build
 # Match the production agent build: the runtime has the canonical firmware
 # symlink, while the toolchain begins with an empty directory at this path.
 RUN rmdir /usr/lib/firmware
