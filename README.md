@@ -86,12 +86,14 @@ kept under `build/sway-desktop/` and `build/i3-desktop/`.
 
 ## Boot splash
 
-The animation is Kairos' own `kairos splash`, which kairos-init installs and
-wires into both the initramfs and the booted system. This repo only supplies
-the artwork in `rootfs/etc/kairos/branding/splash/` (`wordmark`, `tagline`,
-`palette`, `name`; see `internal/splash/branding.go` in kairos-io/kairos for
-the format) and a drop-in that orders the booted half before `ly@tty1`. Add
-`kairos.splash=0` at the boot menu to turn it off for one boot.
+`splash/` builds the boot animation and installs it as `/usr/bin/kairos-splash`.
+kairos-init keeps a binary already at that path, and its dracut module and
+`kairos-splash.service` then run it in the initramfs and in the booted system.
+So there is one animation from firmware to login, with no splash units of our
+own. It draws straight into the framebuffer (simpledrm, then whichever DRM
+driver takes over) over the same gradient as the GRUB theme, and falls back to
+a text animation on a console without one. Add `kairos.splash=0` at the boot
+menu to turn it off for one boot. See `splash/README.md`.
 
 ## Following Hadron
 
