@@ -168,6 +168,10 @@ echo "==> VNC:    $(hostname -I 2>/dev/null | awk '{print $1}'):$VNC_PORT  (disp
 echo "==> Ctrl-C in this terminal stops the VM."
 
 # virtio-vga is the whole point — clean UEFI framebuffer, no garbled boot.
+# The USB tablet gives an absolute pointer, so the mouse lands where it points
+# over VNC and in scripted tests. vmport=off retires QEMU's default VMware
+# mouse, which would otherwise be the active pointer, and which a guest without
+# the vmmouse driver only sees as a relative PS/2 mouse.
 exec qemu-system-x86_64 \
   -name "hadron-${DESKTOP}-desktop-vm" \
   "${ACCEL[@]}" \
@@ -179,6 +183,7 @@ exec qemu-system-x86_64 \
   "${CDROM[@]}" \
   "${SEED_ARGS[@]}" \
   -device virtio-vga \
+  -machine vmport=off -device qemu-xhci -device usb-tablet \
   "${NET_ARGS[@]}" \
   -audiodev none,id=snd0 -device intel-hda -device hda-output,audiodev=snd0 \
   "${QMP_ARGS[@]}" \
