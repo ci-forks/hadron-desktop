@@ -24,6 +24,7 @@ func TestRenderCloudConfigContainsRequiredFields(t *testing.T) {
 		"path: /etc/ly/save.ini",
 		"user = ada",
 		"session_index = 2",
+		"usermod -c ada ada",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("rendered config missing %q\n---\n%s", want, out)
@@ -40,10 +41,12 @@ func TestRenderCloudConfigUsesInitramfsStage(t *testing.T) {
 	if !strings.Contains(out, "stages:\n  initramfs:\n") {
 		t.Errorf("expected stages.initramfs hook:\n%s", out)
 	}
-	// Anchored to the stage indent so `reboot: true` in the install block does
-	// not satisfy it.
-	if strings.Contains(out, "\n  boot:") {
-		t.Errorf("expected no boot stage, save.ini would land after ly starts:\n%s", out)
+	// save.ini must sit in the initramfs stage, ahead of any boot stage (which
+	// does exist, for the display name). Anchored to the stage indent so
+	// `reboot: true` in the install block does not count as a boot stage.
+	ini, boot := strings.Index(out, "path: /etc/ly/save.ini"), strings.Index(out, "\n  boot:")
+	if ini < 0 || (boot >= 0 && boot < ini) {
+		t.Errorf("save.ini must be written in the initramfs stage, before ly starts:\n%s", out)
 	}
 }
 

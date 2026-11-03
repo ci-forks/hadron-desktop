@@ -52,3 +52,9 @@ stages:
           content: |
             user = kairos
             session_index = 2
+  boot:
+    # The name graphical login screens (COSMIC's greeter) show. Kairos' users
+    # block has no gecos field and fills in "Created by entities".
+    - name: "Display name"
+      commands:
+        - usermod -c Kairos kairos
