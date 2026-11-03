@@ -14,8 +14,10 @@ in one multi-stage `Dockerfile`; BuildKit only evaluates the selected graphics
 stack.
 
 The repo is self-contained (`Dockerfile`, common and variant rootfs overlays,
-and a `test/` harness) and depends only on the published Hadron images
-(`ghcr.io/kairos-io/hadron{,-toolchain}:main`) — no Hadron source checkout needed.
+and a `test/` harness) and depends only on published images: a pinned Hadron
+release (`ghcr.io/kairos-io/hadron{,-toolchain}:<HADRON_VERSION>`) and
+kairos-init from the Kairos monorepo (`ghcr.io/kairos-io/kairos/kairos-init:master`)
+— no Hadron or Kairos source checkout needed.
 
 > Status: built incrementally — see the milestone table below.
 
@@ -61,6 +63,47 @@ docker build --build-arg DESKTOP=i3 -t i3-desktop:dev .
 Only `sway` and `i3` are valid selector values. The corresponding artifacts are
 kept under `build/sway-desktop/` and `build/i3-desktop/`.
 
+## Everyday use
+
+- **Shortcuts:** `Super+F1` opens a cheat sheet. `Super+D` launches apps,
+  `Super+Enter` opens a terminal, `Super+Shift+E` opens the power menu (log
+  out, suspend, reboot, power off). A one-time notification on the first login
+  points at all three.
+- **Apps:** `flatpak install flathub <app>`; `distrobox` for a mutable Linux to
+  tinker in.
+- **Updates:** a desktop notification appears when a new Hadron Desktop
+  release is out. In a terminal:
+
+  ```sh
+  hadron-update                 # installed vs latest release
+  hadron-update upgrade         # install the latest; asks, then offers a reboot
+  hadron-update upgrade --version v0.1.2   # a specific release (also rolls back)
+  ```
+
+  Upgrades are A/B: `kairos-agent upgrade` writes the new image next to the
+  running one, which stays untouched until the reboot, and the previous system
+  is kept as the fallback boot entry.
+
+## Boot splash
+
+The animation is Kairos' own `kairos splash`, which kairos-init installs and
+wires into both the initramfs and the booted system. This repo only supplies
+the artwork in `rootfs/etc/kairos/branding/splash/` (`wordmark`, `tagline`,
+`palette`, `name`; see `internal/splash/branding.go` in kairos-io/kairos for
+the format) and a drop-in that orders the booted half before `ly@tty1`. Add
+`kairos.splash=0` at the boot menu to turn it off for one boot.
+
+## Following Hadron
+
+The Hadron release is pinned in one value kept in four places (the
+`Makefile`, `Dockerfile`, `Dockerfile.agent` and the agent gate's
+`test/agent/Dockerfile.compat`). `scripts/bump-hadron.sh vX.Y.Z` moves them all; `--check` fails if they ever disagree, and CI runs it.
+
+`.github/workflows/follow-hadron.yml` runs daily. When kairos-io/hadron
+publishes a newer release (and its images are pullable), it pins it, commits to
+`main`, tags the next patch version and dispatches the release pipeline below.
+A failed release publishes nothing, so installed systems never see it.
+
 ## Releases
 
 Pushing a `v`-prefixed tag runs `.github/workflows/release.yml`. The workflow
@@ -72,6 +115,11 @@ asset and creates a GitHub Release:
 git tag -a v1.0.0 -m "Hadron Desktop v1.0.0"
 git push origin v1.0.0
 ```
+
+Every release also pushes one upgrade image per flavor,
+`ghcr.io/kairos-community/hadron-desktop:<flavor>-<tag>` (the agent image only
+after all five gates pass). `hadron-update` installs those; it only considers
+tags GitHub reports as the latest *published* release.
 
 Each release carries twelve files — three ISOs, and for every ISO a checksum,
 an SPDX SBOM, and a build manifest:
@@ -90,7 +138,7 @@ went into the image, so a downloaded ISO can be traced back to its sources:
 {
   "release_tag": "v1.0.0",
   "git_commit": "…",
-  "hadron_base_reference": "ghcr.io/kairos-io/hadron:main",
+  "hadron_base_reference": "ghcr.io/kairos-io/hadron:v0.6.3",
   "hadron_base_digest": "sha256:…",
   "image_id": "sha256:…",
   "iso": "hadron-desktop-agent-v1.0.0-amd64.iso",
@@ -331,6 +379,8 @@ hadron-desktop/
   cloud-config.yaml   # example Kairos install config (creates the desktop user)
   rootfs/             # shared OS, installer and service overlay
   install-ui/         # Go TUI installer (-> /usr/bin/hadron-install-ui)
+  update/             # update checker / notifier / upgrade CLI (-> /usr/bin/hadron-update)
+  scripts/            # release manifest, Hadron pin bump
   rootfs-sway/        # Wayland/Sway session config and native tools
   rootfs-i3/          # XLibre/i3 session config and native tools
   tools/
