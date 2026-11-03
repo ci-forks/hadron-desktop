@@ -36,8 +36,9 @@ command -v docker >/dev/null || die "docker is required"
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Makefile: `BASE_IMAGE ?= ghcr.io/kairos-io/hadron:main`.
-base_ref="$(grep -oP '^BASE_IMAGE\s*\?=\s*\K\S+' "$repo_root/Makefile" || true)"
+# Makefile: `BASE_IMAGE ?= ghcr.io/kairos-io/hadron:$(HADRON_VERSION)`. Asked of
+# make itself, so the reference is the resolved one, not the template.
+base_ref="$(make -s -C "$repo_root" print-base-image 2>/dev/null || true)"
 [ -n "$base_ref" ] || die "could not read BASE_IMAGE from the Makefile"
 
 # The base must be in the local image store, carrying the registry digest it was

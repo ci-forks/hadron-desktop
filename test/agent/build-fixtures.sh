@@ -19,7 +19,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 IMAGE="${AGENT_IMAGE:-agent-desktop:dev}"
-TOOLCHAIN="${FIXTURE_TOOLCHAIN:-ghcr.io/kairos-io/hadron-toolchain:main}"
+TOOLCHAIN="${FIXTURE_TOOLCHAIN:-ghcr.io/kairos-io/hadron-toolchain:$("$REPO_ROOT/scripts/bump-hadron.sh" --current)}"
 OUT_DIR="${FIXTURE_OUT:-$SCRIPT_DIR/runtime/fixtures}"
 SRC="$SCRIPT_DIR/fixtures/gtk3/main.c"
 HTML="$SCRIPT_DIR/fixtures/chromium/index.html"

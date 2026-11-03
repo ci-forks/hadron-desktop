@@ -1,0 +1,14 @@
+#!/bin/sh
+# fuzzel power menu for Sway, bound to Mod+Shift+e and the waybar power button.
+# Hadron has no polkit, so logind refuses reboot/poweroff/suspend from an
+# unprivileged session; they go through sudo instead. The desktop user is in
+# `admin`, which Kairos' 10_accounting stage gives passwordless sudo, so -n
+# never prompts.
+sel=$(printf '%s\n' "󰍃  Log out" "󰒲  Suspend" "󰜉  Reboot" "󰐥  Power off" |
+    fuzzel --dmenu --width=24 --lines=4 --prompt='Power > ') || exit 0
+case "$sel" in
+    *"Log out")   swaymsg exit ;;
+    *Suspend)     sudo -n /usr/bin/systemctl suspend ;;
+    *Reboot)      sudo -n /usr/bin/systemctl reboot ;;
+    *"Power off") sudo -n /usr/bin/systemctl poweroff ;;
+esac

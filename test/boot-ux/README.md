@@ -13,9 +13,9 @@ Or via make, which runs the suite for whichever variants are already built:
 
 | Script | Asserts |
 |---|---|
-| `check-splash.sh` | `/usr/bin/hadron-splash` present, non-tty fallback prints `HADRON`, no stale branding |
-| `check-initramfs.sh` | dracut module files present **and** the splash actually baked into `/boot/initrd` |
-| `check-branding.sh` | `vconsole.conf`, per-variant GRUB theme subtitle, full quiet cmdline in `grubmenu.cfg` |
+| `check-splash.sh` | kairos-init's `/usr/bin/kairos-splash` present, our branding files parse (non-tty fallback prints `HADRON DESKTOP`, nothing rejected), unit ordered before ly, old vendored splash gone |
+| `check-initramfs.sh` | splash **and** branding baked into `/boot/initrd`, branding identical to the image's, the splash execs inside it |
+| `check-branding.sh` | `vconsole.conf`, per-variant GRUB theme subtitle, `grubmenu.cfg` log level, release identity file, `hadron-update` |
 | `check-iso-overlay.sh` | staged live `grub.cfg` is retitled, themed, quiet, and has no unrendered `{{...}}` placeholders |
 
 These do not boot anything. The animation itself, and the themed GRUB menu, need
@@ -29,8 +29,10 @@ a VM:
 Two failure modes leave every other check passing while the feature silently
 does nothing:
 
-1. The splash binary landing in the image **after** kairos-init runs `dracut -f`.
-2. BuildKit **caching** the kairos stage, shipping a stale initramfs.
+1. dracut's `check()` refusing the `50kairos-splash` module, so the initramfs
+   has no splash at all.
+2. BuildKit **caching** the kairos stage, shipping older artwork in the
+   initramfs than in the image.
 
 `check-initramfs.sh` inspects `/boot/initrd` itself, which is the only way to
 catch either.

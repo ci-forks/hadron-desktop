@@ -5,7 +5,7 @@
     "spacing": 4,
     "modules-left": ["sway/workspaces", "sway/mode"],
     "modules-center": ["clock"],
-    "modules-right": ["network", "bluetooth", "wireplumber", "cpu", "memory", "battery", "tray"],
+    "modules-right": ["network", "bluetooth", "wireplumber", "cpu", "memory", "battery", "tray", "custom/power"],
 
     "sway/workspaces": {
         "disable-scroll": false,
@@ -63,5 +63,10 @@
     "tray": {
         "icon-size": 18,
         "spacing": 8
+    },
+    "custom/power": {
+        "format": "󰐥",
+        "tooltip-format": "Power menu (Super+Shift+E)",
+        "on-click": "hadron-power-menu"
     }
 }

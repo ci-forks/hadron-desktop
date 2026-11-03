@@ -1,4 +1,7 @@
 ARG BASE_IMAGE=i3-desktop:dev
+# Must match the Hadron release the i3 base image was built on (see the
+# top-level Dockerfile); scripts/bump-hadron.sh keeps the two in step.
+ARG HADRON_VERSION=v0.6.3
 FROM ${BASE_IMAGE} AS xlibre-desktop
 FROM rust:1.97.0-alpine3.22 AS rust-toolchain
 
@@ -20,7 +23,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     -ldflags="-s -w -X github.com/mudler/hadron-desktop/agent/internal/buildinfo.Version=${VERSION} -X github.com/mudler/hadron-desktop/agent/internal/buildinfo.CuaRevision=${CUA_COMMIT}" \
     -o /out/hadron-agent ./cmd/hadron-agent
 
-FROM ghcr.io/kairos-io/hadron-toolchain:main AS agent-native
+FROM ghcr.io/kairos-io/hadron-toolchain:${HADRON_VERSION} AS agent-native
 # The desktop root has the canonical /usr/lib/firmware symlink while the
 # toolchain has an empty directory at that path; normalize it before overlay.
 RUN rmdir /usr/lib/firmware
@@ -170,3 +173,6 @@ RUN groupadd -r hadron-agent-control && \
     ! grep -q 'not found' /tmp/cua-ldd.txt && \
     rm /tmp/cua-ldd.txt && \
     ! getent passwd agent
+# The appliance upgrades along its own image line, not the i3 one it is built on.
+RUN sed -i 's/^FLAVOR=.*/FLAVOR=agent/' /etc/hadron-desktop/release && \
+    grep -qx 'FLAVOR=agent' /etc/hadron-desktop/release

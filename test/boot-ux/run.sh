@@ -17,6 +17,13 @@ fail=0
 
 "$SCRIPT_DIR/check-splash.sh"    "$IMAGE" || fail=1
 "$SCRIPT_DIR/check-initramfs.sh" "$IMAGE" || fail=1
+# The agent appliance boots the i3 session (so its subtitle says i3) but
+# upgrades along its own image line. The Makefile's tags are <flavor>-desktop:*,
+# so the flavor is read off the tag; set EXPECTED_FLAVOR to override.
+case "$IMAGE" in
+    sway-desktop:*|i3-desktop:*|agent-desktop:*) : "${EXPECTED_FLAVOR:=${IMAGE%%-desktop:*}}" ;;
+esac
+EXPECTED_FLAVOR="${EXPECTED_FLAVOR:-}" \
 "$SCRIPT_DIR/check-branding.sh"  "$IMAGE" "$SUBTITLE" || fail=1
 "$SCRIPT_DIR/check-installer.sh" "$IMAGE" || fail=1
 

@@ -9,7 +9,7 @@ on:
       - "test/agent/**"
       - "install-ui/**"
       - "test/boot-ux/**"
-      - "splash/**"
+      - "rootfs/etc/kairos/branding/**"
       - "auroraboot/**"
       - "Dockerfile"
       - "Makefile"

@@ -29,9 +29,22 @@ check "theme subtitle is '$EXPECTED'" "grep -qF '$EXPECTED' $T"
 check "theme has no unsubstituted placeholder" "! grep -q '@VARIANT_SUBTITLE@' $T"
 
 G=/etc/kairos/branding/grubmenu.cfg
-check "grubmenu.cfg sets the full quiet cmdline" \
-    "grep -qF 'quiet splash loglevel=3 udev.log_level=3 systemd.show_status=false rd.systemd.show_status=false' $G"
+check "grubmenu.cfg lowers the console log level" \
+    "grep -qF 'loglevel=3 udev.log_level=3' $G"
+# kairos-init's grub.cfg owns `splash quiet` and keeps recovery verbose on
+# purpose; forcing them from extra_cmdline would put them on recovery too.
+check "grubmenu.cfg leaves splash/quiet to kairos-init" \
+    "! grep -E '^set extra_cmdline=.*(quiet|splash)' $G"
 check "grubmenu.cfg preserves any pre-existing extra_cmdline" \
     "grep -q 'set extra_cmdline=\"\${extra_cmdline}' $G"
+
+# Release identity: hadron-update builds the upgrade image reference from it.
+R=/etc/hadron-desktop/release
+FLAVOR="${EXPECTED_FLAVOR:-${EXPECTED%% *}}"
+check "release file names the '$FLAVOR' image line" "grep -qx 'FLAVOR=$FLAVOR' $R"
+check "release file records the Hadron base" "grep -Eq '^HADRON_VERSION=v[0-9]' $R"
+check "release file points at the published image repo" \
+    "grep -qx 'IMAGE_REPO=ghcr.io/kairos-community/hadron-desktop' $R"
+check "hadron-update is installed and runs" "hadron-update help | grep -q upgrade"
 
 exit "$fail"

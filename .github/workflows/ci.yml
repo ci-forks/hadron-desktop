@@ -1,0 +1,47 @@
+name: CI
+
+# Fast checks that need no image build: the Go tools' unit tests, the Hadron
+# pin consistency check, and syntax checks on the session scripts and configs.
+# The image itself is built by release.yml and, for the agent, agent-gates.yml.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: update/go.mod
+          cache: false
+
+      - name: hadron-update tests
+        working-directory: update
+        run: go vet ./... && go test ./...
+
+      - name: install-ui tests
+        working-directory: install-ui
+        run: go vet ./... && go test ./...
+
+      - name: Hadron pins agree
+        run: scripts/bump-hadron.sh --check
+
+      - name: Session scripts and configs parse
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in rootfs*/usr/bin/* scripts/*.sh test/boot-ux/*.sh; do
+            if head -n1 "$f" | grep -q bash; then bash -n "$f"; else sh -n "$f"; fi
+          done
+          jq empty rootfs-sway/etc/xdg/waybar/config

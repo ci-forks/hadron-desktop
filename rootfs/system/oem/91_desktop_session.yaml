@@ -18,14 +18,14 @@ stages:
       commands:
         - mkdir -p /etc/systemd/system/multi-user.target.wants
         - ln -sf /usr/lib/systemd/system/ly@.service /etc/systemd/system/multi-user.target.wants/ly@tty1.service
-        - ln -sf /usr/lib/systemd/system/hadron-splash.service /etc/systemd/system/multi-user.target.wants/hadron-splash.service
         - systemctl daemon-reload
-        # Enqueue the splash then ly WITHOUT waiting. ly@.service is Type=idle,
+        # Enqueue ly WITHOUT waiting. The boot splash is kairos-init's
+        # kairos-splash.service; a drop-in orders it Before=ly@tty1, so ly
+        # still waits for the animation to finish. ly@.service is Type=idle,
         # which defers its execution until every pending job is done -- including
         # THIS cos-setup-boot run. A blocking `systemctl start` would therefore
         # deadlock (cos-setup-boot waits for the start job; the idle unit waits
         # for cos-setup-boot to finish). --no-block breaks the cycle: ly runs
         # once cos-setup-boot completes, by which point later boot stages (e.g.
         # the agent appliance's account-creation stage) have already run.
-        - systemctl start --no-block hadron-splash.service || true
         - systemctl start --no-block ly@tty1.service || true
