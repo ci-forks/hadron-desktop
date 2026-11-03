@@ -20,7 +20,7 @@ IMAGE="${1:?usage: build.sh <IMAGE> <OUT_DIR> [ISO_NAME]}"
 OUT_DIR="${2:?usage: build.sh <IMAGE> <OUT_DIR> [ISO_NAME]}"
 ISO_NAME="${3:-}"
 ARCH="${ARCH:-amd64}"
-AURORA_IMAGE="${AURORA_IMAGE:-quay.io/kairos/auroraboot:v0.21.0-alpha.4}"
+AURORA_IMAGE="${AURORA_IMAGE:-quay.io/kairos/auroraboot:v0.29.0}"
 
 THEME_SRC="rootfs/etc/kairos/branding/hadron-theme"
 OVERLAY_DIR="$OUT_DIR/iso-overlay"
@@ -110,11 +110,11 @@ fi
 #              /usr/lib/grub/x86_64-efi/grubx64.efi onto the ISO, so the EFI core
 #              and these modules are the same GRUB build by construction.
 #   i386-pc -> $AURORA_IMAGE. AuroraBoot builds the eltorito BIOS core itself,
-#              inside its own container, with its own grub2-mkimage. That is a
-#              DIFFERENT GRUB than the build image's: today AuroraBoot
-#              v0.21.0-alpha.4 is GRUB 2.12 while the desktop image is 2.14, and
-#              gfxmenu.mod differs between them. Staging $IMAGE's i386-pc tree
-#              here would hand a 2.12 core a set of 2.14 modules.
+#              inside its own container, with its own grub2-mkimage. That can be
+#              a DIFFERENT GRUB than the build image's (AuroraBoot
+#              v0.21.0-alpha.4 shipped 2.12 while the desktop image had 2.14,
+#              and gfxmenu.mod differs between them), so staging $IMAGE's
+#              i386-pc tree here could hand the core mismatched modules.
 #
 # Best-effort, like every other asset here: if a source tree is absent we warn
 # and carry on, and the `if [ -f theme.txt ]` guard in grub.cfg leaves GRUB on
