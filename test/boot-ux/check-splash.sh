@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
-# Assert the boot splash is kairos-init's, wearing the hadron-desktop branding.
+# Assert the boot splash is ours, installed where Kairos runs it.
 #
 #   test/boot-ux/check-splash.sh [IMAGE]
 #
-# The animation is `kairos splash` (kairos-io/kairos internal/splash), installed
-# by kairos-init as /usr/bin/kairos-splash. This repo only ships artwork in
-# /etc/kairos/branding/splash and an ordering drop-in for ly. Run with stdout on
-# a pipe, the splash takes its non-tty fallback: it prints the branding name and
-# reports any artwork it rejected on stderr, then falls back to the stock Kairos
-# art. So "prints HADRON DESKTOP and complains about nothing" proves the files
-# are present AND parse.
+# splash/ is built into /usr/bin/kairos-splash. kairos-init keeps an existing
+# binary at that path instead of linking its stock `kairos splash` there, and
+# both its units and its dracut module exec that path. So the image must carry
+# our binary, not the symlink, and it must run: the non-tty fallback prints the
+# name, and --render draws one framebuffer frame without a framebuffer.
 set -euo pipefail
 IMAGE="${1:-sway-desktop:dev}"
 fail=0
@@ -22,23 +20,21 @@ check() {
     fi
 }
 
-B=/etc/kairos/branding/splash
-check "kairos-splash present and executable" 'test -x /usr/bin/kairos-splash'
-for f in wordmark tagline palette name; do
-    check "branding file $f present" "test -s $B/$f"
-done
-check "non-tty fallback prints the hadron-desktop name" \
-    '/usr/bin/kairos-splash 2>/dev/null | grep -q "HADRON DESKTOP"'
-# Artwork the splash rejects is reported as "<file>: <reason>" on stderr while
-# the stock Kairos artwork is painted instead -- a silent rebrand failure.
-check "no branding file is rejected" \
-    '! /usr/bin/kairos-splash 2>&1 >/dev/null | grep -Eq "(wordmark|palette|tagline|name):"'
+check "kairos-splash is our binary, not the stock symlink" \
+    'test -x /usr/bin/kairos-splash && ! test -L /usr/bin/kairos-splash'
+check "binary is the hadron-desktop splash" \
+    'grep -aq "built from source on Kairos" /usr/bin/kairos-splash'
+check "non-tty fallback prints HADRON" '/usr/bin/kairos-splash | grep -q HADRON'
+check "renders a framebuffer frame" \
+    'mkdir -p /run/t && /usr/bin/kairos-splash --render=/run/t/f.ppm --size=320x200 && test "$(stat -c %s /run/t/f.ppm)" -eq $((15 + 320 * 200 * 3))'
+check "splash shows the release version" \
+    'test -s /etc/kairos/branding/splash/version && /usr/bin/kairos-splash | grep -q "HADRON v"'
 check "booted splash unit enabled" \
     'test -L /etc/systemd/system/multi-user.target.wants/kairos-splash.service'
 check "booted splash ordered before ly on tty1" \
     'grep -qx "Before=ly@tty1.service" /usr/lib/systemd/system/kairos-splash.service.d/10-hadron-desktop.conf'
-# The vendored splash this replaced must be gone entirely, or two animations
-# fight over tty1.
+# The splash this replaced must be gone entirely, or two animations fight
+# over tty1.
 check "no leftover hadron-splash unit or dracut module" \
     '! test -e /usr/lib/systemd/system/hadron-splash.service && ! test -e /usr/lib/dracut/modules.d/50hadron-splash && ! test -e /etc/dracut.conf.d/50-hadron-splash.conf'
 
