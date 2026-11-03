@@ -173,3 +173,6 @@ RUN groupadd -r hadron-agent-control && \
     ! grep -q 'not found' /tmp/cua-ldd.txt && \
     rm /tmp/cua-ldd.txt && \
     ! getent passwd agent
+# The appliance upgrades along its own image line, not the i3 one it is built on.
+RUN sed -i 's/^FLAVOR=.*/FLAVOR=agent/' /etc/hadron-desktop/release && \
+    grep -qx 'FLAVOR=agent' /etc/hadron-desktop/release

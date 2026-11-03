@@ -2655,6 +2655,20 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/hadron-
     && { /out/hadron-install-ui --nonsense 2>/dev/null; [ $? -eq 2 ]; }
 
 
+# ---------------------------------------------------------------------------
+# hadron-update: release checker, desktop notifier and `kairos-agent upgrade`
+# wrapper. Static and dependency-free (stdlib only), like the installer TUI, and
+# for the same reasons kept out of the --no-cache-filter list. The unit tests
+# run here so a broken updater fails the image build, not a user's upgrade.
+# ---------------------------------------------------------------------------
+FROM golang:1.25.0-alpine3.22 AS update-build
+WORKDIR /src
+COPY update/ ./
+RUN CGO_ENABLED=0 go test ./... \
+    && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/hadron-update . \
+    && { /out/hadron-update --nonsense >/dev/null 2>&1; [ $? -eq 2 ]; }
+
+
 FROM ${BASE_IMAGE} AS default
 # Built desktop stack
 COPY --from=desktop-rootfs / /
@@ -2787,6 +2801,8 @@ RUN chmod 1777 /tmp; \
 # system. (The shell installer it replaces lived in /usr/local/bin and only
 # worked because the installer runs in the live environment.)
 COPY --from=install-ui-build /out/hadron-install-ui /usr/bin/hadron-install-ui
+# Update checker + upgrade CLI. /usr/bin for the same /usr/local reason.
+COPY --from=update-build /out/hadron-update /usr/bin/hadron-update
 
 
 # ===========================================================================
@@ -2815,6 +2831,17 @@ RUN --mount=type=bind,from=kairos-init,src=/kairos-init,dst=/kairos-init \
 # name is unset, preferring it over /etc/os-release. The OS identity fields in
 # /etc/os-release are intentionally left untouched.
 RUN echo 'GRUB_ENTRY_NAME="hadron-desktop"' >> /etc/kairos-release
+# Release identity for hadron-update. FLAVOR names the image line this system
+# upgrades along: hadron-update pulls ${IMAGE_REPO}:${FLAVOR}-<tag>, which
+# release.yml pushes for every published release. Dockerfile.agent rewrites
+# FLAVOR to `agent` for the appliance. VERSION is the release tag, so a dev
+# build (v0.0.0) never sorts as newer than a real release.
+ARG IMAGE_REPO=ghcr.io/kairos-community/hadron-desktop
+ARG HADRON_VERSION
+ARG DESKTOP
+RUN printf 'FLAVOR=%s\nVERSION=%s\nHADRON_VERSION=%s\nIMAGE_REPO=%s\nGITHUB_REPO=%s\n' \
+      "${DESKTOP}" "${VERSION}" "${HADRON_VERSION}" "${IMAGE_REPO}" kairos-community/hadron-desktop \
+      > /etc/hadron-desktop/release
 # Tokyo Night GRUB menu colours — text-mode fallback. The main menu renders from
 # /etc/cos/grub.cfg (copied to COS_STATE at install) before grubmenu.cfg switches
 # to the gfxterm theme, and these 16-colour accents also apply if gfxterm/the

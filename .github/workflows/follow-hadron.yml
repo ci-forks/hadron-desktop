@@ -1,0 +1,122 @@
+name: Follow Hadron releases
+
+# Rebuild and release Hadron Desktop whenever Hadron tags a new release.
+#
+# Fully automatic by design: when kairos-io/hadron publishes a newer release,
+# this pins it (scripts/bump-hadron.sh), commits to main, tags the next patch
+# version and dispatches release.yml for that tag. Nothing reaches users until
+# release.yml has built every flavor, passed the agent gates and verified every
+# asset; a failed release leaves the tag without a published GitHub Release, so
+# hadron-update on installed systems never sees it.
+#
+# The dispatch is explicit because a tag pushed with GITHUB_TOKEN does not fire
+# release.yml's `push: tags` trigger; workflow_dispatch is the one event
+# GITHUB_TOKEN is allowed to start.
+
+on:
+  schedule:
+    # Daily, off the top of the hour.
+    - cron: "41 5 * * *"
+  workflow_dispatch:
+    inputs:
+      hadron_version:
+        description: Hadron tag to move to (default the latest release)
+        required: false
+        type: string
+
+concurrency:
+  group: follow-hadron
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  follow:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Compare with the latest Hadron release
+        id: compare
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED: ${{ inputs.hadron_version }}
+        run: |
+          set -euo pipefail
+          current="$(scripts/bump-hadron.sh --current)"
+          latest="${REQUESTED:-$(gh release view --repo kairos-io/hadron --json tagName -q .tagName)}"
+          echo "pinned: $current, latest Hadron: $latest"
+
+          if [[ ! "$latest" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::unexpected Hadron tag '$latest'"; exit 1
+          fi
+          # Only ever move forward: sort -V puts the higher version last.
+          if [ "$latest" = "$current" ] || \
+             [ "$(printf '%s\n%s\n' "$current" "$latest" | sort -V | tail -n1)" != "$latest" ]; then
+            echo "Already on $current, nothing to do."
+            echo "bump=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Hadron's images are published by its own release pipeline, possibly
+          # after the GitHub release appears. Both must be pullable, or the
+          # release build fails; tomorrow's run retries.
+          for img in "ghcr.io/kairos-io/hadron:$latest" "ghcr.io/kairos-io/hadron-toolchain:$latest"; do
+            if ! docker manifest inspect "$img" >/dev/null 2>&1; then
+              echo "::warning::$img is not published yet; retrying on the next run"
+              echo "bump=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+
+          last_tag="$(git tag -l 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)"
+          last_tag="${last_tag:-v0.0.0}"
+          IFS=. read -r major minor patch <<<"${last_tag#v}"
+          next="v${major}.${minor}.$((patch + 1))"
+          if git rev-parse -q --verify "refs/tags/$next" >/dev/null; then
+            echo "::error::$next already exists"; exit 1
+          fi
+
+          {
+            echo "bump=true"
+            echo "hadron=$latest"
+            echo "previous=$current"
+            echo "tag=$next"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Pin, commit, tag and push
+        if: steps.compare.outputs.bump == 'true'
+        shell: bash
+        env:
+          HADRON: ${{ steps.compare.outputs.hadron }}
+          PREVIOUS: ${{ steps.compare.outputs.previous }}
+          TAG: ${{ steps.compare.outputs.tag }}
+        run: |
+          set -euo pipefail
+          scripts/bump-hadron.sh "$HADRON"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: build on Hadron $HADRON" \
+            -m "Hadron $PREVIOUS -> $HADRON: https://github.com/kairos-io/hadron/releases/tag/$HADRON"
+          git tag -a "$TAG" -m "Hadron Desktop $TAG (Hadron $HADRON)"
+          git push origin HEAD:main
+          git push origin "$TAG"
+
+      - name: Dispatch the release
+        if: steps.compare.outputs.bump == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.compare.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main -f tag="$TAG"
+          echo "Dispatched release.yml for $TAG"

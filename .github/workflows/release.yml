@@ -22,6 +22,12 @@ env:
   # Pinned SBOM generator. The exact tag is part of the released evidence, so it
   # is never floated to a moving tag such as `latest`.
   SYFT_IMAGE: anchore/syft:v1.29.0
+  # Upgradable images. hadron-update on an installed system pulls
+  # $IMAGE_REPO:<flavor>-<tag> (see /etc/hadron-desktop/release), and only for a
+  # tag GitHub reports as the latest *published* release, so an image pushed
+  # here is invisible to users until the release job below has verified and
+  # published every asset.
+  IMAGE_REPO: ghcr.io/kairos-community/hadron-desktop
   # Every agent VM gate resolves its appliance image through this variable
   # (`test/agent/run.sh` takes `${1:-${AGENT_IMAGE:-agent-desktop:dev}}`, and the
   # Makefile declares `AGENT_IMAGE ?= agent-desktop:dev`), so one value keeps the
@@ -33,6 +39,9 @@ jobs:
     name: Build ${{ matrix.desktop }} ISO
     runs-on: ubuntu-24.04
     timeout-minutes: 330
+    permissions:
+      contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -138,6 +147,17 @@ jobs:
           asset="hadron-desktop-${DESKTOP}-${RELEASE_TAG}-amd64.iso"
           ./scripts/release-manifest.sh "$DESKTOP" "$RELEASE_TAG" "${DESKTOP}-desktop:dev" \
             "dist/$asset" "dist/$asset.build.json"
+      - name: Push the ${{ matrix.desktop }} upgrade image
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          target="${IMAGE_REPO}:${DESKTOP}-${RELEASE_TAG}"
+          docker tag "${DESKTOP}-desktop:dev" "$target"
+          docker push "$target"
+
       - name: Upload ${{ matrix.desktop }} workflow artifact
         uses: actions/upload-artifact@v7
         with:
@@ -150,6 +170,9 @@ jobs:
   build-agent:
     name: Gate and build agent ISO
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
     # GitHub-hosted jobs are capped at six hours; the agent build plus the five
     # VM gates share that budget, and every individual gate additionally carries
     # its own shell timeout inside test/agent/run.sh.
@@ -341,6 +364,19 @@ jobs:
           asset="hadron-desktop-agent-${RELEASE_TAG}-amd64.iso"
           ./scripts/release-manifest.sh agent "$RELEASE_TAG" "$AGENT_IMAGE" \
             "dist/$asset" "dist/$asset.build.json"
+      # After every gate: an appliance image that failed one must never be
+      # pullable as an upgrade.
+      - name: Push the agent upgrade image
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          target="${IMAGE_REPO}:agent-${RELEASE_TAG}"
+          docker tag "$AGENT_IMAGE" "$target"
+          docker push "$target"
+
       - name: Upload agent workflow artifact
         uses: actions/upload-artifact@v7
         with:
