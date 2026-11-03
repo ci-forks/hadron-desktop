@@ -70,3 +70,6 @@ window#waybar {
 
 #tray { background-color: #24283b; }
 #tray > .needs-attention { color: #f7768e; }
+
+#custom-power   { color: #f7768e; padding: 0 12px 0 8px; }
+#custom-power:hover { background-color: #24283b; }

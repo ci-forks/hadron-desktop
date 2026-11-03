@@ -59,6 +59,11 @@ exec /usr/bin/wireplumber
 exec mako
 exec swayidle -w timeout 600 'swaymsg "output * dpms off"' resume 'swaymsg "output * dpms on"'
 exec $term
+# First-login welcome (once per user) and the release checker, which shows a
+# notification when a new Hadron Desktop is out. Both talk to mako over the
+# session bus start-desktop opened.
+exec hadron-welcome
+exec hadron-update notify
 
 ### Key bindings ##########################################################
 floating_modifier $mod normal
@@ -67,7 +72,8 @@ bindsym $mod+Return        exec $term
 bindsym $mod+d             exec $menu
 bindsym $mod+Shift+q       kill
 bindsym $mod+Shift+c       reload
-bindsym $mod+Shift+e       exec swaynag -t warning -m 'Exit sway?' -B 'Exit' 'swaymsg exit'
+bindsym $mod+Shift+e       exec hadron-power-menu
+bindsym $mod+F1            exec foot --app-id=floatterm -T "Keyboard shortcuts" hadron-help
 
 # Focus
 bindsym $mod+$left  focus left
@@ -159,6 +165,7 @@ bindsym $mod+Shift+a exec hadron-audio-menu
 bindsym $mod+Shift+b exec foot --app-id=floatterm -T bluetooth bluetoothctl
 # floating "control" terminals (bluetoothctl etc.), centered and sized
 for_window [app_id="floatterm"] floating enable, resize set 820 520, move position center
+for_window [app_id="floatterm" title="Keyboard shortcuts"] resize set 900 720, move position center
 
 ### Status bar ############################################################
 # waybar (Tokyo Night) — config at /etc/xdg/waybar/{config,style.css}. Modules:

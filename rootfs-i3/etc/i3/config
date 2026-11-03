@@ -42,6 +42,11 @@ exec --no-startup-id /usr/bin/pipewire
 exec --no-startup-id /usr/bin/wireplumber
 exec --no-startup-id dunst
 exec --no-startup-id $term
+# First-login welcome (once per user) and the release checker, which shows a
+# notification when a new Hadron Desktop is out. Both talk to dunst over the
+# session bus start-desktop opened.
+exec --no-startup-id hadron-welcome
+exec --no-startup-id hadron-update notify
 
 floating_modifier $mod
 
@@ -49,7 +54,8 @@ bindsym $mod+Return        exec --no-startup-id $term
 bindsym $mod+d             exec --no-startup-id $menu
 bindsym $mod+Shift+q       kill
 bindsym $mod+Shift+c       reload
-bindsym $mod+Shift+e       exec "i3-nagbar -t warning -m 'Exit i3?' -B 'Exit' 'i3-msg exit'"
+bindsym $mod+Shift+e       exec --no-startup-id hadron-power-menu
+bindsym $mod+F1            exec --no-startup-id st -c HadronFloat -t "Keyboard shortcuts" -e hadron-help
 
 bindsym $mod+$left  focus left
 bindsym $mod+$down  focus down
@@ -136,6 +142,7 @@ bindsym $mod+n       exec --no-startup-id hadron-wifi-menu
 bindsym $mod+Shift+a exec --no-startup-id hadron-audio-menu
 bindsym $mod+Shift+b exec --no-startup-id st -c HadronFloat -t bluetooth -e bluetoothctl
 for_window [class="HadronFloat"] floating enable, resize set 820 520, move position center
+for_window [class="HadronFloat" title="Keyboard shortcuts"] resize set 900 720, move position center
 
 bar {
     position top

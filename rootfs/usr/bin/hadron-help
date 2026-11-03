@@ -1,0 +1,51 @@
+#!/bin/sh
+# Keyboard shortcut cheat sheet, opened with Super+F1 (and mentioned in the
+# first-login welcome notification). Shared by both variants; the few lines
+# that differ key off XDG_CURRENT_DESKTOP, which each session's env file sets.
+b=$(printf '\033[1;34m') c=$(printf '\033[36m') d=$(printf '\033[2m') r=$(printf '\033[0m')
+
+# Keys are ASCII on purpose: printf pads by bytes, so a multi-byte character
+# in the key column would push its description out of line.
+row() { printf "  ${c}%-34s${r} %s\n" "$1" "$2"; }
+section() { printf "\n${b}%s${r}\n" "$1"; }
+
+{
+printf "${b}Hadron Desktop${r}  ${d}Super is the Windows / Command key${r}\n"
+
+section "Basics"
+row "Super + Enter"          "open a terminal"
+row "Super + D"              "launch an application"
+row "Super + Shift + Q"      "close the focused window"
+row "Super + Shift + E"      "power menu: log out, suspend, reboot, power off"
+row "Super + F1"             "this help"
+
+section "Windows"
+row "Super + arrows / H J K L"          "move focus"
+row "Super + Shift + arrows / H J K L"  "move the window"
+row "Super + F"              "fullscreen"
+row "Super + Shift + Space"  "float / tile the window"
+row "Super + W / S / E"      "tabbed / stacked / split layout"
+row "Super + R"              "resize mode (arrows, then Enter)"
+row "Super + drag"           "move a floating window with the mouse"
+
+section "Workspaces"
+row "Super + 1 ... 0"          "switch to workspace 1 to 10"
+row "Super + Shift + 1 ... 0"  "send the window to that workspace"
+
+section "System"
+row "Super + N"              "Wi-Fi"
+row "Super + Shift + A"      "audio output"
+row "Super + Shift + B"      "Bluetooth"
+if [ "${XDG_CURRENT_DESKTOP:-}" = sway ]; then
+row "Print"                  "screenshot to the clipboard"
+row "Super + Print"          "screenshot of an area"
+fi
+
+section "Software"
+row "flatpak install flathub <app>"  "install a desktop app"
+row "distrobox create / enter"       "a mutable Linux to tinker in"
+row "hadron-update"                  "check for a new Hadron Desktop release"
+row "hadron-update upgrade"          "install it (applies on the next boot)"
+
+printf "\n${d}Press q to close.${r}\n"
+} | less -R

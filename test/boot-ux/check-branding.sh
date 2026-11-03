@@ -38,4 +38,13 @@ check "grubmenu.cfg leaves splash/quiet to kairos-init" \
 check "grubmenu.cfg preserves any pre-existing extra_cmdline" \
     "grep -q 'set extra_cmdline=\"\${extra_cmdline}' $G"
 
+# Release identity: hadron-update builds the upgrade image reference from it.
+R=/etc/hadron-desktop/release
+FLAVOR="${EXPECTED_FLAVOR:-${EXPECTED%% *}}"
+check "release file names the '$FLAVOR' image line" "grep -qx 'FLAVOR=$FLAVOR' $R"
+check "release file records the Hadron base" "grep -Eq '^HADRON_VERSION=v[0-9]' $R"
+check "release file points at the published image repo" \
+    "grep -qx 'IMAGE_REPO=ghcr.io/kairos-community/hadron-desktop' $R"
+check "hadron-update is installed and runs" "hadron-update help | grep -q upgrade"
+
 exit "$fail"
