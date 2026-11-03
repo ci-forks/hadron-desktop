@@ -2466,6 +2466,431 @@ RUN curl -fL --retry 5 --retry-delay 3 --retry-all-errors "https://codeberg.org/
 
 
 # ===========================================================================
+# COSMIC desktop (DESKTOP=cosmic). See
+# docs/superpowers/specs/2026-11-03-cosmic-desktop-design.md.
+#
+# Every COSMIC component is Rust, built from its epoch tag against Hadron's
+# musl and the libraries this Dockerfile builds. Rust itself comes from the
+# pinned Alpine image (only the toolchain; nothing it links ships), the same
+# way Dockerfile.agent builds cua-driver. libclang for bindgen comes from the
+# llvm stage and is used at build time only. BuildKit only evaluates these
+# stages for DESKTOP=cosmic.
+# ===========================================================================
+FROM rust:1.97.0-alpine3.22 AS rust-toolchain
+
+# duktape: the small JavaScript engine polkit evaluates its rules with (the
+# alternative is mozjs, a browser engine's worth of build).
+FROM toolchain AS duktape
+ARG DUKTAPE_VERSION=2.7.0
+RUN mkdir -p /duktape
+WORKDIR /build
+RUN curl -fL --retry 5 https://duktape.org/duktape-${DUKTAPE_VERSION}.tar.xz -o d.tar.xz && tar -xf d.tar.xz && mv duktape-* src
+WORKDIR /build/src
+RUN make -f Makefile.sharedlibrary INSTALL_PREFIX=/usr CC=cc && \
+    make -f Makefile.sharedlibrary INSTALL_PREFIX=/duktape/usr install && \
+    mkdir -p /duktape/usr/lib/pkgconfig && \
+    printf 'prefix=/usr\nlibdir=${prefix}/lib\nincludedir=${prefix}/include\n\nName: duktape\nDescription: Embeddable Javascript engine\nVersion: %s\nLibs: -L${libdir} -lduktape\nLibs.private: -lm\nCflags: -I${includedir}\n' "${DUKTAPE_VERSION}" \
+      > /duktape/usr/lib/pkgconfig/duktape.pc
+
+# gettext's tools (msgfmt): polkit and accountsservice merge translations into
+# their policy files at build time even with translations off. Build-only;
+# nothing from this stage ships.
+FROM toolchain AS gettext-tools
+ARG GETTEXT_VERSION=0.22.5
+WORKDIR /build
+RUN curl -fL --retry 5 https://ftp.gnu.org/pub/gnu/gettext/gettext-${GETTEXT_VERSION}.tar.xz -o g.tar.xz && tar -xf g.tar.xz && \
+    cd gettext-${GETTEXT_VERSION} && \
+    ./configure --prefix=/usr --disable-java --disable-csharp --disable-libasprintf \
+      --disable-openmp --disable-acl --disable-curses --without-emacs --without-git \
+      --disable-static --enable-shared && \
+    make -j"$(nproc)" && make install DESTDIR=/gettext-tools
+
+# polkit: lets an unprivileged desktop session ask for privileged actions
+# (date and time, language, users) with a password prompt. cosmic-osd is the
+# agent that shows the prompt. Without it, COSMIC Settings' system panels and
+# cosmic-initial-setup silently fail. --libexecdir=lib for the same reason as
+# flatpak: /usr/libexec is a persistent path on Kairos.
+FROM toolchain AS polkit
+COPY --from=glib2 /glib2 /
+COPY --from=pcre2 /pcre2 /
+COPY --from=duktape /duktape /
+COPY --from=gettext-tools /gettext-tools /
+COPY --from=libucontext /libucontext /
+ARG POLKIT_VERSION=126
+RUN mkdir -p /polkit
+WORKDIR /build
+RUN curl -fL --retry 5 https://github.com/polkit-org/polkit/archive/refs/tags/${POLKIT_VERSION}.tar.gz -o p.tar.gz && tar -xzf p.tar.gz && mv polkit-* src
+WORKDIR /build/src
+RUN pip3 install meson ninja
+RUN meson setup buildDir ${COMMON_MESON_FLAGS} --libexecdir=lib \
+      -Dsession_tracking=logind -Dsystemdsystemunitdir=/usr/lib/systemd/system \
+      -Dauthfw=pam -Dpam_include=system-auth -Dgettext=false \
+      -Dintrospection=false -Dman=false -Dgtk_doc=false -Dexamples=false -Dtests=false \
+      -Dpolkitd_user=polkitd -Dprivileged_group=admin
+RUN DESTDIR=/polkit ninja -C buildDir install
+
+# accountsservice: the user-account D-Bus service COSMIC Settings' Users page
+# and the greeter's user list talk to.
+FROM toolchain AS accountsservice
+COPY --from=glib2 /glib2 /
+COPY --from=pcre2 /pcre2 /
+COPY --from=duktape /duktape /
+COPY --from=polkit /polkit /
+COPY --from=gettext-tools /gettext-tools /
+COPY --from=libucontext /libucontext /
+# The GitLab release Alpine builds: it carries the musl fallbacks (shadow
+# entries without fgetspent_r, the wtmp path) that the last tarball lacks.
+# Its version script reads the version from the source directory's name.
+ARG ACCOUNTSSERVICE_VERSION=26.27.3
+RUN mkdir -p /accountsservice
+WORKDIR /build
+RUN curl -fL --retry 5 https://gitlab.freedesktop.org/accountsservice/accountsservice/-/archive/${ACCOUNTSSERVICE_VERSION}/accountsservice-${ACCOUNTSSERVICE_VERSION}.tar.gz -o a.tar.gz && tar -xzf a.tar.gz
+WORKDIR /build/accountsservice-${ACCOUNTSSERVICE_VERSION}
+RUN pip3 install meson ninja
+RUN meson setup buildDir ${COMMON_MESON_FLAGS} --libexecdir=lib \
+      -Dsystemdsystemunitdir=/usr/lib/systemd/system -Delogind=false -Dlibxcrypt=false \
+      -Dintrospection=false -Dvapi=false -Ddocbook=false -Dgtk_doc=false -Dtests=false \
+      -Dadmin_group=admin -Dwtmpfile=/var/log/wtmp
+RUN DESTDIR=/accountsservice ninja -C buildDir install
+
+# libsndfile + libpulse: the PulseAudio client library the audio applet, OSD
+# and settings link against. Only the client: PipeWire's pipewire-pulse is the
+# server.
+FROM toolchain AS libsndfile
+ARG LIBSNDFILE_VERSION=1.2.2
+RUN mkdir -p /libsndfile
+WORKDIR /build
+RUN curl -fL --retry 5 https://github.com/libsndfile/libsndfile/releases/download/${LIBSNDFILE_VERSION}/libsndfile-${LIBSNDFILE_VERSION}.tar.xz -o s.tar.xz && tar -xf s.tar.xz && mv libsndfile-* src
+WORKDIR /build/src
+RUN pip3 install ninja
+RUN cmake -B build -G Ninja -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+      -DBUILD_SHARED_LIBS=ON -DENABLE_EXTERNAL_LIBS=OFF -DENABLE_MPEG=OFF \
+      -DBUILD_PROGRAMS=OFF -DBUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF -DENABLE_CPACK=OFF && \
+    cmake --build build && DESTDIR=/libsndfile cmake --install build
+
+FROM toolchain AS libpulse
+COPY --from=glib2 /glib2 /
+COPY --from=pcre2 /pcre2 /
+COPY --from=libsndfile /libsndfile /
+ARG PULSEAUDIO_VERSION=17.0
+RUN mkdir -p /libpulse
+WORKDIR /build
+RUN curl -fL --retry 5 https://www.freedesktop.org/software/pulseaudio/releases/pulseaudio-${PULSEAUDIO_VERSION}.tar.xz -o p.tar.xz && tar -xf p.tar.xz && mv pulseaudio-* src
+WORKDIR /build/src
+RUN pip3 install meson ninja
+RUN meson setup buildDir ${COMMON_MESON_FLAGS} \
+      -Ddaemon=false -Dclient=true -Ddoxygen=false -Dman=false -Dtests=false -Ddatabase=simple \
+      -Dalsa=disabled -Dasyncns=disabled -Davahi=disabled -Dbluez5=disabled -Ddbus=enabled \
+      -Dfftw=disabled -Dglib=enabled -Dgsettings=disabled -Dgtk=disabled -Djack=disabled \
+      -Dlirc=disabled -Dopenssl=disabled -Dorc=disabled -Dsamplerate=disabled -Dsoxr=disabled \
+      -Dspeex=disabled -Dsystemd=disabled -Dudev=disabled -Dx11=disabled -Dgstreamer=disabled \
+      -Dwebrtc-aec=disabled -Dtcpwrap=disabled -Dvalgrind=disabled -Delogind=disabled \
+      -Doss-output=disabled -Dconsolekit=disabled -Dbashcompletiondir=no -Dzshcompletiondir=no
+RUN DESTDIR=/libpulse ninja -C buildDir install
+
+# dav1d: AV1 decoding for the AVIF wallpapers COSMIC ships. No assembly, so no
+# nasm in the toolchain; the C path is plenty for a few wallpapers.
+FROM toolchain AS dav1d
+ARG DAV1D_VERSION=1.5.1
+RUN mkdir -p /dav1d
+WORKDIR /build
+RUN curl -fL --retry 5 https://downloads.videolan.org/pub/videolan/dav1d/${DAV1D_VERSION}/dav1d-${DAV1D_VERSION}.tar.xz -o d.tar.xz && tar -xf d.tar.xz && mv dav1d-* src
+WORKDIR /build/src
+RUN pip3 install meson ninja
+RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Denable_asm=false -Denable_tools=false -Denable_tests=false -Denable_examples=false
+RUN DESTDIR=/dav1d ninja -C buildDir install
+
+# iso-codes: only the JSON tables and the .pc file COSMIC Settings' region page
+# reads. Its build wants gettext for the translations, which this toolchain does
+# not have and nothing here needs.
+FROM toolchain AS iso-codes
+ARG ISO_CODES_VERSION=4.18.0
+RUN mkdir -p /iso-codes/usr/share/iso-codes/json /iso-codes/usr/share/pkgconfig
+WORKDIR /build
+RUN curl -fL --retry 5 https://salsa.debian.org/iso-codes-team/iso-codes/-/archive/v${ISO_CODES_VERSION}/iso-codes-v${ISO_CODES_VERSION}.tar.gz -o i.tar.gz && tar -xzf i.tar.gz && \
+    cp iso-codes-*/data/*.json /iso-codes/usr/share/iso-codes/json/ && \
+    printf 'prefix=/usr\ndatarootdir=${prefix}/share\ndatadir=${datarootdir}\ndomains=iso_639-2 iso_639-3 iso_639-5 iso_3166-1 iso_3166-2 iso_3166-3 iso_4217 iso_15924\n\nName: iso-codes\nDescription: ISO country, subdivision, language, currency and script codes and their translations\nVersion: %s\n' "${ISO_CODES_VERSION}" \
+      > /iso-codes/usr/share/pkgconfig/iso-codes.pc
+
+# GStreamer core + base libraries: xdg-desktop-portal-cosmic records the screen
+# with it for screen sharing. Plugins beyond the base libraries are off.
+FROM toolchain AS gstreamer
+COPY --from=glib2 /glib2 /
+COPY --from=pcre2 /pcre2 /
+ARG GSTREAMER_VERSION=1.26.7
+RUN mkdir -p /gstreamer
+WORKDIR /build
+RUN curl -fL --retry 5 https://gstreamer.freedesktop.org/src/gstreamer/gstreamer-${GSTREAMER_VERSION}.tar.xz -o g.tar.xz && tar -xf g.tar.xz && \
+    curl -fL --retry 5 https://gstreamer.freedesktop.org/src/gst-plugins-base/gst-plugins-base-${GSTREAMER_VERSION}.tar.xz -o b.tar.xz && tar -xf b.tar.xz
+RUN pip3 install meson ninja
+WORKDIR /build/gstreamer-${GSTREAMER_VERSION}
+RUN meson setup buildDir ${COMMON_MESON_FLAGS} --libexecdir=lib \
+      -Dintrospection=disabled -Dnls=disabled -Dtests=disabled -Dexamples=disabled \
+      -Dbenchmarks=disabled -Dtools=disabled -Ddoc=disabled -Dptp-helper=disabled \
+      -Dlibunwind=disabled -Dlibdw=disabled -Dbash-completion=disabled -Dcheck=enabled && \
+    ninja -C buildDir install && DESTDIR=/gstreamer ninja -C buildDir install
+WORKDIR /build/gst-plugins-base-${GSTREAMER_VERSION}
+RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dauto_features=disabled \
+      -Dintrospection=disabled -Dnls=disabled -Dtests=disabled -Dexamples=disabled \
+      -Dtools=disabled -Ddoc=disabled -Dapp=enabled -Dvideoconvertscale=enabled \
+      -Daudioconvert=enabled -Dvideorate=enabled -Daudioresample=enabled && \
+    DESTDIR=/gstreamer ninja -C buildDir install
+
+# xdg-desktop-portal: the broker Flatpak apps open files, take screenshots and
+# share the screen through. xdg-desktop-portal-cosmic is its COSMIC backend.
+FROM toolchain AS xdg-desktop-portal
+COPY --from=glib2 /glib2 /
+COPY --from=pcre2 /pcre2 /
+COPY --from=json-glib /json-glib /
+COPY --from=libfuse3 /libfuse3 /
+COPY --from=pipewire /pipewire /
+COPY --from=gdk-pixbuf /gdk-pixbuf /
+COPY --from=libpng /libpng /
+COPY --from=flatpak /flatpak /
+COPY --from=libarchive /libarchive /
+COPY --from=libxmlb /libxmlb /
+COPY --from=appstream /appstream /
+COPY --from=libyaml /libyaml /
+COPY --from=ostree /ostree /
+COPY --from=gpgme /gpgme /
+COPY --from=libassuan /libassuan /
+COPY --from=libgpg-error /libgpg-error /
+COPY --from=bubblewrap /bubblewrap /
+COPY --from=gstreamer /gstreamer /
+# Hadron's libsystemd links libucontext; the linker needs it to resolve it.
+COPY --from=libucontext /libucontext /
+ARG XDG_DESKTOP_PORTAL_VERSION=1.20.3
+RUN mkdir -p /xdg-desktop-portal
+WORKDIR /build
+RUN curl -fL --retry 5 https://github.com/flatpak/xdg-desktop-portal/releases/download/${XDG_DESKTOP_PORTAL_VERSION}/xdg-desktop-portal-${XDG_DESKTOP_PORTAL_VERSION}.tar.xz -o x.tar.xz && tar -xf x.tar.xz && mv xdg-desktop-portal-* src
+WORKDIR /build/src
+RUN pip3 install meson ninja
+RUN meson setup buildDir ${COMMON_MESON_FLAGS} --libexecdir=lib \
+      -Dsystemd=enabled -Ddocumentation=disabled -Dman-pages=disabled -Dtests=disabled \
+      -Dgeoclue=disabled -Dsandboxed-image-validation=disabled -Dsandboxed-sound-validation=disabled \
+      -Dflatpak-interfaces=enabled
+RUN DESTDIR=/xdg-desktop-portal ninja -C buildDir install
+
+# Xwayland: X11 apps (several popular Flatpaks still are) on the COSMIC
+# compositor. XLibre does not ship it, so this is the upstream X.org release,
+# reusing the X11 libraries built for the i3 variant.
+FROM toolchain AS xwayland
+COPY --from=wayland /wayland /
+COPY --from=libdrm /libdrm /
+COPY --from=mesa /mesa /
+COPY --from=libepoxy /libepoxy /
+COPY --from=pixman /pixman /
+COPY --from=xorgproto /xorgproto /
+COPY --from=libxau /libxau /
+COPY --from=xcbproto /xcbproto /
+COPY --from=libxcb /libxcb /
+COPY --from=x11-libs /x11-libs /
+COPY --from=freetype /freetype /
+COPY --from=libpng /libpng /
+COPY --from=libucontext /libucontext /
+ARG XWAYLAND_VERSION=24.1.8
+RUN mkdir -p /xwayland
+WORKDIR /build
+RUN curl -fL --retry 5 https://www.x.org/releases/individual/xserver/xwayland-${XWAYLAND_VERSION}.tar.xz -o x.tar.xz && tar -xf x.tar.xz && mv xwayland-* src
+WORKDIR /build/src
+RUN pip3 install meson ninja
+RUN meson setup buildDir ${COMMON_MESON_FLAGS} \
+      -Dxvfb=false -Dxdmcp=false -Dxdm-auth-1=false -Dxcsecurity=true -Ddri3=true -Dglamor=true -Dglx=false \
+      -Dsha1=libcrypto -Dsecure-rpc=false -Dlibdecor=false \
+      -Dxwayland_ei=false -Ddocs=false -Ddevel-docs=false -Dlisten_tcp=false \
+      -Dxkb_dir=/usr/share/X11/xkb -Dxkb_output_dir=/var/lib/xkb -Dxkb_bin_dir=/usr/bin
+RUN DESTDIR=/xwayland ninja -C buildDir install
+
+# The shared COSMIC build environment: every library a component links
+# against, Rust, just, and libclang.
+FROM toolchain AS cosmic-build
+RUN rmdir /usr/lib/firmware 2>/dev/null || true
+COPY --from=wayland /wayland /
+COPY --from=libdrm /libdrm /
+COPY --from=libucontext /libucontext /
+COPY --from=mesa /mesa /
+COPY --from=xkeyboard-config /xkeyboard-config /
+COPY --from=libxkb /libxkb /
+COPY --from=pixman /pixman /
+COPY --from=libevdev /libevdev /
+COPY --from=libinput /libinput /
+COPY --from=hwdata /hwdata /
+COPY --from=libdisplay-info /libdisplay-info /
+COPY --from=libseat /libseat /
+COPY --from=pcre2 /pcre2 /
+COPY --from=glib2 /glib2 /
+COPY --from=freetype /freetype /
+COPY --from=harfbuzz /harfbuzz /
+COPY --from=fribidi /fribidi /
+COPY --from=fontconfig /fontconfig /
+COPY --from=libpng /libpng /
+COPY --from=xorgproto /xorgproto /
+COPY --from=libxau /libxau /
+COPY --from=xcbproto /xcbproto /
+COPY --from=libxcb /libxcb /
+COPY --from=alsa-lib /alsa-lib /
+COPY --from=pipewire /pipewire /
+COPY --from=libsndfile /libsndfile /
+COPY --from=libpulse /libpulse /
+COPY --from=dav1d /dav1d /
+COPY --from=iso-codes /iso-codes /
+COPY --from=gstreamer /gstreamer /
+COPY --from=xdg-desktop-portal /xdg-desktop-portal /
+COPY --from=json-glib /json-glib /
+COPY --from=libfuse3 /libfuse3 /
+COPY --from=libgpg-error /libgpg-error /
+COPY --from=libassuan /libassuan /
+COPY --from=gpgme /gpgme /
+COPY --from=libyaml /libyaml /
+COPY --from=libxmlb /libxmlb /
+COPY --from=appstream /appstream /
+COPY --from=libarchive /libarchive /
+COPY --from=ostree /ostree /
+COPY --from=flatpak /flatpak /
+COPY --from=llvm /llvm /
+COPY --from=rust-toolchain /usr/local/cargo/ /usr/local/cargo/
+COPY --from=rust-toolchain /usr/local/rustup/ /usr/local/rustup/
+COPY --from=rust-toolchain /sbin/ldconfig /sbin/ldconfig
+RUN sed -i '$a exit 0' /sbin/ldconfig && ldconfig
+ENV CARGO_HOME=/usr/local/cargo \
+    RUSTUP_HOME=/usr/local/rustup \
+    PATH=/usr/local/cargo/bin:${PATH} \
+    RUSTFLAGS="-C target-feature=-crt-static" \
+    PKG_CONFIG_PATH=/usr/lib/pkgconfig:/usr/share/pkgconfig \
+    LIBCLANG_PATH=/usr/lib \
+    CFLAGS="-O2 -pipe" CXXFLAGS="-O2 -pipe" LDFLAGS="-Wl,--as-needed" \
+    CARGO_PROFILE_RELEASE_LTO=thin \
+    CARGO_INCREMENTAL=0
+ARG JUST_VERSION=1.43.0
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
+    cargo install just --version ${JUST_VERSION} --locked --root /usr/local
+COPY tools/cosmic-build.sh /usr/local/bin/cosmic-build
+WORKDIR /build
+
+# greetd, the login daemon cosmic-greeter runs under, and pop-launcher, the
+# search backend behind the COSMIC launcher.
+FROM cosmic-build AS greetd
+ARG GREETD_VERSION=0.10.3
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
+    curl -fsSL --retry 5 https://git.sr.ht/~kennylevinsen/greetd/archive/${GREETD_VERSION}.tar.gz | tar -xz && \
+    cd greetd-${GREETD_VERSION} && cargo build --release --locked && \
+    install -Dm755 target/release/greetd /greetd/usr/bin/greetd && \
+    install -Dm755 target/release/agreety /greetd/usr/bin/agreety && \
+    ! ldd /greetd/usr/bin/greetd | grep 'not found'
+
+FROM cosmic-build AS pop-launcher
+ARG COSMIC_VERSION=1.11.0
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
+    curl -fsSL --retry 5 https://github.com/pop-os/launcher/archive/refs/tags/epoch-${COSMIC_VERSION}.tar.gz | tar -xz && \
+    cd launcher-epoch-${COSMIC_VERSION} && just build-release --locked && \
+    just rootdir=/pop-launcher install && \
+    ! ldd /pop-launcher/usr/bin/pop-launcher | grep 'not found'
+
+# The COSMIC components, one RUN each so a failure re-runs only that one. They
+# build in a cargo target dir on a cache mount, so nothing but the installed
+# files reaches a layer, and each step empties it when done: the components'
+# release profiles differ (panic strategy, LTO), so little compiled code is
+# shared between them, and keeping it would grow by gigabytes per component.
+FROM cosmic-build AS cosmic
+ARG COSMIC_VERSION=1.11.0
+ENV COSMIC_VERSION=${COSMIC_VERSION} COSMIC_OUT=/cosmic
+ENV CARGO_TARGET_DIR=/cargo-target
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-comp
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-session
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-settings-daemon
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-panel && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-applets && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-bg && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-osd && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-notifications && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-launcher && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-app-library && rm -rf /cargo-target/*
+# cosmic-workspaces installs with make, not just.
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked \
+    mkdir -p /build/ws && curl -fsSL --retry 5 https://github.com/pop-os/cosmic-workspaces-epoch/archive/refs/tags/epoch-${COSMIC_VERSION}.tar.gz | tar -xz --strip-components=1 -C /build/ws && \
+    cd /build/ws && cargo build --release --locked --bin cosmic-workspaces && \
+    make install DESTDIR=/cosmic CARGO_TARGET_DIR=/cargo-target && \
+    ! ldd /cosmic/usr/bin/cosmic-workspaces | grep 'not found' && \
+    cd /build && rm -rf /build/ws /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-idle && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-randr && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-screenshot && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build xdg-desktop-portal-cosmic && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-settings && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked COSMIC_CARGO_ARGS="--package cosmic-files --package cosmic-files-applet --package cosmic-files-thumbnailer" cosmic-build cosmic-files && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-term && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-edit && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-store && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked COSMIC_CARGO_ARGS="--all" cosmic-build cosmic-greeter && rm -rf /cargo-target/*
+# cosmic-initial-setup reads the system locale from systemd-localed
+# (org.freedesktop.locale1), which Hadron builds without, and gives up on the
+# whole language page when it is absent: an empty list and no way past it. The
+# sed makes a missing localed mean "no system locale set", so the page still
+# lists the languages `locale -a` reports. Its crabtime macros also insist the
+# target dir is named `target`, hence the nested CARGO_TARGET_DIR.
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked \
+    mkdir -p /build/is && curl -fsSL --retry 5 https://github.com/pop-os/cosmic-initial-setup/archive/refs/tags/epoch-${COSMIC_VERSION}.tar.gz | tar -xz --strip-components=1 -C /build/is && \
+    cd /build/is && \
+    sed -i 's/\.wrap_err("could not get locale from locale1")?/.unwrap_or_default()/' src/page/language.rs && \
+    grep -q 'unwrap_or_default()' src/page/language.rs && ! grep -q 'could not get locale from locale1' src/page/language.rs && \
+    export CARGO_TARGET_DIR=/cargo-target/target VERGEN_GIT_COMMIT_DATE=1970-01-01 VERGEN_GIT_SHA=epoch-${COSMIC_VERSION} && \
+    cargo build --release --locked && just rootdir=/cosmic install && \
+    ! ldd /cosmic/usr/bin/cosmic-initial-setup | grep 'not found' && \
+    cd /build && rm -rf /build/is /cargo-target/*
+# Data-only components: the icon theme (just) and the wallpapers (make).
+RUN mkdir -p /build/icons /build/wallpapers && \
+    curl -fsSL --retry 5 https://github.com/pop-os/cosmic-icons/archive/refs/tags/epoch-${COSMIC_VERSION}.tar.gz | tar -xz --strip-components=1 -C /build/icons && \
+    curl -fsSL --retry 5 https://github.com/pop-os/cosmic-wallpapers/archive/refs/tags/epoch-${COSMIC_VERSION}.tar.gz | tar -xz --strip-components=1 -C /build/wallpapers && \
+    (cd /build/icons && just rootdir=/cosmic install) && \
+    (cd /build/wallpapers && make install DESTDIR=/cosmic prefix=/usr) && \
+    rm -rf /build/icons /build/wallpapers
+
+# musl-locales: the `locale` command musl lacks. cosmic-initial-setup and
+# COSMIC Settings build their language lists from `locale -a`; without it the
+# first-run wizard shows an empty list and cannot go on. Alpine's patch makes
+# `locale -a` list every language, since musl has no compiled locales to
+# enumerate (its C library messages stay English; app UIs are translated).
+# Each name gets the .UTF-8 suffix glibc systems report, which is what
+# cosmic-initial-setup filters on; musl accepts any locale name.
+FROM toolchain AS musl-locales
+COPY --from=gettext-tools /gettext-tools /
+ARG MUSL_LOCALES_VERSION=0.1.0
+ARG APORTS_COMMIT=65780305dd2517157357121ccddbe95c84e6d5a4
+WORKDIR /build
+RUN curl -fsSL --retry 5 https://git.adelielinux.org/adelie/musl-locales/-/archive/${MUSL_LOCALES_VERSION}/musl-locales-${MUSL_LOCALES_VERSION}.tar.bz2 | tar -xj && \
+    cd musl-locales-${MUSL_LOCALES_VERSION} && \
+    curl -fsSL --retry 5 https://raw.githubusercontent.com/alpinelinux/aports/${APORTS_COMMIT}/main/musl-locales/add-all-available-locales.patch | patch -p1 && \
+    sed -i '/printf("a_DJ\\n/s/\\n/.UTF-8\\n/g' locale.c && grep -q 'de_DE.UTF-8' locale.c && \
+    pip3 install ninja && \
+    cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_POLICY_VERSION_MINIMUM=3.5 && \
+    cmake --build build && DESTDIR=/musl-locales cmake --install build && \
+    /musl-locales/usr/bin/locale -a | grep -qx de_DE.UTF-8
+
+# hicolor: the fallback icon theme every other theme inherits from, and where
+# applications install their own icons. Only its index.theme (and the empty
+# size directories it declares); without it no app icon resolves.
+FROM toolchain AS hicolor-icon-theme
+ARG HICOLOR_VERSION=0.18
+WORKDIR /build
+RUN curl -fsSL --retry 5 https://icon-theme.freedesktop.org/releases/hicolor-icon-theme-${HICOLOR_VERSION}.tar.xz | tar -xJ && \
+    cd hicolor-icon-theme-${HICOLOR_VERSION} && pip3 install meson ninja && \
+    meson setup build --prefix=/usr && DESTDIR=/hicolor-icon-theme ninja -C build install && \
+    test -f /hicolor-icon-theme/usr/share/icons/hicolor/index.theme
+
+# The UI fonts libcosmic defaults to (Open Sans, Noto Sans Mono), installed
+# system-wide so Flatpak and Xwayland apps match the shell. Pinned commits.
+FROM toolchain AS cosmic-fonts
+ARG GOOGLE_FONTS_COMMIT=8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5
+ARG NOTO_FONTS_COMMIT=8b36ddb234b06c091320e28985a3c96b48ce2596
+RUN d=/cosmic-fonts/usr/share/fonts/cosmic && mkdir -p $d && \
+    for f in "OpenSans%5Bwdth,wght%5D.ttf" "OpenSans-Italic%5Bwdth,wght%5D.ttf"; do \
+      curl -fsSL --retry 5 "https://raw.githubusercontent.com/google/fonts/${GOOGLE_FONTS_COMMIT}/ofl/opensans/$f" -o "$d/$(printf %s "$f" | sed 's/%5B/[/;s/%5D/]/')" || exit 1; \
+    done && \
+    for f in NotoSansMono-Regular.ttf NotoSansMono-Bold.ttf; do \
+      curl -fsSL --retry 5 "https://raw.githubusercontent.com/notofonts/notofonts.github.io/${NOTO_FONTS_COMMIT}/fonts/NotoSansMono/hinted/ttf/$f" -o "$d/$f" || exit 1; \
+    done
+
+# ===========================================================================
 # M6: real-hardware firmware (optional)
 #
 # Real wifi / bluetooth / GPU hardware needs firmware blobs in /lib/firmware.
@@ -2623,6 +3048,73 @@ COPY --from=nerdfont /nerdfont /
 COPY --from=ly /ly /
 
 
+# COSMIC root. Shares the networking/audio/bluetooth runtime with the other
+# variants; the desktop itself is the cosmic stage's output plus the services it
+# needs (polkit, accountsservice, the portal, greetd, Xwayland).
+FROM scratch AS cosmic-rootfs
+COPY --from=wayland /wayland /
+COPY --from=libdrm /libdrm /
+COPY --from=libucontext /libucontext /
+COPY --from=mesa /mesa /
+COPY --from=xkeyboard-config /xkeyboard-config /
+COPY --from=libxkb /libxkb /
+COPY --from=pixman /pixman /
+COPY --from=libevdev /libevdev /
+COPY --from=libinput /libinput /
+COPY --from=hwdata /hwdata /
+COPY --from=libdisplay-info /libdisplay-info /
+COPY --from=libseat /libseat /
+COPY --from=pcre2 /pcre2 /
+COPY --from=glib2 /glib2 /
+COPY --from=freetype /freetype /
+COPY --from=harfbuzz /harfbuzz /
+COPY --from=fribidi /fribidi /
+COPY --from=fontconfig /fontconfig /
+COPY --from=libpng /libpng /
+COPY --from=gdk-pixbuf /gdk-pixbuf /
+COPY --from=libepoxy /libepoxy /
+# Xwayland and the X11 libraries it (and xkbcomp) need.
+COPY --from=xorgproto /xorgproto /
+COPY --from=libxau /libxau /
+COPY --from=libxcb /libxcb /
+COPY --from=x11-libs /x11-libs /
+COPY --from=xwayland /xwayland /
+# M2: networking
+COPY --from=libnl /libnl /
+COPY --from=wpa-supplicant /wpa /
+COPY --from=hostapd /hostapd /
+COPY --from=libndp /libndp /
+COPY --from=networkmanager /networkmanager /
+COPY --from=wireless-regdb /wireless-regdb /
+COPY --from=ncurses /ncurses /
+# M3: audio
+COPY --from=alsa-lib /alsa-lib /
+COPY --from=alsa-ucm-conf /alsa-ucm-conf /
+COPY --from=pipewire /pipewire /
+COPY --from=wireplumber /wireplumber /
+COPY --from=libsndfile /libsndfile /
+COPY --from=libpulse /libpulse /
+# M4: bluetooth
+COPY --from=sbc /sbc /
+COPY --from=bluez /bluez /
+# COSMIC and the services it talks to.
+COPY --from=duktape /duktape /
+COPY --from=polkit /polkit /
+COPY --from=accountsservice /accountsservice /
+COPY --from=dav1d /dav1d /
+COPY --from=iso-codes /iso-codes /
+COPY --from=gstreamer /gstreamer /
+COPY --from=json-glib /json-glib /
+COPY --from=xdg-desktop-portal /xdg-desktop-portal /
+COPY --from=greetd /greetd /
+COPY --from=pop-launcher /pop-launcher /
+COPY --from=cosmic /cosmic /
+COPY --from=cosmic-fonts /cosmic-fonts /
+COPY --from=hicolor-icon-theme /hicolor-icon-theme /
+COPY --from=musl-locales /musl-locales /
+COPY --from=nerdfont /nerdfont /
+
+
 # Static configuration is also selected as a rootfs stage. rootfs/ is shared;
 # the overlay contains only files for the chosen session, so the i3 image never
 # advertises a broken Sway session (and vice versa).
@@ -2634,6 +3126,9 @@ COPY rootfs-sway/ /
 
 FROM common-config AS i3-config
 COPY rootfs-i3/ /
+
+FROM common-config AS cosmic-config
+COPY rootfs-cosmic/ /
 
 FROM ${DESKTOP}-rootfs AS desktop-rootfs
 FROM ${DESKTOP}-config AS desktop-config
@@ -2751,7 +3246,9 @@ RUN chmod 1777 /tmp; \
     # bounce straight back to the login screen. The installer TUI lives in
     # /usr/bin for the same reason (it is COPYied in after this block, already
     # executable, so the glob below deliberately does not have to reach it).
-    chmod +x /usr/bin/start-desktop /usr/bin/hadron-*; \
+    chmod +x /usr/bin/hadron-*; \
+    if [ -e /usr/bin/start-desktop ]; then chmod +x /usr/bin/start-desktop; fi; \
+    if [ -e /usr/lib/systemd/system/ly@.service ]; then \
     # ly runs on tty1 via the ly@tty1 instance of the ly@.service template (ly
     # 1.3.x dropped the plain ly.service and the config `tty` option — the tty is
     # the systemd instance). It authenticates the cloud-config user and launches
@@ -2785,6 +3282,27 @@ RUN chmod 1777 /tmp; \
     systemctl enable ly@tty1.service 2>/dev/null || true; \
     mkdir -p /etc/systemd/system/multi-user.target.wants; \
     ln -sf /usr/lib/systemd/system/ly@.service /etc/systemd/system/multi-user.target.wants/ly@tty1.service; \
+    else \
+    # COSMIC: greetd runs cosmic-greeter on tty1 instead of ly (rootfs-cosmic/).
+    # The greeter runs as its own system user, which needs the seat groups for
+    # its compositor; polkitd runs the polkit daemon. polkit's agent helper is
+    # what checks a password for the prompt, so it must be setuid root, and its
+    # rules directories must be readable by polkitd only.
+      useradd -r -M -d /var/lib/cosmic-greeter -s /usr/sbin/nologin -G video,render,input,seat cosmic-greeter; \
+      useradd -r -M -d / -s /usr/sbin/nologin polkitd; \
+      mkdir -p /var/lib/cosmic-greeter && chown cosmic-greeter: /var/lib/cosmic-greeter; \
+      chmod 4755 /usr/lib/polkit-1/polkit-agent-helper-1; \
+      # cosmic-osd (the password prompt) execs the helper at Debian's path,
+      # compiled in; exec follows the link to the setuid target.
+      mkdir -p /usr/libexec && ln -sf /usr/lib/polkit-1/polkit-agent-helper-1 /usr/libexec/polkit-agent-helper-1; \
+      for d in /etc/polkit-1/rules.d /usr/share/polkit-1/rules.d; do \
+        mkdir -p "$d" && chown polkitd:root "$d" && chmod 700 "$d"; \
+      done; \
+      mkdir -p /etc/systemd/system/multi-user.target.wants; \
+      for u in cosmic-greeter cosmic-greeter-daemon accounts-daemon; do \
+        ln -sf /usr/lib/systemd/system/$u.service /etc/systemd/system/multi-user.target.wants/$u.service; \
+      done; \
+    fi; \
     systemctl mask getty@tty1.service 2>/dev/null || true; \
     # M2: NetworkManager is the network manager (systemd-networkd disabled at
     # runtime in favour of NM).

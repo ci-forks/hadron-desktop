@@ -1,0 +1,8 @@
+#%PAM-1.0
+# The greeter's own session (user cosmic-greeter). It needs a logind session of
+# class greeter for seat access, and must never ask for a password.
+auth       required     pam_permit.so
+account    required     pam_permit.so
+password   required     pam_deny.so
+-session   optional     pam_systemd.so       class=greeter
+session    required     pam_env.so

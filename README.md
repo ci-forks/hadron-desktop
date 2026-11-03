@@ -1,12 +1,15 @@
 # Hadron desktop
 
-Two tiling desktop variants plus an opt-in agent overlay built on top of the
-minimal [Hadron](https://github.com/kairos-io/hadron) base image:
+Three desktop variants plus an opt-in agent overlay built on top of the
+minimal [Hadron](https://github.com/kairos-io/hadron) base image. COSMIC is the
+one for people new to Linux; Sway and i3 are tiling desktops for people who
+already know them.
 
 | `DESKTOP` | Display stack | Desktop | Native desktop tools |
 |-----------|---------------|---------|----------------------|
 | `sway` (default) | Wayland + wlroots | [Sway](https://swaywm.org/) | foot, fuzzel, waybar, mako |
 | `i3` | [XLibre](https://www.xlibre.net/) X server | [i3](https://i3wm.org/) | st, dmenu, i3bar, dunst |
+| `cosmic` | Wayland + Smithay | [COSMIC](https://system76.com/cosmic) Epoch 1 | Files, Terminal, Text Editor, Settings, Store (Flathub), graphical login, first-run setup |
 
 Both include NetworkManager, PipeWire audio, wifi, bluetooth, Docker and
 Distrobox. Everything is compiled from source against the Hadron musl toolchain
@@ -27,10 +30,18 @@ kairos-init from the Kairos monorepo (`ghcr.io/kairos-io/kairos/kairos-init:mast
   wl-clipboard, slurp and swayidle.
 - **i3:** XLibre 25.2.0, X11 Mesa/GLX, the XLibre libinput driver, i3 4.25.1,
   st, dmenu, i3bar, dunst and xsel.
+- **COSMIC:** COSMIC Epoch 1.11 (the cosmic-comp compositor, panel and dock,
+  launcher, Settings, Files, Terminal, Text Editor, Store), built from source
+  in Rust against the Hadron musl libraries. polkit (duktape) and
+  accountsservice back the Settings panels that need privileges; the
+  xdg-desktop-portal stack backs Flatpak file dialogs and screen sharing;
+  Xwayland runs X11 apps.
 - **Agent overlay:** an opt-in i3-based appliance build that layers Cua and
   the agent services on top of the XLibre desktop.
-- **Login:** `ly` runs on `tty1`. It launches Sway directly for the Wayland
-  session and owns the XLibre server lifecycle for the i3 X session.
+- **Login:** on Sway and i3, `ly` runs on `tty1`. It launches Sway directly for
+  the Wayland session and owns the XLibre server lifecycle for the i3 X session.
+  On COSMIC, greetd runs the graphical cosmic-greeter on `tty1`, and the first
+  login opens COSMIC's welcome (cosmic-initial-setup).
 - **Networking:** NetworkManager + wpa_supplicant (wifi).
 - **Audio:** PipeWire + WirePlumber.
 - **Bluetooth:** BlueZ.
@@ -44,6 +55,7 @@ kairos-init from the Kairos monorepo (`ghcr.io/kairos-io/kairos/kairos-init:mast
 ```sh
 make image                 # default Wayland/Sway image: sway-desktop:dev
 make DESKTOP=i3 image      # XLibre/i3 image: i3-desktop:dev
+make DESKTOP=cosmic image  # COSMIC image: cosmic-desktop:dev
 make images                # build both image variants
 make agent-image           # build the opt-in agent overlay image
 make agent-iso             # build the opt-in agent ISO
@@ -60,7 +72,7 @@ docker build -t sway-desktop:dev .
 docker build --build-arg DESKTOP=i3 -t i3-desktop:dev .
 ```
 
-Only `sway` and `i3` are valid selector values. The corresponding artifacts are
+Only `sway`, `i3` and `cosmic` are valid selector values. The corresponding artifacts are
 kept under `build/sway-desktop/` and `build/i3-desktop/`.
 
 ## Everyday use

@@ -1,0 +1,12 @@
+# From cosmic-greeter's debian/cosmic-greeter-daemon.service (epoch-1.11.0).
+[Unit]
+Description=COSMIC Greeter Daemon
+
+[Service]
+Type=dbus
+BusName=com.system76.CosmicGreeter
+ExecStart=/usr/bin/cosmic-greeter-daemon
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

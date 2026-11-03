@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Hadron Desktop updates
+Comment=Shows a notification when a new Hadron Desktop release is ready
+Exec=hadron-update notify
+NoDisplay=true
+OnlyShowIn=COSMIC;
+X-GNOME-Autostart-enabled=true

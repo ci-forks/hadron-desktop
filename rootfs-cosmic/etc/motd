@@ -1,0 +1,5 @@
+Welcome to Hadron Desktop — COSMIC on Wayland, built from source on Kairos.
+
+  Apps       : COSMIC Store, or flatpak install flathub <id>
+  Containers : docker run …   ·   distrobox enter
+  Updates    : hadron-update   ·   hadron-update upgrade
