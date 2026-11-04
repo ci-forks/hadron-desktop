@@ -57,6 +57,13 @@ func RenderCloudConfig(c Choice, hash string) string {
 	b.WriteString("          content: |\n")
 	fmt.Fprintf(&b, "            user = %s\n", c.Username)
 	b.WriteString("            session_index = 2\n")
+	// The name graphical login screens (cosmic-greeter) show. Kairos' users
+	// block has no gecos field and fills in "Created by entities", and /etc is
+	// rebuilt from cloud-config at every boot, so it is set again each boot.
+	b.WriteString("  boot:\n")
+	b.WriteString("    - name: \"Hadron desktop display name\"\n")
+	b.WriteString("      commands:\n")
+	fmt.Fprintf(&b, "        - usermod -c %s %s\n", c.Username, c.Username)
 	return b.String()
 }
 

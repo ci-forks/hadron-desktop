@@ -33,6 +33,23 @@ ARG KAIROS_INIT_IMAGE=ghcr.io/kairos-io/kairos/kairos-init:master
 
 FROM ghcr.io/kairos-io/hadron-toolchain:${HADRON_VERSION} AS toolchain
 
+# ---------------------------------------------------------------------------
+# Boot splash (splash/). Installed as /usr/bin/kairos-splash: kairos-init leaves
+# an existing binary at that path alone and runs it in both halves of the boot
+# (its 50kairos-splash dracut module bakes it into the initramfs, and
+# kairos-splash.service runs it before the login screen). It draws straight
+# into the framebuffer, falling back to a text animation without one.
+#
+# The smoke tests run the whole program twice: the non-tty fallback, and one
+# rendered frame, which must be a PPM of exactly the requested size.
+# ---------------------------------------------------------------------------
+FROM toolchain AS hadron-splash
+COPY splash/ /build/splash/
+RUN cd /build/splash && make clean && make && \
+    ./hadron-splash | grep -q HADRON && \
+    ./hadron-splash --render=/tmp/frame.ppm --size=640x400 --at=2 && \
+    [ "$(stat -c %s /tmp/frame.ppm)" -eq $((15 + 640 * 400 * 3)) ]
+
 
 FROM toolchain AS wayland
 ARG WAYLAND_VERSION=1.24.0
@@ -2713,6 +2730,10 @@ COPY --from=distrobox /distrobox /
 COPY --from=firmware /firmware /
 # Shared + selected session config / launch layer
 COPY --from=desktop-config / /
+# The boot splash, at the path kairos-init's units and dracut module exec. It
+# must be in place before the kairos stage runs kairos-init, which then keeps it
+# instead of linking the stock `kairos splash` there.
+COPY --from=hadron-splash /build/splash/hadron-splash /usr/bin/kairos-splash
 
 # System setup. NOTE: no user is created here — the desktop user is defined at
 # install time via a Kairos cloud-config (see cloud-config.yaml) and lives on
@@ -2822,6 +2843,10 @@ ARG MODEL=generic
 ARG TRUSTED_BOOT=false
 ARG VERSION=v0.0.0
 ARG FIPS=no-fips
+# The splash shows the release. kairos-init's dracut module copies every file in
+# /etc/kairos/branding/splash into the initramfs, so writing it here, before
+# kairos-init builds the initramfs, gives both halves of the boot the same one.
+RUN mkdir -p /etc/kairos/branding/splash && printf '%s\n' "${VERSION}" > /etc/kairos/branding/splash/version
 RUN --mount=type=bind,from=kairos-init,src=/kairos-init,dst=/kairos-init \
     fips_flag=""; [ "$FIPS" = "fips" ] && fips_flag="--fips"; \
     /kairos-init -l debug -s install -m "${MODEL}" -t "${TRUSTED_BOOT}" --version "${VERSION}" $fips_flag && \
