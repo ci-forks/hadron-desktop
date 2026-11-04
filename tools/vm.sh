@@ -13,7 +13,7 @@
 #   tools/vm.sh run             # boot the already-installed disk   (default)
 #
 # Env knobs (all optional):
-#   DESKTOP     sway or i3             (default sway; selects artifact paths)
+#   DESKTOP     sway, i3 or cosmic     (default sway; selects artifact paths)
 #   DISK         disk image path        (default build/vm/<desktop>-disk.qcow2)
 #   DISK_SIZE    size for a fresh disk   (default 20G)
 #   FRESH=1      recreate the disk even if it exists
@@ -41,8 +41,8 @@ REPO="$PWD"
 MODE="${1:-run}"
 DESKTOP="${DESKTOP:-sway}"
 case "$DESKTOP" in
-  sway|i3) ;;
-  *) echo "error: unsupported DESKTOP '$DESKTOP' (expected sway or i3)" >&2; exit 2 ;;
+  sway|i3|cosmic) ;;
+  *) echo "error: unsupported DESKTOP '$DESKTOP' (expected sway, i3 or cosmic)" >&2; exit 2 ;;
 esac
 MEM="${MEM:-4096}"
 CPUS="${CPUS:-4}"

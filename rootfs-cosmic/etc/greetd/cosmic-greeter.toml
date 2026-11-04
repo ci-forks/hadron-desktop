@@ -1,0 +1,12 @@
+# greetd runs cosmic-greeter, COSMIC's graphical login screen, on tty1.
+# cosmic-greeter.service passes this file to greetd.
+[terminal]
+vt = 1
+
+[general]
+# PAM service for the user's session (rootfs-cosmic/etc/pam.d/cosmic-greeter).
+service = "cosmic-greeter"
+
+[default_session]
+command = "cosmic-greeter-start"
+user = "cosmic-greeter"

@@ -46,5 +46,14 @@ check "release file records the Hadron base" "grep -Eq '^HADRON_VERSION=v[0-9]' 
 check "release file points at the published image repo" \
     "grep -qx 'IMAGE_REPO=ghcr.io/kairos-community/hadron-desktop' $R"
 check "hadron-update is installed and runs" "hadron-update help | grep -q upgrade"
+if [ "$FLAVOR" = cosmic ]; then
+    # The COSMIC password prompt (cosmic-osd) execs polkit's helper at this
+    # path; without it every privileged Settings change fails silently.
+    check "polkit agent helper at the path cosmic-osd runs, setuid" \
+        "test -u /usr/libexec/polkit-agent-helper-1"
+    check "locale -a lists UTF-8 locales (the setup wizard's language list)" \
+        "locale -a | grep -qx de_DE.UTF-8"
+    check "hicolor icon theme index present" "test -f /usr/share/icons/hicolor/index.theme"
+fi
 
 exit "$fail"

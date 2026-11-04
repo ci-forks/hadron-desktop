@@ -1,0 +1,18 @@
+# Start the COSMIC login screen on the installed desktop. Replaces the common
+# overlay's ly version of this file for the cosmic variant; see it for why a
+# boot stage is needed at all (Kairos' /etc overlay shadows baked enablement
+# and forces multi-user.target).
+name: "Hadron desktop session"
+stages:
+  boot:
+    - if: '! grep -q "install-mode" /proc/cmdline && [ ! -f /run/cos/live_mode ]'
+      name: "enable + start the COSMIC greeter on the installed desktop"
+      commands:
+        - mkdir -p /etc/systemd/system/multi-user.target.wants
+        - ln -sf /usr/lib/systemd/system/cosmic-greeter.service /etc/systemd/system/multi-user.target.wants/cosmic-greeter.service
+        - ln -sf /usr/lib/systemd/system/cosmic-greeter-daemon.service /etc/systemd/system/multi-user.target.wants/cosmic-greeter-daemon.service
+        - ln -sf /usr/lib/systemd/system/accounts-daemon.service /etc/systemd/system/multi-user.target.wants/accounts-daemon.service
+        - systemctl daemon-reload
+        # --no-block for the same reason as ly: a blocking start from inside
+        # cos-setup-boot can wait on units ordered after it.
+        - systemctl start --no-block cosmic-greeter.service || true
