@@ -59,11 +59,14 @@ type fakeDoc struct {
 }
 
 // fakeReg is fakeRegistry's server plus the images fakeImage published on it.
-// docs is keyed by "manifests/<tag or digest>" or "blobs/<digest>".
+// docs is keyed by "<name>/manifests/<tag or digest>" or "<name>/blobs/<digest>".
 type fakeReg struct {
 	docs map[string]fakeDoc
 	// omitDigest drops Docker-Content-Digest, as some registries do.
 	omitDigest bool
+	// headerDigest, when set, is sent as Docker-Content-Digest instead of the
+	// real one.
+	headerDigest string
 }
 
 func newFakeRegistry(t *testing.T, private bool, published ...string) *fakeReg {
@@ -85,17 +88,20 @@ func newFakeRegistry(t *testing.T, private bool, published ...string) *fakeReg {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
-			key := strings.TrimPrefix(r.URL.Path, "/v2/kairos-community/hadron-desktop/")
+			key := strings.TrimPrefix(r.URL.Path, "/v2/kairos-community/")
 			if d, ok := reg.docs[key]; ok {
 				w.Header().Set("Content-Type", d.contentType)
 				if !reg.omitDigest {
-					sum := sha256.Sum256(d.body)
-					w.Header().Set("Docker-Content-Digest", "sha256:"+hex.EncodeToString(sum[:]))
+					h := digestOf(d.body)
+					if reg.headerDigest != "" {
+						h = reg.headerDigest
+					}
+					w.Header().Set("Docker-Content-Digest", h)
 				}
 				w.Write(d.body)
 				return
 			}
-			tag := strings.TrimPrefix(key, "manifests/")
+			tag := strings.TrimPrefix(key, "hadron-desktop/manifests/")
 			for _, p := range published {
 				if p == tag {
 					return
@@ -134,12 +140,12 @@ func (r *fakeReg) image(t *testing.T, name, tag, arch string, labels map[string]
 		cfg, _ := json.Marshal(map[string]any{
 			"os": "linux", "architecture": a, "config": map[string]any{"Labels": l},
 		})
-		r.docs["blobs/"+digestOf(cfg)] = fakeDoc{cfg, "application/vnd.oci.image.config.v1+json"}
+		r.docs[name+"/blobs/"+digestOf(cfg)] = fakeDoc{cfg, "application/vnd.oci.image.config.v1+json"}
 		m, _ := json.Marshal(map[string]any{
 			"schemaVersion": 2, "mediaType": oci,
 			"config": map[string]any{"mediaType": "application/vnd.oci.image.config.v1+json", "digest": digestOf(cfg), "size": len(cfg)},
 		})
-		r.docs["manifests/"+digestOf(m)] = fakeDoc{m, oci}
+		r.docs[name+"/manifests/"+digestOf(m)] = fakeDoc{m, oci}
 		entries = append(entries, map[string]any{
 			"mediaType": oci, "digest": digestOf(m), "size": len(m),
 			"platform": map[string]string{"os": "linux", "architecture": a},
@@ -147,14 +153,14 @@ func (r *fakeReg) image(t *testing.T, name, tag, arch string, labels map[string]
 		single = m
 	}
 	if !index && len(entries) == 1 {
-		r.docs["manifests/"+tag] = fakeDoc{single, oci}
+		r.docs[name+"/manifests/"+tag] = fakeDoc{single, oci}
 		return digestOf(single)
 	}
 	idx, _ := json.Marshal(map[string]any{
 		"schemaVersion": 2, "mediaType": "application/vnd.oci.image.index.v1+json", "manifests": entries,
 	})
-	r.docs["manifests/"+tag] = fakeDoc{idx, "application/vnd.oci.image.index.v1+json"}
-	r.docs["manifests/"+digestOf(idx)] = r.docs["manifests/"+tag]
+	r.docs[name+"/manifests/"+tag] = fakeDoc{idx, "application/vnd.oci.image.index.v1+json"}
+	r.docs[name+"/manifests/"+digestOf(idx)] = r.docs[name+"/manifests/"+tag]
 	return digestOf(idx)
 }
 

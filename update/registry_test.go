@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -87,5 +88,77 @@ func TestResolveMissingImage(t *testing.T) {
 	_, err := Resolve(context.Background(), mustRef(t, testImage))
 	if err == nil || errors.Is(err, ErrNeedsCredentials) {
 		t.Fatalf("err = %v, want a plain does-not-exist error", err)
+	}
+}
+
+func TestResolveRejectsAHeaderThatDisagreesWithTheBody(t *testing.T) {
+	reg := newFakeRegistry(t, false)
+	reg.image(t, "hadron-desktop", "sway-v1", "amd64", nil, false)
+	reg.headerDigest = "sha256:" + strings.Repeat("a", 64)
+	if _, err := Resolve(context.Background(), mustRef(t, testImage)); err == nil {
+		t.Fatal("a Docker-Content-Digest that is not the body's digest was accepted")
+	}
+	reg.headerDigest = "sha256:short"
+	if _, err := Resolve(context.Background(), mustRef(t, testImage)); err == nil {
+		t.Fatal("a malformed Docker-Content-Digest was accepted")
+	}
+}
+
+func TestResolveRejectsContentThatIsNotTheDigestPinned(t *testing.T) {
+	reg := newFakeRegistry(t, false)
+	reg.image(t, "hadron-desktop", "sway-v1", "amd64", nil, false)
+	pinned := "sha256:" + strings.Repeat("b", 64)
+	reg.docs["hadron-desktop/manifests/"+pinned] = reg.docs["hadron-desktop/manifests/sway-v1"]
+	_, err := Resolve(context.Background(), mustRef(t, "ghcr.io/kairos-community/hadron-desktop@"+pinned))
+	if err == nil {
+		t.Fatal("content that does not hash to the pinned digest was accepted")
+	}
+}
+
+func TestResolveRejectsATamperedConfigBlob(t *testing.T) {
+	reg := newFakeRegistry(t, false)
+	reg.image(t, "hadron-desktop", "sway-v1", "amd64", map[string]string{hdLabel: "sway"}, false)
+	for k, d := range reg.docs {
+		if strings.Contains(k, "/blobs/") {
+			d.body = []byte(`{"os":"linux","architecture":"amd64","config":{"Labels":{"x":"y"}}}`)
+			reg.docs[k] = d
+		}
+	}
+	reg.omitDigest = true // so only the manifest's own digest can catch it
+	if _, err := Resolve(context.Background(), mustRef(t, testImage)); err == nil {
+		t.Fatal("a config blob that does not hash to its digest was accepted")
+	}
+}
+
+func TestResolveRejectsATamperedIndexChild(t *testing.T) {
+	reg := newFakeRegistry(t, false)
+	reg.image(t, "hadron-desktop", "sway-v1", "arm64,amd64", nil, true)
+	reg.omitDigest = true
+	for k, d := range reg.docs {
+		if strings.Contains(k, "/manifests/sha256:") && !strings.Contains(string(d.body), `"manifests"`) {
+			d.body = append(d.body, ' ')
+			reg.docs[k] = d
+		}
+	}
+	if _, err := Resolve(context.Background(), mustRef(t, testImage)); err == nil {
+		t.Fatal("an index child that does not hash to its digest was accepted")
+	}
+}
+
+func TestResolveRejectsMalformedChildDigest(t *testing.T) {
+	reg := newFakeRegistry(t, false)
+	reg.docs["hadron-desktop/manifests/sway-v1"] = fakeDoc{[]byte(
+		`{"manifests":[{"digest":"../../x","platform":{"os":"linux","architecture":"amd64"}}]}`), "application/vnd.oci.image.index.v1+json"}
+	if _, err := Resolve(context.Background(), mustRef(t, testImage)); err == nil {
+		t.Fatal("a malformed child digest was used in a URL")
+	}
+}
+
+func TestResolveRejectsAnOversizedBody(t *testing.T) {
+	reg := newFakeRegistry(t, false)
+	reg.docs["hadron-desktop/manifests/sway-v1"] = fakeDoc{make([]byte, maxRegistryBody+1), "application/json"}
+	_, err := Resolve(context.Background(), mustRef(t, testImage))
+	if err == nil || !strings.Contains(err.Error(), "larger than") {
+		t.Fatalf("err = %v, want a size-limit error", err)
 	}
 }

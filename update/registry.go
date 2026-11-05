@@ -171,7 +171,7 @@ func Resolve(ctx context.Context, ref ImageRef) (ImageInfo, error) {
 	base := registryBase(ref.Host)
 	manifestURL := func(r string) string { return fmt.Sprintf("%s/v2/%s/manifests/%s", base, ref.Name, r) }
 
-	body, digest, err := c.fetch(ctx, manifestURL(ref.Reference()), ref.String())
+	body, digest, err := c.fetch(ctx, manifestURL(ref.Reference()), ref.String(), ref.Digest)
 	if err != nil {
 		return ImageInfo{}, err
 	}
@@ -203,7 +203,11 @@ func Resolve(ctx context.Context, ref ImageRef) (ImageInfo, error) {
 		if child == "" {
 			return ImageInfo{}, fmt.Errorf("%s: %w", ref, ErrWrongPlatform)
 		}
-		if body, _, err = c.fetch(ctx, manifestURL(child), ref.String()); err != nil {
+		// A nested index is not followed: images that matter here are one level.
+		if !sha256Digest.MatchString(child) {
+			return ImageInfo{}, fmt.Errorf("%s: the index lists a malformed digest %q", ref, child)
+		}
+		if body, _, err = c.fetch(ctx, manifestURL(child), ref.String(), child); err != nil {
 			return ImageInfo{}, err
 		}
 		m.Config.Digest = ""
@@ -215,7 +219,10 @@ func Resolve(ctx context.Context, ref ImageRef) (ImageInfo, error) {
 		return ImageInfo{}, fmt.Errorf("%s: the manifest names no config", ref)
 	}
 
-	blob, _, err := c.fetch(ctx, fmt.Sprintf("%s/v2/%s/blobs/%s", base, ref.Name, m.Config.Digest), ref.String())
+	if !sha256Digest.MatchString(m.Config.Digest) {
+		return ImageInfo{}, fmt.Errorf("%s: the manifest names a malformed config digest %q", ref, m.Config.Digest)
+	}
+	blob, _, err := c.fetch(ctx, fmt.Sprintf("%s/v2/%s/blobs/%s", base, ref.Name, m.Config.Digest), ref.String(), m.Config.Digest)
 	if err != nil {
 		return ImageInfo{}, err
 	}
@@ -236,9 +243,13 @@ func Resolve(ctx context.Context, ref ImageRef) (ImageInfo, error) {
 	return info, nil
 }
 
-// fetch GETs u and returns the body and its digest: Docker-Content-Digest when
-// the registry sends it, else sha256 over the exact bytes served.
-func (c *regClient) fetch(ctx context.Context, u, name string) ([]byte, string, error) {
+var sha256Digest = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+
+// fetch GETs u and returns the body and its sha256 digest, computed over the
+// exact bytes served. A Docker-Content-Digest header is only a claim: it must
+// match the body, and so must want (the digest the caller asked for, "" when
+// it asked by tag), else the registry or a middlebox swapped the content.
+func (c *regClient) fetch(ctx context.Context, u, name, want string) ([]byte, string, error) {
 	resp, err := c.do(ctx, http.MethodGet, u)
 	if err != nil {
 		return nil, "", err
@@ -253,14 +264,25 @@ func (c *regClient) fetch(ctx context.Context, u, name string) ([]byte, string, 
 	default:
 		return nil, "", fmt.Errorf("%s answered HTTP %d", name, resp.StatusCode)
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxRegistryBody))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxRegistryBody+1))
 	if err != nil {
 		return nil, "", err
 	}
-	digest := resp.Header.Get("Docker-Content-Digest")
-	if digest == "" {
-		sum := sha256.Sum256(body)
-		digest = "sha256:" + hex.EncodeToString(sum[:])
+	if len(body) > maxRegistryBody {
+		return nil, "", fmt.Errorf("%s: the registry's answer is larger than %d bytes", name, maxRegistryBody)
+	}
+	sum := sha256.Sum256(body)
+	digest := "sha256:" + hex.EncodeToString(sum[:])
+	if h := resp.Header.Get("Docker-Content-Digest"); h != "" {
+		if !sha256Digest.MatchString(h) {
+			return nil, "", fmt.Errorf("%s: the registry sent a malformed digest %q", name, h)
+		}
+		if h != digest {
+			return nil, "", fmt.Errorf("%s: the registry claims digest %s but the content is %s", name, h, digest)
+		}
+	}
+	if want != "" && want != digest {
+		return nil, "", fmt.Errorf("%s: expected digest %s but the content is %s", name, want, digest)
 	}
 	return body, digest, nil
 }
