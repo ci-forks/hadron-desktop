@@ -20,6 +20,9 @@ const (
 	// thirdParty is served by the same fake registry, but its host makes it a
 	// repository other than the release one, so it is never trusted by name.
 	thirdParty = "quay.io/kairos-community/hadron-desktop:custom"
+	// labelledThirdParty carries the Hadron labels, but it is not in the
+	// release repository: a mirror, or someone's own build.
+	labelledThirdParty = "quay.io/kairos-community/hadron-desktop:labelled"
 	// daemonReleases is the published list: newest v0.0.6.
 	daemonReleases = `[{"tag_name":"v0.0.5"},{"tag_name":"v0.0.6"},{"tag_name":"v0.0.4"},{"tag_name":"v0.0.7-rc1","prerelease":true}]`
 )
@@ -117,6 +120,8 @@ func daemonEnv(t *testing.T, installed string) daemonDigests {
 		d[ghcrRepo+":"+tag] = reg.image(t, "hadron-desktop", tag, "amd64", nil, false)
 	}
 	d[thirdParty] = reg.image(t, "hadron-desktop", "custom", "amd64", map[string]string{"x": "y"}, false)
+	d[labelledThirdParty] = reg.image(t, "hadron-desktop", "labelled", "amd64",
+		map[string]string{labelFlavor: "sway", labelVersion: "v0.0.6"}, false)
 	return d
 }
 
@@ -380,6 +385,11 @@ func TestAdvancedOverridesOnlyNotHadron(t *testing.T) {
 		{"unlabelled third-party, not advanced", thirdParty, false, "", ErrNotHadron},
 		{"agent image, advanced", agent, true, "", ErrAgentImage},
 		{"advanced turned off", thirdParty, true, "advanced=false\n", ErrNotHadron},
+		// The spec: images from any other repository are accepted only
+		// through advanced mode, labels or not.
+		{"labelled third-party, not advanced", labelledThirdParty, false, "", ErrNotRelease},
+		{"labelled third-party, advanced", labelledThirdParty, true, "", nil},
+		{"labelled third-party, advanced off", labelledThirdParty, true, "advanced=false\n", ErrNotRelease},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			dg := daemonEnv(t, "v0.0.5")

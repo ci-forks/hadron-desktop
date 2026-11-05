@@ -19,8 +19,14 @@ var (
 	// ErrAgentImage is never overridable: the agent flavor has no daemon, so
 	// switching a desktop system onto it would remove its own updater.
 	ErrAgentImage = errors.New("this is an agent image; the desktop updater cannot install it")
-	// ErrNotHadron is the one refusal the daemon's advanced mode may override.
+	// ErrNotHadron and ErrNotRelease are the refusals the daemon's advanced
+	// mode may override.
 	ErrNotHadron = errors.New("this is not a Hadron desktop image")
+	// ErrNotRelease is the daemon's refusal of an image that Classify
+	// accepts but does not trust: labelled as Hadron, but not a published
+	// release of the release repository. The spec accepts images from other
+	// repositories only through advanced mode.
+	ErrNotRelease = errors.New("this is not a published Hadron Desktop release")
 )
 
 // desktopFlavors are the flavors that ship the daemon and tray.

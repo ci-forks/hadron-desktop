@@ -281,6 +281,31 @@ func TestUnlabelledImageThroughTheRealService(t *testing.T) {
 	}
 }
 
+// TestLabelledImageThroughTheRealService: labels outside the release
+// repository do not make an image a release; the second question names that.
+func TestLabelledImageThroughTheRealService(t *testing.T) {
+	daemonEnv(t, "v0.0.5")
+	b := &fakeBackend{}
+	f := startService(t, NewDaemon(b), &fakeAuth{allow: true})
+	old, oldWait := dialDaemon, busyWait
+	dialDaemon = func() (daemonClient, error) {
+		conn, err := dbus.Connect(f.addr)
+		if err != nil {
+			return nil, err
+		}
+		return &client{conn: conn, obj: conn.Object(busName, busPath)}, nil
+	}
+	busyWait = 0
+	t.Cleanup(func() { dialDaemon, busyWait = old, oldWait })
+
+	code, out, errOut := runCLI("", "upgrade", "--yes", "--image", labelledThirdParty)
+	if code != exitOK || len(b.calls()) != 0 ||
+		!strings.Contains(out, "Source:   labelled by its publisher, not a published release") ||
+		!strings.Contains(out, "This is not a published Hadron Desktop release. Install it anyway? [y/N]") {
+		t.Fatalf("code %d, out %q, stderr %q, upgrades %v", code, out, errOut, b.calls())
+	}
+}
+
 func TestNonOverridableRefusalExits1(t *testing.T) {
 	setup(t, "v0.1.0", "v0.2.0")
 	f := okDaemon()

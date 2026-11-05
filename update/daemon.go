@@ -394,11 +394,13 @@ func (d *Daemon) Releases(ctx context.Context) ([]Latest, error) {
 	return d.fetchReleases(ctx)
 }
 
-// evaluate resolves r and decides whether it may be installed. Only
-// ErrNotHadron yields to advanced mode, and only when the caller asked for it
-// and update.conf allows it; an agent image, a wrong platform or a private
-// image is refused whatever the caller says. info is returned whenever Resolve
-// succeeded, so a refusal can still show what the image is.
+// evaluate resolves r and decides whether it may be installed. Only a
+// published release is installed without advanced mode. ErrNotHadron and
+// ErrNotRelease (labelled, but not trusted by name) yield to advanced mode,
+// and only when the caller asked for it and update.conf allows it; an agent
+// image, a wrong platform or a private image is refused whatever the caller
+// says. info and the verdict are returned whenever Resolve succeeded, so a
+// refusal can still show what the image is.
 func (d *Daemon) evaluate(ctx context.Context, r ImageRef, advanced bool) (ImageInfo, Verdict, []Latest, error) {
 	info, err := Resolve(ctx, r)
 	if err != nil {
@@ -409,11 +411,15 @@ func (d *Daemon) evaluate(ctx context.Context, r ImageRef, advanced bool) (Image
 		return info, Verdict{}, nil, fmt.Errorf("could not list the published releases: %w", err)
 	}
 	v, err := Classify(info, d.rel, published)
-	if errors.Is(err, ErrNotHadron) && advanced && AdvancedEnabled() {
-		return info, Verdict{}, published, nil
+	if err == nil && !v.Trusted {
+		err = ErrNotRelease
+	}
+	overridable := errors.Is(err, ErrNotHadron) || errors.Is(err, ErrNotRelease)
+	if overridable && advanced && AdvancedEnabled() {
+		return info, v, published, nil
 	}
 	if err != nil {
-		return info, Verdict{}, published, fmt.Errorf("%s: %w", r, err)
+		return info, v, published, fmt.Errorf("%s: %w", r, err)
 	}
 	return info, v, published, nil
 }

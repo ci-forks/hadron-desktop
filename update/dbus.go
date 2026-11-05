@@ -144,7 +144,7 @@ func busError(err error) *dbus.Error {
 		name = "NotCancellable"
 	case errors.Is(err, ErrRebooting):
 		name = "Rebooting"
-	case errors.Is(err, ErrAgentImage), errors.Is(err, ErrNotHadron),
+	case errors.Is(err, ErrAgentImage), errors.Is(err, ErrNotHadron), errors.Is(err, ErrNotRelease),
 		errors.Is(err, ErrNeedsCredentials), errors.Is(err, ErrWrongPlatform),
 		errors.Is(err, errUnmanaged):
 		name = "Refused"
@@ -324,7 +324,8 @@ func (a busAPI) Releases() ([]string, *dbus.Error) {
 
 // Inspect reports a policy refusal in the reply, not as an error, so the
 // client can show what the image is and why it would be refused before it
-// asks to Apply. "overridable" says whether asking again with advanced=true
+// asks to Apply. An image that is not a published release (unlabelled, or
+// labelled but from another repository) is refused unless advanced is set. "overridable" says whether asking again with advanced=true
 // would make it installable. Everything else (a bad reference, the network,
 // a private image, a wrong platform) is an error.
 func (a busAPI) Inspect(ref string, advanced bool) (map[string]dbus.Variant, *dbus.Error) {
@@ -346,6 +347,8 @@ func (a busAPI) Inspect(ref string, advanced bool) (map[string]dbus.Variant, *db
 	switch {
 	case errors.Is(err, ErrNotHadron):
 		refusal, overridable = ErrNotHadron.Error(), AdvancedEnabled()
+	case errors.Is(err, ErrNotRelease):
+		refusal, overridable = ErrNotRelease.Error(), AdvancedEnabled()
 	case errors.Is(err, ErrAgentImage):
 		refusal = ErrAgentImage.Error()
 	case err != nil:

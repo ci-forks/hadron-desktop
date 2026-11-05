@@ -308,6 +308,8 @@ func TestBusErrorMapping(t *testing.T) {
 		{fmt.Errorf("x: %w", ErrRebooting), "Rebooting"},
 		{ErrAgentImage, "Refused"},
 		{ErrNotHadron, "Refused"},
+		{ErrNotRelease, "Refused"},
+		{errUnfinishedPending, "RebootPending"},
 		{ErrNeedsCredentials, "Refused"},
 		{ErrWrongPlatform, "Refused"},
 		{errUnmanaged, "Refused"},
@@ -385,6 +387,17 @@ func TestBusInspect(t *testing.T) {
 	info = inspect(t, f, thirdParty, true)
 	if info["refusal"].Value() != "" || info["hadron"].Value() != false {
 		t.Fatalf("third party, advanced %v", info)
+	}
+
+	// A labelled image outside the release repository says what it is, but
+	// it is not a published release: advanced mode only.
+	info = inspect(t, f, labelledThirdParty, false)
+	if info["refusal"].Value() != ErrNotRelease.Error() || info["overridable"].Value() != true ||
+		info["hadron"].Value() != true || info["trusted"].Value() != false || info["flavor"].Value() != "sway" {
+		t.Fatalf("labelled third party %v", info)
+	}
+	if info = inspect(t, f, labelledThirdParty, true); info["refusal"].Value() != "" || info["hadron"].Value() != true {
+		t.Fatalf("labelled third party, advanced %v", info)
 	}
 
 	// The agent image is refused whatever the caller asks.
