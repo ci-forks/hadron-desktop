@@ -100,4 +100,53 @@ if [ "$FLAVOR" = niri ]; then
         "test -f /usr/share/xdg-desktop-portal/portals/gtk.portal"
 fi
 
+# Flatpak portals: file dialogs on every variant, and the dark colour scheme
+# through the Settings interface. xdg-desktop-portal reads the backends for a
+# session from <XDG_CURRENT_DESKTOP>-portals.conf. The agent image is i3.
+case "$FLAVOR" in
+    sway)     desktop=sway;   backends="gtk wlr" ;;
+    i3|agent) desktop=i3;     backends="gtk" ;;
+    niri)     desktop=niri;   backends="gtk" ;;
+    cosmic)   desktop=cosmic; backends="cosmic" ;;
+    *)        desktop="";     backends="" ;;
+esac
+if [ -n "$desktop" ]; then
+    P=/usr/share/xdg-desktop-portal
+    check "$desktop-portals.conf is installed" "test -f $P/$desktop-portals.conf"
+    for b in xdg-desktop-portal $(printf 'xdg-desktop-portal-%s ' $backends); do
+        # meson installs them in libexecdir: lib here, libexec for COSMIC's.
+        check "$b is installed and finds all its libraries in the image" \
+            "for f in /usr/lib/$b /usr/libexec/$b; do [ -x \$f ] && break; done && [ -x \$f ] && ! ldd \$f 2>&1 | grep -q 'not found'"
+    done
+    for b in $backends; do
+        check "$desktop-portals.conf picks the $b backend" "grep -Eq '=([^#]*;)?$b(;|\$)' $P/$desktop-portals.conf"
+        check "the $b backend is registered" "test -f $P/portals/$b.portal"
+    done
+    # The backend that serves org.freedesktop.appearance color-scheme.
+    settings=${backends%% *}
+    check "the $settings backend implements Settings (the colour scheme)" \
+        "grep -q 'org.freedesktop.impl.portal.Settings' $P/portals/$settings.portal"
+    if [ "$settings" = gtk ]; then
+        # xdg-desktop-portal-gtk reads the colour scheme from GSettings.
+        check "Hadron's dark GSettings override is installed" \
+            "grep -qx \"color-scheme='prefer-dark'\" /usr/share/glib-2.0/schemas/90_hadron.gschema.override"
+        check "the GSettings schemas are compiled" "test -f /usr/share/glib-2.0/schemas/gschemas.compiled"
+        check "GSettings reports the dark colour scheme" \
+            "[ \"\$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null)\" = \"'prefer-dark'\" ]"
+        check "the Adwaita-dark GTK3 theme the override names exists" \
+            "test -f /usr/share/themes/Adwaita-dark/gtk-3.0/gtk.css"
+    fi
+fi
+if [ "$desktop" = sway ]; then
+    check "Sway pushes WAYLAND_DISPLAY to D-Bus activation (portals)" \
+        "grep -q '^exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY' /etc/sway/config.d/50-portals.conf"
+    check "the Sway session sets XDG_CURRENT_DESKTOP=sway" "grep -qx 'export XDG_CURRENT_DESKTOP=sway' /etc/sway-desktop/env"
+fi
+if [ "$desktop" = i3 ]; then
+    check "i3 pushes DISPLAY to D-Bus activation (portals)" \
+        "grep -q '^exec --no-startup-id dbus-update-activation-environment --systemd DISPLAY' /etc/i3/config.d/20-portals.conf"
+    check "the i3 session sets XDG_CURRENT_DESKTOP=i3" "grep -qx 'export XDG_CURRENT_DESKTOP=i3' /etc/i3-desktop/env"
+    check "the i3 GTK3 has the X11 backend (the portal's file chooser)" "test -f /usr/lib/pkgconfig/gtk+-x11-3.0.pc"
+fi
+
 exit "$fail"
