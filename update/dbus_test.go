@@ -879,18 +879,32 @@ func TestCheckKeepsTheServiceUp(t *testing.T) {
 	}
 }
 
-// fakeProc makes a /proc of its own with one process, pid, and points
-// procRoot at it. flatpak puts .flatpak-info at the root of the sandbox; the
-// returned path is that file, so a test can take the process out of it.
-// Call it before startService: serve reads procRoot from its own goroutines.
+// fakeProc makes a /proc of its own with one live process, pid, and points
+// procRoot at it: <pid>/root is a symlink to a directory, as in the real
+// /proc, and <pid>/stat carries start time 4242 (field 22). flatpak puts
+// .flatpak-info at the root of the sandbox; the returned path is that file,
+// so a test can take the process out of it. Call it before startService:
+// serve reads procRoot from its own goroutines.
 func fakeProc(t *testing.T, pid uint32, flatpak bool) (info string) {
 	t.Helper()
 	dir := t.TempDir()
-	root := filepath.Join(dir, fmt.Sprint(pid), "root")
-	if err := os.MkdirAll(root, 0o755); err != nil {
+	pdir := filepath.Join(dir, fmt.Sprint(pid))
+	rootDir := filepath.Join(dir, "fs-"+fmt.Sprint(pid))
+	if err := os.MkdirAll(pdir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	info = filepath.Join(root, ".flatpak-info")
+	if err := os.MkdirAll(rootDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(rootDir, filepath.Join(pdir, "root")); err != nil {
+		t.Fatal(err)
+	}
+	// The command name has a space and a ')' to show the parser skips it.
+	stat := fmt.Sprintf("%d (we (ird) S 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 4242 19 20\n", pid)
+	if err := os.WriteFile(filepath.Join(pdir, "stat"), []byte(stat), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	info = filepath.Join(rootDir, ".flatpak-info")
 	if flatpak {
 		if err := os.WriteFile(info, []byte("[Application]\nname=org.example.App\n"), 0o644); err != nil {
 			t.Fatal(err)
@@ -902,30 +916,132 @@ func fakeProc(t *testing.T, pid uint32, flatpak bool) (info string) {
 	return info
 }
 
+// fakeFdinfo points selfFdinfo at a directory holding one fdinfo file for
+// fd, whose Pid: line is pid.
+func fakeFdinfo(t *testing.T, fd int, pid int) {
+	t.Helper()
+	dir := t.TempDir()
+	body := fmt.Sprintf("pos:\t0\nflags:\t02000002\nmnt_id:\t15\nino:\t1\nPid:\t%d\nNSpid:\t%d\n", pid, pid)
+	if err := os.WriteFile(filepath.Join(dir, fmt.Sprint(fd)), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := selfFdinfo
+	selfFdinfo = dir
+	t.Cleanup(func() { selfFdinfo = old })
+}
+
+// sequence returns f's results in order, then repeats the last one.
+func startTimes(values ...string) func(uint32) (string, error) {
+	var mu sync.Mutex
+	return func(uint32) (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		v := values[0]
+		if len(values) > 1 {
+			values = values[1:]
+		}
+		return v, nil
+	}
+}
+
+func TestStartTimeIsField22(t *testing.T) {
+	fakeProc(t, 42, false)
+	if got, err := procStartTime(42); err != nil || got != "4242" {
+		t.Fatalf("start time %q, %v", got, err)
+	}
+	if _, err := procStartTime(43); err == nil {
+		t.Fatal("start time of a missing process")
+	}
+}
+
+func TestPidfdPidReadsFdinfo(t *testing.T) {
+	fakeFdinfo(t, 7, 42)
+	if pid, err := pidfdPid(7); err != nil || pid != 42 {
+		t.Fatalf("pid %d, %v", pid, err)
+	}
+	fakeFdinfo(t, 7, -1)
+	if pid, err := pidfdPid(7); err != nil || pid != -1 {
+		t.Fatalf("exited process: pid %d, %v", pid, err)
+	}
+	if _, err := pidfdPid(8); err == nil {
+		t.Fatal("pid of a missing fd")
+	}
+}
+
 // TestAuthorizeRefusesAFlatpakCaller: a Flatpak app with system-bus access
 // runs as the user, so polkit's admin rule would let it install. It is
 // refused before polkit is asked, as xdg-desktop-portal tells sandboxed
-// callers apart.
+// callers apart, and every doubt about the caller's process is a refusal.
 func TestAuthorizeRefusesAFlatpakCaller(t *testing.T) {
 	daemonEnv(t, "v0.0.5")
+	const pidfd = 100000 // a number no test fd has
 	for _, c := range []struct {
 		name    string
 		flatpak bool
-		pidErr  error
-		pid     uint32 // the pid the resolver answers; the fake /proc has 42
+		creds   callerCreds
+		err     error
+		fdPid   []int // successive Pid: values of the pidfd; nil: no fdinfo
+		times   []string
+		zombie  bool // <pid>/root does not resolve
 		allowed bool
-		asked   bool
 	}{
-		{"host process", false, nil, 42, true, true},
-		{"flatpak", true, nil, 42, false, false},
-		{"pid lookup fails", false, errors.New("no such name"), 42, false, false},
-		{"process gone", false, nil, 43, false, false},
+		{name: "host process, pid", creds: callerCreds{pid: 42, pidfd: -1}, allowed: true},
+		{name: "host process, pidfd", creds: callerCreds{pid: 42, pidfd: pidfd}, fdPid: []int{42}, allowed: true},
+		{name: "flatpak, pid", flatpak: true, creds: callerCreds{pid: 42, pidfd: -1}},
+		{name: "flatpak, pidfd", flatpak: true, creds: callerCreds{pid: 42, pidfd: pidfd}, fdPid: []int{42}},
+		{name: "credentials fail", err: errors.New("no such name"), creds: callerCreds{pidfd: -1}},
+		{name: "no pid at all", creds: callerCreds{pidfd: -1}},
+		{name: "process gone", creds: callerCreds{pid: 43, pidfd: -1}},
+		// A zombie keeps its pid but its root no longer resolves, so every
+		// path under it reads as missing, .flatpak-info too.
+		{name: "zombie, pid", zombie: true, flatpak: true, creds: callerCreds{pid: 42, pidfd: -1}},
+		{name: "zombie, pidfd", zombie: true, flatpak: true, creds: callerCreds{pid: 42, pidfd: pidfd}, fdPid: []int{42}},
+		// The pid was reused between the reads.
+		{name: "start time changes", creds: callerCreds{pid: 42, pidfd: -1}, times: []string{"4242", "9999"}},
+		{name: "pidfd of an exited process", creds: callerCreds{pid: 42, pidfd: pidfd}, fdPid: []int{-1}},
+		{name: "pidfd process exits during the check", creds: callerCreds{pid: 42, pidfd: pidfd}, fdPid: []int{42, -1}},
+		{name: "pidfd unreadable", creds: callerCreds{pid: 42, pidfd: pidfd}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			fakeProc(t, 42, c.flatpak)
+			if c.zombie {
+				if err := os.Remove(filepath.Join(procRoot, "42", "root")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if c.fdPid != nil {
+				fakeFdinfo(t, pidfd, c.fdPid[0])
+				if len(c.fdPid) > 1 {
+					// The second read sees the later value.
+					oldRead := readPidfdPid
+					n := 0
+					readPidfdPid = func(fd int) (int, error) {
+						n++
+						if n > 1 {
+							return c.fdPid[1], nil
+						}
+						return oldRead(fd)
+					}
+					t.Cleanup(func() { readPidfdPid = oldRead })
+				}
+			} else {
+				old := selfFdinfo
+				selfFdinfo = t.TempDir()
+				t.Cleanup(func() { selfFdinfo = old })
+			}
+			if c.times != nil {
+				old := readStartTime
+				readStartTime = startTimes(c.times...)
+				t.Cleanup(func() { readStartTime = old })
+			}
 			auth := &fakeAuth{allow: true}
 			s := newService(NewDaemon(&fakeBackend{}), auth)
-			s.pidOf = func(dbus.Sender) (uint32, error) { return c.pid, c.pidErr }
+			closed := 0
+			creds := c.creds
+			if creds.pidfd >= 0 {
+				creds.close = func() { closed++ }
+			}
+			s.credsOf = func(dbus.Sender) (callerCreds, error) { return creds, c.err }
 			err := s.authorize(":1.5", actionApply)
 			if (err == nil) != c.allowed {
 				t.Fatalf("authorize: %v, want allowed=%v", err, c.allowed)
@@ -933,14 +1049,17 @@ func TestAuthorizeRefusesAFlatpakCaller(t *testing.T) {
 			if err != nil && err.Name != busInterface+".Error.NotAuthorized" {
 				t.Fatalf("error name %s", err.Name)
 			}
-			if asked := len(auth.questions()) > 0; asked != c.asked {
-				t.Fatalf("polkit asked: %v, want %v", asked, c.asked)
+			if asked := len(auth.questions()) > 0; asked != c.allowed {
+				t.Fatalf("polkit asked: %v, want %v", asked, c.allowed)
+			}
+			if creds.pidfd >= 0 && closed != 1 {
+				t.Fatalf("pidfd closed %d times, want 1", closed)
 			}
 		})
 	}
 	// No resolver: refuse, never skip the check.
 	s := newService(NewDaemon(&fakeBackend{}), &fakeAuth{allow: true})
-	s.pidOf = nil
+	s.credsOf = nil
 	if err := s.authorize(":1.5", actionApply); err == nil {
 		t.Fatal("authorized without a way to find the caller's process")
 	}

@@ -8,7 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/godbus/dbus/v5"
@@ -162,31 +164,100 @@ var errNotAuthorized = dbus.NewError(busInterface+".Error.NotAuthorized",
 var errSandboxed = dbus.NewError(busInterface+".Error.NotAuthorized",
 	[]any{"not authorized: applications in a Flatpak sandbox may not install updates or reboot"})
 
-// procRoot is where the caller's process is looked up. A variable so tests
-// can point it at a fake /proc.
-var procRoot = "/proc"
+// procRoot is where the caller's process is looked up, and selfFdinfo
+// where this process's own fds are described. Variables so tests can point
+// them at a fake /proc.
+var (
+	procRoot   = "/proc"
+	selfFdinfo = "/proc/self/fdinfo"
+)
 
-// busPID asks the bus which process owns sender. The bus vouches for it; the
-// caller cannot claim another.
-func busPID(conn *dbus.Conn) func(dbus.Sender) (uint32, error) {
-	return func(sender dbus.Sender) (uint32, error) {
+// callerCreds is what the bus says about the process behind a bus name.
+// pidfd is -1 when the bus sent none (dbus-daemon before 1.15.x); close
+// releases it.
+type callerCreds struct {
+	pid   uint32
+	pidfd int
+	close func()
+}
+
+// busCreds asks the bus for sender's credentials. The bus vouches for them;
+// the caller cannot claim another process. ProcessFD, a pidfd, pins the
+// process itself, so a reused pid cannot stand in for it; without it the
+// pid is checked against the process start time instead.
+func busCreds(conn *dbus.Conn) func(dbus.Sender) (callerCreds, error) {
+	return func(sender dbus.Sender) (callerCreds, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), polkitTimeout)
 		defer cancel()
-		var pid uint32
-		err := conn.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.GetConnectionUnixProcessID", 0, string(sender)).Store(&pid)
-		return pid, err
+		c := callerCreds{pidfd: -1}
+		var m map[string]dbus.Variant
+		err := conn.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.GetConnectionCredentials", 0, string(sender)).Store(&m)
+		if err == nil {
+			if fd, ok := m["ProcessFD"].Value().(dbus.UnixFD); ok {
+				c.pidfd = int(fd)
+				c.close = func() { syscall.Close(int(fd)) }
+			}
+			c.pid, _ = m["ProcessID"].Value().(uint32)
+		}
+		if c.pidfd < 0 && c.pid == 0 {
+			err = conn.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.GetConnectionUnixProcessID", 0, string(sender)).Store(&c.pid)
+		}
+		return c, err
 	}
 }
 
-// sandboxed reports whether pid runs in a Flatpak sandbox, the way
-// xdg-desktop-portal tells: flatpak puts .flatpak-info at the root of every
-// sandbox. A process that cannot be looked up counts as sandboxed.
-func sandboxed(pid uint32) (bool, error) {
-	dir := filepath.Join(procRoot, strconv.FormatUint(uint64(pid), 10))
-	if _, err := os.Stat(dir); err != nil {
-		return true, err
+// readPidfdPid and readStartTime are the two reads that tie a check to one
+// process. Variables so tests can make the process change between them.
+var (
+	readPidfdPid  = pidfdPid
+	readStartTime = procStartTime
+)
+
+// pidfdPid is the pid a pidfd refers to, from the Pid: line of its fdinfo:
+// -1 once that process has exited (and been reaped).
+func pidfdPid(fd int) (int, error) {
+	b, err := os.ReadFile(filepath.Join(selfFdinfo, strconv.Itoa(fd)))
+	if err != nil {
+		return 0, err
 	}
-	_, err := os.Stat(filepath.Join(dir, "root", ".flatpak-info"))
+	for _, line := range strings.Split(string(b), "\n") {
+		if v, ok := strings.CutPrefix(line, "Pid:"); ok {
+			return strconv.Atoi(strings.TrimSpace(v))
+		}
+	}
+	return 0, errors.New("the pidfd's fdinfo has no Pid line")
+}
+
+// procStartTime is field 22 of /proc/<pid>/stat, the start time in clock
+// ticks since boot: a pid reused by another process has another one. The
+// command name (field 2) may hold spaces and parentheses, so the fields are
+// counted after its last ')'.
+func procStartTime(pid uint32) (string, error) {
+	b, err := os.ReadFile(filepath.Join(procRoot, strconv.FormatUint(uint64(pid), 10), "stat"))
+	if err != nil {
+		return "", err
+	}
+	end := strings.LastIndexByte(string(b), ')')
+	if end < 0 {
+		return "", errors.New("malformed stat")
+	}
+	fields := strings.Fields(string(b)[end+1:]) // starts at field 3
+	if len(fields) < 20 {
+		return "", errors.New("malformed stat")
+	}
+	return fields[19], nil
+}
+
+// flatpakInfo reports whether pid's root holds .flatpak-info, the way
+// xdg-desktop-portal tells a sandbox. The root must resolve first: for a
+// zombie it does not, and every path under it would read as missing, which
+// would make any sandboxed zombie look like a host process.
+func flatpakInfo(pid uint32) (bool, error) {
+	root := filepath.Join(procRoot, strconv.FormatUint(uint64(pid), 10), "root")
+	if _, err := os.Readlink(root); err != nil {
+		return true, fmt.Errorf("the root of pid %d does not resolve: %w", pid, err)
+	}
+	_, err := os.Stat(filepath.Join(root, ".flatpak-info"))
 	switch {
 	case err == nil:
 		return true, nil
@@ -194,6 +265,53 @@ func sandboxed(pid uint32) (bool, error) {
 		return false, nil
 	}
 	return true, err
+}
+
+// sandboxed reports whether the caller runs in a Flatpak sandbox. It fails
+// closed: any error, or any sign that the process changed during the check,
+// counts as sandboxed. With a pidfd the pid is read from it before and after
+// the check; without one the process start time is.
+func sandboxed(c callerCreds) (bool, error) {
+	if c.pidfd >= 0 {
+		pid, err := readPidfdPid(c.pidfd)
+		if err != nil {
+			return true, err
+		}
+		if pid <= 0 {
+			return true, errors.New("the calling process has exited")
+		}
+		sb, err := flatpakInfo(uint32(pid))
+		if err != nil {
+			return true, err
+		}
+		after, err := readPidfdPid(c.pidfd)
+		if err != nil {
+			return true, err
+		}
+		if after != pid {
+			return true, errors.New("the calling process exited during the check")
+		}
+		return sb, nil
+	}
+	if c.pid == 0 {
+		return true, errors.New("the bus named no process")
+	}
+	before, err := readStartTime(c.pid)
+	if err != nil {
+		return true, err
+	}
+	sb, err := flatpakInfo(c.pid)
+	if err != nil {
+		return true, err
+	}
+	after, err := readStartTime(c.pid)
+	if err != nil {
+		return true, err
+	}
+	if after != before {
+		return true, fmt.Errorf("pid %d changed hands during the check", c.pid)
+	}
+	return sb, nil
 }
 
 func statusDict(s Status) map[string]dbus.Variant {
@@ -213,9 +331,9 @@ func statusDict(s Status) map[string]dbus.Variant {
 type service struct {
 	d    *Daemon
 	auth Authorizer
-	// pidOf names the process behind a bus name; nil refuses every
+	// credsOf names the process behind a bus name; nil refuses every
 	// mutating call.
-	pidOf func(dbus.Sender) (uint32, error)
+	credsOf func(dbus.Sender) (callerCreds, error)
 
 	// netSlot admits one network-bound call (Check, Releases, Inspect) at
 	// a time. They are open to every local user, so without it any caller
@@ -313,21 +431,24 @@ func newService(d *Daemon, a Authorizer) *service {
 // user, so the admin-group rule would let any app with system-bus access
 // install an image or reboot.
 func (s *service) authorize(sender dbus.Sender, action string) *dbus.Error {
-	if s.pidOf == nil {
+	if s.credsOf == nil {
 		fmt.Fprintf(os.Stderr, "hadron-update: refusing %s for %s: no way to look up the caller\n", action, sender)
 		return errNotAuthorized
 	}
-	pid, err := s.pidOf(sender)
+	creds, err := s.credsOf(sender)
+	if creds.close != nil {
+		defer creds.close()
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "hadron-update: refusing %s for %s: %v\n", action, sender, err)
 		return errNotAuthorized
 	}
-	if sb, err := sandboxed(pid); sb {
+	if sb, err := sandboxed(creds); sb {
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "hadron-update: refusing %s for %s (pid %d): %v\n", action, sender, pid, err)
+			fmt.Fprintf(os.Stderr, "hadron-update: refusing %s for %s: %v\n", action, sender, err)
 			return errNotAuthorized
 		}
-		fmt.Fprintf(os.Stderr, "hadron-update: refusing %s for %s: pid %d runs in a Flatpak sandbox\n", action, sender, pid)
+		fmt.Fprintf(os.Stderr, "hadron-update: refusing %s for %s: it runs in a Flatpak sandbox\n", action, sender)
 		return errSandboxed
 	}
 	ok, err := s.auth.Allowed(sender, action)
@@ -497,7 +618,7 @@ func (a busAPI) RebootPrevious(sender dbus.Sender) *dbus.Error {
 // taken or the bus goes away. It never returns while a job runs.
 func serve(conn *dbus.Conn, d *Daemon, a Authorizer) error {
 	s := newService(d, a)
-	s.pidOf = busPID(conn)
+	s.credsOf = busCreds(conn)
 	d.OnChange(func(st Status) {
 		s.touch()
 		if err := conn.Emit(busPath, busInterface+".StateChanged", statusDict(st)); err != nil {
