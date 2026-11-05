@@ -44,18 +44,20 @@ func Classify(info ImageInfo, rel Release, published []Latest) (Verdict, error) 
 	}
 
 	// Trusted by name: the repo and a tag that a published release maps to.
-	// A digest-only ref has no tag, so it is never trusted by name.
-	if rel.ImageRepo != "" && info.Ref.Repo() == rel.ImageRepo {
+	// A digest-only ref has no tag, and a tag+digest ref is resolved by the
+	// digest, so the tag says nothing about the content: neither is trusted by
+	// name. Both can still be labelled.
+	if rel.ImageRepo != "" && info.Ref.Digest == "" && info.Ref.Repo() == rel.ImageRepo {
 		flavor, tag, ok := strings.Cut(info.Ref.Tag, "-")
 		if ok && desktopFlavors[flavor] && strictTag.MatchString(tag) {
-			if _, ok := parseSemver(tag); ok && isPublished(tag, published) {
+			if isPublished(tag, published) {
 				return Verdict{Flavor: flavor, Version: tag, Trusted: true, Hadron: true}, nil
 			}
 		}
 	}
 
 	flavor, version := info.Labels[labelFlavor], info.Labels[labelVersion]
-	if desktopFlavors[flavor] && version != "" {
+	if desktopFlavors[flavor] && strictTag.MatchString(version) {
 		return Verdict{Flavor: flavor, Version: version, Hadron: true}, nil
 	}
 	return Verdict{}, ErrNotHadron

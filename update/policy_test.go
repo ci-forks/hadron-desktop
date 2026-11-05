@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+const hex64 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
 func policyRel() Release {
 	return Release{Flavor: "sway", Version: "v0.0.3", ImageRepo: "ghcr.io/kairos-community/hadron-desktop", GitHubRepo: "kairos-community/hadron-desktop"}
 }
@@ -51,8 +53,6 @@ func TestClassifyTrustedByNameRejectsLookalikes(t *testing.T) {
 		}
 	}
 }
-
-const hex64 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 func TestClassifyLabelled(t *testing.T) {
 	labels := map[string]string{labelFlavor: "sway", labelVersion: "v9.9.9"}
@@ -104,5 +104,32 @@ func TestReleaseRef(t *testing.T) {
 	}
 	if _, err := ReleaseRef(Release{}, "niri", "v0.0.4"); err == nil {
 		t.Fatal("empty ImageRepo must fail")
+	}
+}
+
+func TestClassifyTagPlusDigestIsNotTrustedByName(t *testing.T) {
+	rel := policyRel()
+	ref := rel.ImageRepo + ":niri-v0.0.4@sha256:" + hex64
+	pub := []Latest{{Tag: "v0.0.4"}}
+	if _, err := Classify(policyInfo(t, ref, nil), rel, pub); !errors.Is(err, ErrNotHadron) {
+		t.Fatalf("got %v, want ErrNotHadron", err)
+	}
+	agent := map[string]string{labelFlavor: "agent", labelVersion: "v0.0.4"}
+	if _, err := Classify(policyInfo(t, ref, agent), rel, pub); !errors.Is(err, ErrAgentImage) {
+		t.Fatalf("got %v, want ErrAgentImage", err)
+	}
+	labelled := map[string]string{labelFlavor: "niri", labelVersion: "v0.0.4"}
+	v, err := Classify(policyInfo(t, ref, labelled), rel, pub)
+	if err != nil || v.Trusted || !v.Hadron {
+		t.Fatalf("got %+v, %v; want labelled, untrusted", v, err)
+	}
+}
+
+func TestClassifyVersionLabelMustBeStrict(t *testing.T) {
+	for _, v := range []string{"latest", "v1.0", "v1.0.0-rc1", "1.0.0", "v01.0.0"} {
+		info := policyInfo(t, "example.com/o/i:x", map[string]string{labelFlavor: "sway", labelVersion: v})
+		if _, err := Classify(info, policyRel(), nil); !errors.Is(err, ErrNotHadron) {
+			t.Errorf("%q: got %v, want ErrNotHadron", v, err)
+		}
 	}
 }
