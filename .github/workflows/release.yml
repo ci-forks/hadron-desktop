@@ -476,12 +476,12 @@ jobs:
           asset="hadron-desktop-agent-${RELEASE_TAG}-amd64.iso"
           ./scripts/release-manifest.sh agent "$RELEASE_TAG" "$AGENT_IMAGE" \
             "dist/$asset" "dist/$asset.build.json"
-      # After every gate: an appliance image that failed one must never be
-      # pullable as an upgrade.
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v4.1.3
 
+      # After every gate: an appliance image that failed one must never be
+      # pullable as an upgrade.
       - name: Push the agent upgrade image
         shell: bash
         run: |

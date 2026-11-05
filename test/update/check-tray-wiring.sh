@@ -132,7 +132,9 @@ if [ "$FLAVOR" = i3 ]; then
     no_missing_libs "snixembed links resolve" /usr/bin/snixembed
     check "the i3 session starts snixembed --fork" \
         "{ $(lines "$SESSION"); } | grep -Eq '^[[:space:]]*exec[[:space:]]+(--no-startup-id[[:space:]]+)?snixembed[[:space:]]+--fork'"
-    check "snixembed starts before the tray" \
+    # Cosmetic only: i3 does not wait for --fork, and the tray registers
+    # with a watcher that appears later. Listed first, the icon shows sooner.
+    check "snixembed is listed before the tray (cosmetic ordering)" \
         "{ $(lines "$SESSION"); } | grep -E 'snixembed|hadron-update[[:space:]]+tray' | head -n1 | grep -q snixembed"
     check "i3bar shows a tray" \
         "{ $(lines "$SESSION"); } | grep -q '^[[:space:]]*bar[[:space:]]*{' && ! { $(lines "$SESSION"); } | grep -Eq '^[[:space:]]*tray_output[[:space:]]+none'"
