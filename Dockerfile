@@ -2771,10 +2771,7 @@ COPY --from=libxcb /libxcb /
 COPY --from=libxau /libxau /
 COPY --from=xorgproto /xorgproto /
 ARG ZIG_VERSION=0.16.0
-# ly 1.4.x has the dur_file animation (durdraw .dur playback) used for the login
-# background AND dur_offset_alignment for centering a movie wider than the
-# console (1.3.x's offset is unsigned, so it can't shift left to centre). Needs
-# Zig 0.16.x.
+# ly 1.4.x needs Zig 0.16.x.
 # renovate: datasource=github-tags depName=fairyglade/ly extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG LY_VERSION=1.4.1
 RUN mkdir -p /ly
@@ -2785,9 +2782,6 @@ RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://github.com/fair
 WORKDIR /build/ly-src
 RUN zig build
 RUN zig build installexe -Dinit_system=systemd -Ddest_directory=/ly
-# The "Black Hole" durdraw animation shown in ly's own README (256-colour .dur),
-# used as the login background via `animation = dur_file`.
-RUN curl -fL --retry 5 --retry-delay 3 --retry-all-errors "https://codeberg.org/attachments/f336d6ac-8331-4323-91fc-0e4619803401" -o /ly/etc/ly/blackhole-smooth.dur
 
 
 # ===========================================================================
@@ -4277,16 +4271,24 @@ RUN chmod 1777 /tmp; \
     # 1.3.x dropped the plain ly.service and the config `tty` option — the tty is
     # the systemd instance). It authenticates the cloud-config user and launches
     # the selected Sway or i3 session via its desktop entry.
-    # Tokyo Night theme for ly + the "Black Hole" .dur animation from ly's README
-    # as the login background (full_color must stay on for the 256-colour file).
+    # Hadron colours for ly, in eight-colour mode. The Linux console has 16
+    # colours: it maps ly's 24-bit values to the nearest of them by hue, so
+    # the accent came out cyan and the navy background black. Instead ly asks
+    # for the console's own colours, which the kernel command line sets to the
+    # Hadron palette (vt.default_* in grubmenu.cfg): the default background is
+    # colour 0 (base), bright white is 15 (text), bright blue is 12 (accent),
+    # red is 1 (error). The values are 0xSSRRGGBB: styling 0x40 is TB_BRIGHT,
+    # 0x01 is bold, and the low byte is a termbox colour (2 red, 5 blue,
+    # 8 white). No animation: decision 8 dropped the "Black Hole" one, whose
+    # licence is not stated.
     sed -i \
-      -e 's/^animation = .*/animation = dur_file/' \
-      -e 's|^dur_file_path = .*|dur_file_path = /etc/ly/blackhole-smooth.dur|' \
-      -e 's/^dur_offset_alignment = .*/dur_offset_alignment = center/' \
-      -e 's/^full_color = .*/full_color = true/' \
-      -e 's/^bg = .*/bg = 0x001a1b26/' \
-      -e 's/^fg = .*/fg = 0x00c0caf5/' \
-      -e 's/^border_fg = .*/border_fg = 0x007aa2f7/' \
+      -e 's/^animation = .*/animation = none/' \
+      -e 's/^full_color = .*/full_color = false/' \
+      -e 's/^bg = .*/bg = 0x00000000/' \
+      -e 's/^fg = .*/fg = 0x40000008/' \
+      -e 's/^border_fg = .*/border_fg = 0x40000005/' \
+      -e 's/^error_fg = .*/error_fg = 0x01000002/' \
+      -e 's/^error_bg = .*/error_bg = 0x00000000/' \
       -e 's/^box_title = .*/box_title = Hadron Desktop/' \
       -e 's/^clock = .*/clock = %H:%M/' \
       /etc/ly/config.ini 2>/dev/null || true; \

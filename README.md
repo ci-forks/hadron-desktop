@@ -128,6 +128,11 @@ driver takes over) over the same gradient as the GRUB theme, and falls back to
 a text animation on a console without one. Add `kairos.splash=0` at the boot
 menu to turn it off for one boot. See `splash/README.md`.
 
+The boot menu also sets the Linux console's 16 colours to the Hadron palette
+(`vt.default_red/grn/blu` on the kernel command line, generated from
+`theme/palette.toml`), so the boot messages, the ly login and the installer
+sit on the desktop's navy rather than black.
+
 ## Following Hadron
 
 The Hadron release is pinned in one value kept in four places (the

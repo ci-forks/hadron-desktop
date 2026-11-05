@@ -37,6 +37,8 @@ check "grubmenu.cfg leaves splash/quiet to kairos-init" \
     "! grep -E '^set extra_cmdline=.*(quiet|splash)' $G"
 check "grubmenu.cfg preserves any pre-existing extra_cmdline" \
     "grep -q 'set extra_cmdline=\"\${extra_cmdline}' $G"
+check "grubmenu.cfg sets the console palette (navy, not black)" \
+    "grep -q '^set hadron_vt_palette=\"vt.default_red=0x1a,' $G && grep -q 'extra_cmdline}.*\${hadron_vt_palette}' $G"
 
 # The Hadron wallpapers are drawn at build time; every variant points at these.
 WP=/usr/share/backgrounds/hadron
@@ -46,6 +48,12 @@ done
 case "${EXPECTED%% *}" in niri|cosmic)
     check "the day wallpaper is a PNG" "[ \"\$(head -c 4 $WP/hadron-orbits-day-3840x2160.png | tail -c 3)\" = PNG ]" ;;
 esac
+# ly runs on the 16-colour console: no animation, the console's own colours.
+if [ "${EXPECTED%% *}" != cosmic ]; then
+    check "ly has no animation" "grep -qx 'animation = none' /etc/ly/config.ini"
+    check "ly uses the console palette (eight-colour mode)" "grep -qx 'full_color = false' /etc/ly/config.ini"
+    check "no third-party ly animation file ships" "! ls /etc/ly/*.dur 2>/dev/null | grep -q ."
+fi
 
 # Release identity: hadron-update builds the upgrade image reference from it.
 R=/etc/hadron-desktop/release
