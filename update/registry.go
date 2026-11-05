@@ -2,8 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -42,39 +46,11 @@ func ImagePullable(ctx context.Context, ref string) error {
 	defer cancel()
 
 	manifest := fmt.Sprintf("%s/v2/%s/manifests/%s", registryBase(r.Host), r.Name, r.Reference())
-	head := func(token string) (*http.Response, error) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodHead, manifest, nil)
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("Accept", strings.Join([]string{
-			"application/vnd.oci.image.index.v1+json",
-			"application/vnd.oci.image.manifest.v1+json",
-			"application/vnd.docker.distribution.manifest.list.v2+json",
-			"application/vnd.docker.distribution.manifest.v2+json",
-		}, ", "))
-		if token != "" {
-			req.Header.Set("Authorization", "Bearer "+token)
-		}
-		return http.DefaultClient.Do(req)
-	}
-
-	resp, err := head("")
+	resp, err := (&regClient{}).do(ctx, http.MethodHead, manifest)
 	if err != nil {
 		return err
 	}
 	resp.Body.Close()
-
-	if resp.StatusCode == http.StatusUnauthorized {
-		token, err := anonymousToken(ctx, resp.Header.Get("WWW-Authenticate"))
-		if err != nil {
-			return err
-		}
-		if resp, err = head(token); err != nil {
-			return err
-		}
-		resp.Body.Close()
-	}
 
 	switch resp.StatusCode {
 	case http.StatusOK:
@@ -86,9 +62,46 @@ func ImagePullable(ctx context.Context, ref string) error {
 	}
 }
 
+// manifestAccept lists every manifest media type a registry may answer with,
+// so a multi-arch index and a single manifest both come back as served.
+const manifestAccept = "application/vnd.oci.image.index.v1+json, " +
+	"application/vnd.oci.image.manifest.v1+json, " +
+	"application/vnd.docker.distribution.manifest.list.v2+json, " +
+	"application/vnd.docker.distribution.manifest.v2+json"
+
+// regClient carries the anonymous pull token between requests, so one Resolve
+// does the 401 -> token handshake once, not once per manifest and blob.
+type regClient struct{ token string }
+
+// do sends one request. An unauthenticated attempt that gets a 401 Bearer
+// challenge fetches an anonymous token and retries once. The caller closes the
+// body.
+func (c *regClient) do(ctx context.Context, method, u string) (*http.Response, error) {
+	send := func() (*http.Response, error) {
+		req, err := http.NewRequestWithContext(ctx, method, u, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", manifestAccept)
+		if c.token != "" {
+			req.Header.Set("Authorization", "Bearer "+c.token)
+		}
+		return http.DefaultClient.Do(req)
+	}
+	resp, err := send()
+	if err != nil || resp.StatusCode != http.StatusUnauthorized {
+		return resp, err
+	}
+	resp.Body.Close()
+	if c.token, err = anonymousToken(ctx, resp.Header.Get("WWW-Authenticate")); err != nil {
+		return nil, err
+	}
+	return send()
+}
+
 func anonymousToken(ctx context.Context, challenge string) (string, error) {
 	if !strings.HasPrefix(challenge, "Bearer ") {
-		return "", fmt.Errorf("the registry asked for credentials (%q)", challenge)
+		return "", fmt.Errorf("%w (the registry's challenge: %q)", ErrNeedsCredentials, challenge)
 	}
 	params := map[string]string{}
 	for _, m := range bearerParam.FindAllStringSubmatch(challenge, -1) {
@@ -114,7 +127,7 @@ func anonymousToken(ctx context.Context, challenge string) (string, error) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		// ghcr answers 403 DENIED here for a private or missing repository.
-		return "", fmt.Errorf("it is private or does not exist (token service answered HTTP %d)", resp.StatusCode)
+		return "", fmt.Errorf("it is private or does not exist (token service answered HTTP %d): %w", resp.StatusCode, ErrNeedsCredentials)
 	}
 	var body struct {
 		Token       string `json:"token"`
@@ -127,4 +140,127 @@ func anonymousToken(ctx context.Context, challenge string) (string, error) {
 		return body.Token, nil
 	}
 	return body.AccessToken, nil
+}
+
+// ErrNeedsCredentials means the registry refused an anonymous pull. Inspect is
+// anonymous on purpose, so a private image is refused, not prompted for.
+var ErrNeedsCredentials = errors.New("needs registry credentials")
+
+// ErrWrongPlatform means the image has no linux/amd64 build, the only
+// platform Hadron Desktop runs on.
+var ErrWrongPlatform = errors.New("image is not built for linux/amd64")
+
+// ImageInfo is what an install needs to know about an image. Digest is the
+// digest of what the reference points at (the index for a multi-arch image),
+// because that is what kairos-agent pulls.
+type ImageInfo struct {
+	Ref      ImageRef
+	Digest   string
+	OS, Arch string
+	Labels   map[string]string
+}
+
+const maxRegistryBody = 8 << 20
+
+// Resolve looks ref up on its registry, anonymously, and returns its digest,
+// platform and labels.
+func Resolve(ctx context.Context, ref ImageRef) (ImageInfo, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	c := &regClient{}
+	base := registryBase(ref.Host)
+	manifestURL := func(r string) string { return fmt.Sprintf("%s/v2/%s/manifests/%s", base, ref.Name, r) }
+
+	body, digest, err := c.fetch(ctx, manifestURL(ref.Reference()), ref.String())
+	if err != nil {
+		return ImageInfo{}, err
+	}
+	info := ImageInfo{Ref: ref, Digest: digest}
+
+	var m struct {
+		Manifests []struct {
+			Digest   string `json:"digest"`
+			Platform struct {
+				OS           string `json:"os"`
+				Architecture string `json:"architecture"`
+			} `json:"platform"`
+		} `json:"manifests"`
+		Config struct {
+			Digest string `json:"digest"`
+		} `json:"config"`
+	}
+	if err := json.Unmarshal(body, &m); err != nil {
+		return ImageInfo{}, fmt.Errorf("%s: unreadable manifest: %w", ref, err)
+	}
+	if len(m.Manifests) > 0 {
+		child := ""
+		for _, e := range m.Manifests {
+			if e.Platform.OS == "linux" && e.Platform.Architecture == "amd64" {
+				child = e.Digest
+				break
+			}
+		}
+		if child == "" {
+			return ImageInfo{}, fmt.Errorf("%s: %w", ref, ErrWrongPlatform)
+		}
+		if body, _, err = c.fetch(ctx, manifestURL(child), ref.String()); err != nil {
+			return ImageInfo{}, err
+		}
+		m.Config.Digest = ""
+		if err := json.Unmarshal(body, &m); err != nil {
+			return ImageInfo{}, fmt.Errorf("%s: unreadable manifest: %w", ref, err)
+		}
+	}
+	if m.Config.Digest == "" {
+		return ImageInfo{}, fmt.Errorf("%s: the manifest names no config", ref)
+	}
+
+	blob, _, err := c.fetch(ctx, fmt.Sprintf("%s/v2/%s/blobs/%s", base, ref.Name, m.Config.Digest), ref.String())
+	if err != nil {
+		return ImageInfo{}, err
+	}
+	var cfg struct {
+		OS           string `json:"os"`
+		Architecture string `json:"architecture"`
+		Config       struct {
+			Labels map[string]string `json:"Labels"`
+		} `json:"config"`
+	}
+	if err := json.Unmarshal(blob, &cfg); err != nil {
+		return ImageInfo{}, fmt.Errorf("%s: unreadable image config: %w", ref, err)
+	}
+	info.OS, info.Arch, info.Labels = cfg.OS, cfg.Architecture, cfg.Config.Labels
+	if info.OS != "linux" || info.Arch != "amd64" {
+		return ImageInfo{}, fmt.Errorf("%s is %s/%s: %w", ref, info.OS, info.Arch, ErrWrongPlatform)
+	}
+	return info, nil
+}
+
+// fetch GETs u and returns the body and its digest: Docker-Content-Digest when
+// the registry sends it, else sha256 over the exact bytes served.
+func (c *regClient) fetch(ctx context.Context, u, name string) ([]byte, string, error) {
+	resp, err := c.do(ctx, http.MethodGet, u)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusNotFound:
+		return nil, "", fmt.Errorf("%s does not exist", name)
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return nil, "", fmt.Errorf("%s: %w", name, ErrNeedsCredentials)
+	default:
+		return nil, "", fmt.Errorf("%s answered HTTP %d", name, resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxRegistryBody))
+	if err != nil {
+		return nil, "", err
+	}
+	digest := resp.Header.Get("Docker-Content-Digest")
+	if digest == "" {
+		sum := sha256.Sum256(body)
+		digest = "sha256:" + hex.EncodeToString(sum[:])
+	}
+	return body, digest, nil
 }

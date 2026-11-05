@@ -2,6 +2,9 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -46,6 +49,26 @@ func fakeTool(t *testing.T, code int) (path, argvFile string) {
 // package nobody made public.
 func fakeRegistry(t *testing.T, private bool, published ...string) {
 	t.Helper()
+	newFakeRegistry(t, private, published...)
+}
+
+// fakeDoc is a manifest or blob a fakeReg serves.
+type fakeDoc struct {
+	body        []byte
+	contentType string
+}
+
+// fakeReg is fakeRegistry's server plus the images fakeImage published on it.
+// docs is keyed by "manifests/<tag or digest>" or "blobs/<digest>".
+type fakeReg struct {
+	docs map[string]fakeDoc
+	// omitDigest drops Docker-Content-Digest, as some registries do.
+	omitDigest bool
+}
+
+func newFakeRegistry(t *testing.T, private bool, published ...string) *fakeReg {
+	t.Helper()
+	reg := &fakeReg{docs: map[string]fakeDoc{}}
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -55,14 +78,24 @@ func fakeRegistry(t *testing.T, private bool, published ...string) {
 				return
 			}
 			fmt.Fprint(w, `{"token":"anon"}`)
-		case strings.HasPrefix(r.URL.Path, "/v2/kairos-community/hadron-desktop/manifests/"):
+		case strings.HasPrefix(r.URL.Path, "/v2/kairos-community/hadron-desktop/"):
 			if r.Header.Get("Authorization") != "Bearer anon" {
 				w.Header().Set("WWW-Authenticate", fmt.Sprintf(
 					`Bearer realm="%s/token",service="ghcr.io",scope="repository:kairos-community/hadron-desktop:pull"`, srv.URL))
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
-			tag := strings.TrimPrefix(r.URL.Path, "/v2/kairos-community/hadron-desktop/manifests/")
+			key := strings.TrimPrefix(r.URL.Path, "/v2/kairos-community/hadron-desktop/")
+			if d, ok := reg.docs[key]; ok {
+				w.Header().Set("Content-Type", d.contentType)
+				if !reg.omitDigest {
+					sum := sha256.Sum256(d.body)
+					w.Header().Set("Docker-Content-Digest", "sha256:"+hex.EncodeToString(sum[:]))
+				}
+				w.Write(d.body)
+				return
+			}
+			tag := strings.TrimPrefix(key, "manifests/")
 			for _, p := range published {
 				if p == tag {
 					return
@@ -75,6 +108,60 @@ func fakeRegistry(t *testing.T, private bool, published ...string) {
 	}))
 	t.Cleanup(srv.Close)
 	t.Setenv("HADRON_UPDATE_REGISTRY", srv.URL)
+	return reg
+}
+
+func digestOf(b []byte) string {
+	sum := sha256.Sum256(b)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// image publishes name:tag. arch is a comma-separated list: one entry makes a
+// single manifest, several (or index) make an index. labels go on the amd64
+// config only; every other architecture gets {"wrong-arch": "yes"}, so a test
+// can tell which config Resolve read. It returns the digest of what the tag
+// points at.
+func (r *fakeReg) image(t *testing.T, name, tag, arch string, labels map[string]string, index bool) string {
+	t.Helper()
+	const oci = "application/vnd.oci.image.manifest.v1+json"
+	var entries []map[string]any
+	var single []byte
+	for _, a := range strings.Split(arch, ",") {
+		l := map[string]string{"wrong-arch": "yes"}
+		if a == "amd64" {
+			l = labels
+		}
+		cfg, _ := json.Marshal(map[string]any{
+			"os": "linux", "architecture": a, "config": map[string]any{"Labels": l},
+		})
+		r.docs["blobs/"+digestOf(cfg)] = fakeDoc{cfg, "application/vnd.oci.image.config.v1+json"}
+		m, _ := json.Marshal(map[string]any{
+			"schemaVersion": 2, "mediaType": oci,
+			"config": map[string]any{"mediaType": "application/vnd.oci.image.config.v1+json", "digest": digestOf(cfg), "size": len(cfg)},
+		})
+		r.docs["manifests/"+digestOf(m)] = fakeDoc{m, oci}
+		entries = append(entries, map[string]any{
+			"mediaType": oci, "digest": digestOf(m), "size": len(m),
+			"platform": map[string]string{"os": "linux", "architecture": a},
+		})
+		single = m
+	}
+	if !index && len(entries) == 1 {
+		r.docs["manifests/"+tag] = fakeDoc{single, oci}
+		return digestOf(single)
+	}
+	idx, _ := json.Marshal(map[string]any{
+		"schemaVersion": 2, "mediaType": "application/vnd.oci.image.index.v1+json", "manifests": entries,
+	})
+	r.docs["manifests/"+tag] = fakeDoc{idx, "application/vnd.oci.image.index.v1+json"}
+	r.docs["manifests/"+digestOf(idx)] = r.docs["manifests/"+tag]
+	return digestOf(idx)
+}
+
+// fakeImage starts a public fake registry holding one image; see fakeReg.image.
+func fakeImage(t *testing.T, name, tag, arch string, labels map[string]string, index bool) string {
+	t.Helper()
+	return newFakeRegistry(t, false).image(t, name, tag, arch, labels, index)
 }
 
 func setup(t *testing.T, installed, latest string) {
