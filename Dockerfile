@@ -797,26 +797,12 @@ RUN cmake --build buildDir -j"$(nproc)" && DESTDIR=/cpp-date cmake --install bui
 # neuter the configure-time intltool version check (it only gates translation
 # catalogs we don't ship) and build just the two library subdirs, skipping the
 # po/ translation dir that actually needs intltool-merge at make time.
-FROM toolchain AS libdbusmenu
-COPY --from=glib2 /glib2 /
-COPY --from=pcre2 /pcre2 /
-COPY --from=cairo /cairo /
-COPY --from=pango /pango /
-COPY --from=harfbuzz /harfbuzz /
-COPY --from=fribidi /fribidi /
-COPY --from=freetype /freetype /
-COPY --from=fontconfig /fontconfig /
-COPY --from=libpng /libpng /
-COPY --from=pixman /pixman /
-COPY --from=gdk-pixbuf /gdk-pixbuf /
-COPY --from=atk /atk /
-COPY --from=libepoxy /libepoxy /
-COPY --from=wayland /wayland /
-COPY --from=libxkb /libxkb /
-COPY --from=mesa /mesa /
-COPY --from=gtk3 /gtk3 /
+#
+# The source and these stubs are shared by two builds: libdbusmenu, against
+# the Wayland-only gtk3 (waybar on Sway), and libdbusmenu-gtk3-x11, against
+# gtk3-x11 (snixembed on i3).
+FROM toolchain AS libdbusmenu-src
 ARG LIBDBUSMENU_VERSION=16.04.0
-RUN mkdir -p /libdbusmenu
 WORKDIR /build
 RUN curl -fL --retry 5 --retry-delay 3 --retry-all-errors https://launchpad.net/libdbusmenu/16.04/${LIBDBUSMENU_VERSION}/+download/libdbusmenu-${LIBDBUSMENU_VERSION}.tar.gz -o d.tar.gz && tar -xf d.tar.gz && rm d.tar.gz && mv libdbusmenu-* src
 WORKDIR /build/src
@@ -841,6 +827,26 @@ RUN mkdir -p /usr/share/perl5/vendor_perl/XML \
 # in that branch, so configure's "conditional X was never defined" sanity guards
 # abort. Neuter those guards — the lib subdirs we build don't use the conditionals.
 RUN sed -i 's/if test -z "${[A-Z_]*_TRUE}" && test -z "${[A-Z_]*_FALSE}"; then/if false; then/g' configure
+
+FROM libdbusmenu-src AS libdbusmenu
+COPY --from=glib2 /glib2 /
+COPY --from=pcre2 /pcre2 /
+COPY --from=cairo /cairo /
+COPY --from=pango /pango /
+COPY --from=harfbuzz /harfbuzz /
+COPY --from=fribidi /fribidi /
+COPY --from=freetype /freetype /
+COPY --from=fontconfig /fontconfig /
+COPY --from=libpng /libpng /
+COPY --from=pixman /pixman /
+COPY --from=gdk-pixbuf /gdk-pixbuf /
+COPY --from=atk /atk /
+COPY --from=libepoxy /libepoxy /
+COPY --from=wayland /wayland /
+COPY --from=libxkb /libxkb /
+COPY --from=mesa /mesa /
+COPY --from=gtk3 /gtk3 /
+RUN mkdir -p /libdbusmenu
 RUN ./configure ${COMMON_CONFIGURE_ARGS} --with-gtk=3 --disable-introspection --disable-vala --disable-gtk-doc --disable-dumper --disable-tests --disable-static --disable-nls
 # This 2016 codebase uses G_TYPE_INSTANCE_GET_PRIVATE, now a deprecation that
 # -Werror promotes to a hard error against modern GLib. Strip -Werror.
@@ -3671,7 +3677,7 @@ RUN meson setup buildDir ${COMMON_MESON_FLAGS} --libexecdir=lib \
     DESTDIR=/at-spi2-core ninja -C buildDir install
 
 # GTK3 with the X11 backend, for the i3 image only: xdg-desktop-portal-gtk
-# needs a GTK that can open a window on XLibre. The Wayland variants keep the
+# and snixembed need a GTK that can open a window on XLibre. The Wayland variants keep the
 # Wayland-only gtk3 stage, so they gain no X11 libraries.
 FROM toolchain AS gtk3-x11
 COPY --from=glib2 /glib2 /
@@ -3745,6 +3751,116 @@ RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} --libexecdir=lib -Dwallpaper=disabled -Dsettings=enabled -Dlockdown=disabled && \
     DESTDIR=/xdg-desktop-portal-gtk-x11 ninja -C buildDir install && \
     ! ldd /xdg-desktop-portal-gtk-x11/usr/lib/xdg-desktop-portal-gtk | grep 'not found'
+
+# libdbusmenu-gtk3 again, against gtk3-x11 for snixembed on i3. Same source,
+# stubs and options as the libdbusmenu stage.
+FROM libdbusmenu-src AS libdbusmenu-gtk3-x11
+COPY --from=glib2 /glib2 /
+COPY --from=pcre2 /pcre2 /
+COPY --from=xorgproto /xorgproto /
+COPY --from=xcbproto /xcbproto /
+COPY --from=libxau /libxau /
+COPY --from=libxcb /libxcb /
+COPY --from=x11-libs /x11-libs /
+COPY --from=cairo-x11 /cairo-x11 /
+COPY --from=pango-x11 /pango-x11 /
+COPY --from=harfbuzz /harfbuzz /
+COPY --from=fribidi /fribidi /
+COPY --from=freetype /freetype /
+COPY --from=fontconfig /fontconfig /
+COPY --from=libpng /libpng /
+COPY --from=pixman /pixman /
+COPY --from=gdk-pixbuf /gdk-pixbuf /
+COPY --from=at-spi2-core /at-spi2-core /
+COPY --from=libdrm /libdrm /
+COPY --from=mesa-x11 /mesa-x11 /
+COPY --from=libepoxy-x11 /libepoxy-x11 /
+COPY --from=libucontext /libucontext /
+COPY --from=gtk3-x11 /gtk3-x11 /
+RUN mkdir -p /libdbusmenu-gtk3-x11
+RUN ./configure ${COMMON_CONFIGURE_ARGS} --with-gtk=3 --disable-introspection --disable-vala --disable-gtk-doc --disable-dumper --disable-tests --disable-static --disable-nls
+RUN find . -name Makefile -exec sed -i 's/-Werror//g' {} +
+RUN make -C libdbusmenu-glib -j"$(nproc)" && make -C libdbusmenu-gtk -j"$(nproc)" \
+    && make -C libdbusmenu-glib DESTDIR=/libdbusmenu-gtk3-x11 install \
+    && make -C libdbusmenu-gtk  DESTDIR=/libdbusmenu-gtk3-x11 install
+
+# Vala compiler, to build snixembed. Build-time only: no rootfs copies this
+# stage. The release tarball carries valac's own sources already translated to
+# C, so it needs no earlier valac; valadoc is off (it needs graphviz).
+# GI_GIRDIR is only where vapigen would look for .gir files; there is no
+# GObject Introspection here, and configure fails without a value.
+FROM toolchain AS vala
+COPY --from=glib2 /glib2 /
+COPY --from=pcre2 /pcre2 /
+COPY --from=libucontext /libucontext /
+# renovate: datasource=gitlab-tags depName=GNOME/vala registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
+ARG VALA_VERSION=0.56.19
+RUN mkdir -p /vala
+WORKDIR /build
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://download.gnome.org/sources/vala/${VALA_VERSION%.*}/vala-${VALA_VERSION}.tar.xz -o vala.tar.xz && tar -xf vala.tar.xz && rm vala.tar.xz && mv vala-* src
+WORKDIR /build/src
+RUN ./configure ${COMMON_CONFIGURE_ARGS} --disable-valadoc GI_GIRDIR=/usr/share/gir-1.0 && \
+    make -j"$(nproc)" && make install DESTDIR=/vala
+
+# snixembed: shows StatusNotifierItems (the update tray's icon) as XEmbed tray
+# icons, the only kind i3bar hosts. It draws them with GTK3's GtkStatusIcon,
+# which exists only in the X11 backend, so it builds against gtk3-x11 and
+# libdbusmenu-gtk3-x11 rather than the Wayland gtk3. Upstream is on sourcehut
+# only (no GitHub mirror), so the archive comes from git.sr.ht.
+#
+# libdbusmenu ships its Vala bindings only when built with GObject
+# Introspection, which Hadron does not build. snixembed uses one thing from
+# them, DbusmenuGtk.Menu's constructor, so the two bindings it names
+# (--pkg Dbusmenu-0.4 DbusmenuGtk3-0.4) are written here: an empty one and one
+# declaring that class. The C code still includes libdbusmenu's real header
+# and links its library, so a wrong function name fails the build.
+FROM toolchain AS snixembed
+COPY --from=glib2 /glib2 /
+COPY --from=pcre2 /pcre2 /
+COPY --from=xorgproto /xorgproto /
+COPY --from=xcbproto /xcbproto /
+COPY --from=libxau /libxau /
+COPY --from=libxcb /libxcb /
+COPY --from=x11-libs /x11-libs /
+COPY --from=cairo-x11 /cairo-x11 /
+COPY --from=pango-x11 /pango-x11 /
+COPY --from=harfbuzz /harfbuzz /
+COPY --from=fribidi /fribidi /
+COPY --from=freetype /freetype /
+COPY --from=fontconfig /fontconfig /
+COPY --from=libpng /libpng /
+COPY --from=pixman /pixman /
+COPY --from=gdk-pixbuf /gdk-pixbuf /
+COPY --from=at-spi2-core /at-spi2-core /
+COPY --from=libdrm /libdrm /
+COPY --from=mesa-x11 /mesa-x11 /
+COPY --from=libepoxy-x11 /libepoxy-x11 /
+COPY --from=libucontext /libucontext /
+COPY --from=gtk3-x11 /gtk3-x11 /
+COPY --from=libdbusmenu-gtk3-x11 /libdbusmenu-gtk3-x11 /
+COPY --from=vala /vala /
+# renovate: datasource=git-tags depName=https://git.sr.ht/~steef/snixembed extractVersion=^(?<version>\d+(\.\d+)*)$
+ARG SNIXEMBED_VERSION=0.3.3
+RUN mkdir -p /snixembed
+WORKDIR /build
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://git.sr.ht/~steef/snixembed/archive/${SNIXEMBED_VERSION}.tar.gz -o s.tar.gz && tar -xzf s.tar.gz && rm s.tar.gz && mv snixembed-* src
+WORKDIR /build/src
+RUN v=/usr/share/vala/vapi && mkdir -p $v && \
+    printf '%s\n' '/* Empty: snixembed uses nothing from libdbusmenu-glib directly. */' \
+      'namespace Dbusmenu {}' > $v/Dbusmenu-0.4.vapi && \
+    printf '%s\n' '/* The part of libdbusmenu-gtk3 snixembed uses (see the Dockerfile). */' \
+      '[CCode (cprefix = "DbusmenuGtk", lower_case_cprefix = "dbusmenu_gtk_")]' \
+      'namespace DbusmenuGtk {' \
+      '	[CCode (cheader_filename = "libdbusmenu-gtk/menu.h", type_id = "dbusmenu_gtkmenu_get_type ()")]' \
+      '	public class Menu : Gtk.Menu {' \
+      '		[CCode (cname = "dbusmenu_gtkmenu_new", has_construct_function = false)]' \
+      '		public Menu (string dbus_name, string dbus_object);' \
+      '	}' \
+      '}' > $v/DbusmenuGtk3-0.4.vapi
+RUN make && make install DESTDIR=/snixembed PREFIX=/usr && \
+    rm -rf /snixembed/usr/share/man && \
+    /snixembed/usr/bin/snixembed --version | grep -qx "version: ${SNIXEMBED_VERSION}" && \
+    ! ldd /snixembed/usr/bin/snixembed | grep 'not found'
 
 # ===========================================================================
 # M6: real-hardware firmware (optional)
@@ -3861,6 +3977,9 @@ COPY --from=xdg-desktop-portal /xdg-desktop-portal /
 COPY --from=xdg-desktop-portal-gtk /xdg-desktop-portal-gtk /
 COPY --from=xdg-desktop-portal-wlr /xdg-desktop-portal-wlr /
 COPY --from=gsettings-desktop-schemas /gsettings-desktop-schemas /
+# polkit, which answers hadron-updated's "may this user install updates?"
+COPY --from=duktape /duktape /
+COPY --from=polkit /polkit /
 
 
 # XLibre/i3 root. This mirrors the shared networking/audio/container-facing
@@ -3930,6 +4049,13 @@ COPY --from=gtk3-x11 /gtk3-x11 /
 COPY --from=xdg-desktop-portal /xdg-desktop-portal /
 COPY --from=xdg-desktop-portal-gtk-x11 /xdg-desktop-portal-gtk-x11 /
 COPY --from=gsettings-desktop-schemas /gsettings-desktop-schemas /
+# polkit, which answers hadron-updated's "may this user install updates?", and
+# the update tray's host: snixembed shows its StatusNotifierItem in i3bar,
+# which hosts only XEmbed icons. It uses the same GTK3 X11 build as the portal.
+COPY --from=duktape /duktape /
+COPY --from=polkit /polkit /
+COPY --from=libdbusmenu-gtk3-x11 /libdbusmenu-gtk3-x11 /
+COPY --from=snixembed /snixembed /
 
 
 # COSMIC root. Shares the networking/audio/bluetooth runtime with the other
@@ -4224,7 +4350,8 @@ RUN chmod 1777 /tmp; \
     # Compile the GSettings schemas the variant ships (GTK's, and on Sway, i3
     # and niri gsettings-desktop-schemas with Hadron's dark override): the
     # stages install them under DESTDIR, where meson skips this, and GLib
-    # aborts a GTK app that opens a file chooser with no compiled schemas.
+    # aborts a GTK app that opens a file chooser with no compiled schemas. On
+    # i3 the AT-SPI bus launcher, which GTK starts for snixembed, aborts too.
     if [ -d /usr/share/glib-2.0/schemas ]; then glib-compile-schemas /usr/share/glib-2.0/schemas || exit 1; fi; \
     for g in audio video render input bluetooth seat docker; do groupadd -f "$g"; done; \
     mkdir -p /var/lib/docker /var/lib/xkb; \
@@ -4284,7 +4411,8 @@ RUN chmod 1777 /tmp; \
         ln -sf /usr/lib/systemd/system/$u.service /etc/systemd/system/multi-user.target.wants/$u.service; \
       done; \
     fi; \
-    # polkit (COSMIC and niri): polkitd runs the daemon. The agent helper is
+    # polkit (Sway, i3, COSMIC and niri): polkitd runs the daemon, which D-Bus
+    # starts on the first request (polkit.service needs no enable link). The agent helper is
     # what checks a password for the prompt, so it must be setuid root, and the
     # rules directories must be readable by polkitd only.
     if [ -d /usr/lib/polkit-1 ]; then \

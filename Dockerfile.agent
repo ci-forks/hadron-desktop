@@ -180,3 +180,13 @@ RUN groupadd -r hadron-agent-control && \
 # The appliance upgrades along its own image line, not the i3 one it is built on.
 RUN sed -i 's/^FLAVOR=.*/FLAVOR=agent/' /etc/hadron-desktop/release && \
     grep -qx 'FLAVOR=agent' /etc/hadron-desktop/release
+# No update service: hadron-update upgrade keeps its direct sudo path on the
+# appliance, so the root daemon, its D-Bus policy and activation, and its
+# polkit action and rule from the i3 image go. The update icon that talks to
+# it is shadowed by rootfs-agent/etc/i3/config.d/30-update-tray.conf.
+RUN rm -f /usr/share/dbus-1/system.d/io.kairos.HadronUpdate1.conf \
+      /usr/share/dbus-1/system-services/io.kairos.HadronUpdate1.service \
+      /usr/lib/systemd/system/hadron-updated.service \
+      /usr/share/polkit-1/actions/io.kairos.hadron-update.policy \
+      /usr/share/polkit-1/rules.d/50-hadron-update.rules && \
+    ! grep -rhsv '^[[:space:]]*#' /etc/i3 /etc/xdg/autostart | grep -q 'hadron-update'
