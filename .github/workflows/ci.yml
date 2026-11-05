@@ -37,6 +37,9 @@ jobs:
       - name: Hadron pins agree
         run: scripts/bump-hadron.sh --check
 
+      - name: Version pins are tracked by Renovate
+        run: scripts/check-renovate-pins.sh
+
       - name: Session scripts and configs parse
         shell: bash
         run: |
