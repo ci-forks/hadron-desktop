@@ -1,0 +1,50 @@
+# The Hadron palette: one source for the colours of every desktop variant.
+#
+# Edit a value here, then run `python3 tools/gen-theme.py` to rewrite the
+# configs that use it. CI runs `python3 tools/gen-theme.py --check`, which
+# fails when a config drifts from this file or a contrast floor is broken.
+#
+# Night is the Tokyo Night lineage the splash, GRUB, ly, sway and i3 already
+# use. Day is for Noctalia's light mode (and later COSMIC and Flatpak apps);
+# sway and i3 have no light mode yet.
+#
+# Roles, not hues: name a colour by what it does, so a config line says
+# "inactive label" and not "grey".
+
+[night]
+crust     = "#16161e"  # darkest: terminal black, text on accent
+base      = "#1a1b26"  # desktop, terminal, bars, popups
+surface   = "#24283b"  # capsules, cards
+overlay   = "#292e42"  # selection, hover
+border    = "#414868"  # inactive borders, separators
+muted     = "#565f89"  # decoration only (2.8:1 on base); never for text you must read
+dim       = "#737aa2"  # inactive labels, placeholders (4.1:1 on base)
+subtext   = "#a9b1d6"  # secondary text
+text      = "#c0caf5"  # primary text
+accent    = "#7aa2f7"  # focus, selection, brand
+glow      = "#7dcfff"  # secondary accent: clock, focus indicator
+violet    = "#bb9af7"  # tertiary accent: binding mode, matches
+success   = "#9ece6a"
+warning   = "#e0af68"
+error     = "#f7768e"
+orange    = "#ff9e64"
+on_accent = "#16161e"  # text on accent, error and the other bright fills
+
+[day]
+crust     = "#d0d5e3"
+base      = "#e1e2e7"
+surface   = "#eef0f5"
+overlay   = "#c4c8da"
+border    = "#a8aecb"
+muted     = "#5f6794"
+dim       = "#5f6794"
+subtext   = "#4c5689"
+text      = "#343b58"
+accent    = "#2a5fc4"
+glow      = "#006a8e"
+violet    = "#7c3fd6"
+success   = "#4b6b2b"
+warning   = "#875700"
+error     = "#c4194f"
+orange    = "#9a4b00"
+on_accent = "#ffffff"

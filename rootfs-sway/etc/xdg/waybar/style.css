@@ -1,4 +1,19 @@
-/* Waybar — Tokyo Night. Matches the Sway/foot/fuzzel/mako palette. */
+/* Waybar: the Hadron palette. Matches the sway, foot, fuzzel and mako colours. */
+/* Colours: generated from theme/palette.toml by tools/gen-theme.py. Edit the
+   palette, not these values. */
+@define-color base      #1a1b26;
+@define-color surface   #24283b;
+@define-color border    #414868;
+@define-color dim       #737aa2;
+@define-color text      #c0caf5;
+@define-color accent    #7aa2f7;
+@define-color glow      #7dcfff;
+@define-color violet    #bb9af7;
+@define-color success   #9ece6a;
+@define-color warning   #e0af68;
+@define-color error     #f7768e;
+@define-color on_accent #16161e;
+
 * {
     font-family: "DejaVu Sans", "Symbols Nerd Font", sans-serif;
     font-size: 13px;
@@ -6,40 +21,40 @@
 }
 
 window#waybar {
-    background-color: #1a1b26;
-    color: #c0caf5;
-    border-bottom: 2px solid #414868;
+    background-color: @base;
+    color: @text;
+    border-bottom: 2px solid @border;
 }
 
 #workspaces button {
     padding: 0 8px;
     margin: 2px 2px;
-    color: #565f89;
+    color: @dim;
     background-color: transparent;
     border-radius: 4px;
 }
 #workspaces button.focused {
-    color: #1a1b26;
-    background-color: #7aa2f7;
+    color: @on_accent;
+    background-color: @accent;
 }
 #workspaces button.urgent {
-    color: #1a1b26;
-    background-color: #f7768e;
+    color: @on_accent;
+    background-color: @error;
 }
 #workspaces button:hover {
-    background-color: #24283b;
-    color: #c0caf5;
+    background-color: @surface;
+    color: @text;
 }
 
 #mode {
-    color: #1a1b26;
-    background-color: #e0af68;
+    color: @on_accent;
+    background-color: @warning;
     padding: 0 8px;
     border-radius: 4px;
 }
 
 #clock {
-    color: #7dcfff;
+    color: @glow;
     font-weight: bold;
 }
 
@@ -53,23 +68,23 @@ window#waybar {
     padding: 0 10px;
     margin: 2px 2px;
     border-radius: 4px;
-    background-color: #24283b;
+    background-color: @surface;
 }
 
-#network        { color: #7aa2f7; }
-#bluetooth      { color: #7dcfff; }
-#wireplumber    { color: #bb9af7; }
-#cpu            { color: #9ece6a; }
-#memory         { color: #e0af68; }
-#battery        { color: #9ece6a; }
+#network        { color: @accent; }
+#bluetooth      { color: @glow; }
+#wireplumber    { color: @violet; }
+#cpu            { color: @success; }
+#memory         { color: @warning; }
+#battery        { color: @success; }
 
-#battery.warning  { color: #e0af68; }
-#battery.critical { color: #f7768e; }
+#battery.warning  { color: @warning; }
+#battery.critical { color: @error; }
 #network.disconnected,
-#wireplumber.muted { color: #565f89; }
+#wireplumber.muted { color: @dim; }
 
-#tray { background-color: #24283b; }
-#tray > .needs-attention { color: #f7768e; }
+#tray { background-color: @surface; }
+#tray > .needs-attention { color: @error; }
 
-#custom-power   { color: #f7768e; padding: 0 12px 0 8px; }
-#custom-power:hover { background-color: #24283b; }
+#custom-power   { color: @error; padding: 0 12px 0 8px; }
+#custom-power:hover { background-color: @surface; }

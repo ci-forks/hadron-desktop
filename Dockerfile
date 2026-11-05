@@ -3491,8 +3491,8 @@ RUN ! ldd /noctalia/usr/bin/noctalia | grep 'not found' && \
     test -f /noctalia/usr/share/noctalia/assets/emoji.json
 
 # The Adwaita cursor theme, cursors only (not the icon set), registered as the
-# system default. Without a cursor theme niri and GTK apps fall back to a bare
-# built-in arrow and no resize or text cursors.
+# system default. Without a cursor theme sway, i3, niri and GTK apps fall back
+# to a bare built-in arrow and no resize or text cursors.
 FROM toolchain AS adwaita-cursors
 # renovate: datasource=gitlab-tags depName=GNOME/adwaita-icon-theme registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG ADWAITA_ICON_THEME_VERSION=51.0
@@ -3808,6 +3808,10 @@ COPY --from=cpp-date /cpp-date /
 COPY --from=libdbusmenu /libdbusmenu /
 COPY --from=waybar /waybar /
 COPY --from=nerdfont /nerdfont /
+# Fallback icon theme and the Adwaita cursors (system default via
+# /usr/share/icons/default), as on niri.
+COPY --from=hicolor-icon-theme /hicolor-icon-theme /
+COPY --from=adwaita-cursors /adwaita-cursors /
 # Login manager (ly) + its X protocol libs
 COPY --from=libxau /libxau /
 COPY --from=libxcb /libxcb /
@@ -3877,6 +3881,8 @@ COPY --from=sbc /sbc /
 COPY --from=bluez /bluez /
 # Shared visual assets + login manager.
 COPY --from=nerdfont /nerdfont /
+COPY --from=hicolor-icon-theme /hicolor-icon-theme /
+COPY --from=adwaita-cursors /adwaita-cursors /
 COPY --from=ly /ly /
 # Portals, so Flatpak apps get file dialogs and the dark colour scheme. The GTK
 # backend needs a GTK3 with the X11 backend (and its AT-SPI bridge) here.

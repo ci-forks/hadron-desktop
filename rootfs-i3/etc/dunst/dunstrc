@@ -1,3 +1,5 @@
+# dunst notifications for the i3 variant: the Hadron palette.
+# Colours: generated from theme/palette.toml by tools/gen-theme.py.
 [global]
     monitor = 0
     follow = mouse

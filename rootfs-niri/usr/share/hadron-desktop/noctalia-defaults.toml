@@ -15,3 +15,11 @@ polkit_agent = true
 # places it in the overview backdrop.
 [backdrop]
 enabled = true
+
+# The Hadron palette, so the bar, panels and launcher match the other variants.
+# hadron-noctalia copies it to ~/.config/noctalia/palettes/Hadron.json. It is
+# generated from theme/palette.toml; Noctalia's builtin "Tokyo-Night" differs
+# (green hover, other outline and light colours).
+[theme]
+source = "custom"
+custom_palette = "Hadron"

@@ -2,7 +2,7 @@
 # dmenu-based Wi-Fi menu for the XLibre/i3 variant (NetworkManager via nmcli).
 menu() {
     dmenu -i -l 14 -p "$1" -fn 'DejaVu Sans-11' \
-        -nb '#1a1b26' -nf '#c0caf5' -sb '#7aa2f7' -sf '#1a1b26'
+        -nb '#1a1b26' -nf '#c0caf5' -sb '#7aa2f7' -sf '#16161e'
 }
 
 radio=$(nmcli -t -f WIFI radio 2>/dev/null || echo "")

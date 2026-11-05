@@ -2,12 +2,15 @@
 
 set $mod   Mod4
 set $term  st
-set $menu  dmenu_run -i -l 12 -p "Run" -fn "DejaVu Sans-11" -nb "#1a1b26" -nf "#c0caf5" -sb "#7aa2f7" -sf "#1a1b26"
+set $menu  dmenu_run -i -l 12 -p "Run" -fn "DejaVu Sans-11" -nb "#1a1b26" -nf "#c0caf5" -sb "#7aa2f7" -sf "#16161e"
 set $left  h
 set $down  j
 set $up    k
 set $right l
 
+# Hadron palette. Generated from theme/palette.toml by tools/gen-theme.py:
+# edit the palette, not these values. Inactive titles and workspace labels use
+# $dim, not the darker decoration grey, so they stay readable.
 set $bg      #1a1b26
 set $bg_alt  #24283b
 set $fg      #c0caf5
@@ -15,7 +18,7 @@ set $blue    #7aa2f7
 set $cyan    #7dcfff
 set $magenta #bb9af7
 set $red     #f7768e
-set $grey    #565f89
+set $dim     #737aa2
 set $border  #414868
 
 font pango:DejaVu Sans 10
@@ -29,10 +32,10 @@ smart_borders on
 
 # class                 border   bg       text   indicator child_border
 client.focused          $blue    $bg      $fg    $cyan     $blue
-client.focused_inactive $border  $bg      $grey  $border   $border
-client.unfocused        $border  $bg      $grey  $border   $bg
+client.focused_inactive $border  $bg      $dim   $border   $border
+client.unfocused        $border  $bg      $dim   $border   $bg
 client.urgent           $red     $red     $fg    $red      $red
-client.placeholder      $border  $bg      $grey  $border   $border
+client.placeholder      $border  $bg      $dim   $border   $border
 client.background       $bg
 
 # Shared desktop services. User systemd also socket-activates the audio stack;
@@ -166,7 +169,7 @@ bar {
         separator  $border
         focused_workspace  $blue $blue $bg
         active_workspace   $border $bg_alt $fg
-        inactive_workspace $border $bg $grey
+        inactive_workspace $border $bg $dim
         urgent_workspace   $red $red $fg
         binding_mode       $magenta $magenta $bg
     }

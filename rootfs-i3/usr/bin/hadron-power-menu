@@ -5,7 +5,7 @@
 # `admin`, which Kairos' 10_accounting stage gives passwordless sudo, so -n
 # never prompts. Lock runs the same i3lock as Mod+Alt+l (/etc/i3/config).
 sel=$(printf '%s\n' "Lock" "Log out" "Suspend" "Reboot" "Power off" |
-    dmenu -i -p "Power" -fn "DejaVu Sans-11" -nb "#1a1b26" -nf "#c0caf5" -sb "#7aa2f7" -sf "#1a1b26") || exit 0
+    dmenu -i -p "Power" -fn "DejaVu Sans-11" -nb "#1a1b26" -nf "#c0caf5" -sb "#7aa2f7" -sf "#16161e") || exit 0
 case "$sel" in
     Lock)        i3lock --ignore-empty-password --show-failed-attempts --color=1a1b26 ;;
     "Log out")   i3-msg exit ;;
