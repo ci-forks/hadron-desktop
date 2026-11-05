@@ -649,7 +649,13 @@ func (d *Daemon) Cancel() error {
 		j := d.job
 		d.job = nil
 		j.cancel()
-		d.setLocked(j.prev, j.prevDetail)
+		prev, detail := j.prev, j.prevDetail
+		if prev == StateError {
+			// The error was the last job's; restoring it would show it as
+			// news. Nothing is wrong now.
+			prev, detail = StateIdle, ""
+		}
+		d.setLocked(prev, detail)
 		return nil
 	case StateApplying:
 		return ErrNotCancellable

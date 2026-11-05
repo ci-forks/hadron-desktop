@@ -654,6 +654,30 @@ func TestMarkerSaysHowTheInstallEnded(t *testing.T) {
 	}
 }
 
+// TestCancelFromErrorReturnsToIdle: the error was the last job's; a cancel
+// must not bring it back as if it were news.
+func TestCancelFromErrorReturnsToIdle(t *testing.T) {
+	dg := daemonEnv(t, "v0.0.5")
+	d := NewDaemon(&fakeBackend{})
+	d.mu.Lock()
+	d.setLocked(StateError, "could not check for updates: offline")
+	d.mu.Unlock()
+	noReleaseCache(t)
+	arrived := blockingGitHub(t)
+	ref := ghcrRepo + ":sway-v0.0.6"
+	if err := d.Apply(context.Background(), ref, dg[ref], false); err != nil {
+		t.Fatal(err)
+	}
+	<-arrived
+	if err := d.Cancel(); err != nil {
+		t.Fatal(err)
+	}
+	if s := d.Status(); s.State != StateIdle || s.Detail != "" {
+		t.Fatalf("after cancel: %+v", s)
+	}
+	d.wg.Wait()
+}
+
 func TestCallbacksMayCallTheDaemon(t *testing.T) {
 	dg := daemonEnv(t, "v0.0.5")
 	d := NewDaemon(&fakeBackend{lines: []string{"a"}})
