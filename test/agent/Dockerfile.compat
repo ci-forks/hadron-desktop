@@ -98,7 +98,13 @@ RUN commit="$(cat /src/chromium.commit)" && \
       END { exit (NR == 0 || bad) }' \
       /etc/hadron-agent-test/flatpak-refs.tsv
 COPY --from=probe-build /out/cua-compat-probe /usr/local/libexec/cua-compat-probe
+# The compat probe launches its own Chromium with the fixture's flags (see
+# etc/i3/config.d/99-cua-compat.conf). The agent's Chromium unit, started by
+# hadron-agent-session-ready at login, would take the same profile first, and
+# the fixture launch would only hand its URL to that instance ("Opening in
+# existing browser session"), losing the /opt fixture mount. rootfs masks it.
 COPY test/agent/rootfs/ /
+RUN test "$(readlink /etc/systemd/user/hadron-agent-browser.service)" = /dev/null
 RUN uid_owner="$(awk -F: '$3 == 1000 { print $1 }' /etc/passwd)" && \
     if [ -n "$uid_owner" ]; then \
       printf 'UID 1000 already belongs to %s\n' "$uid_owner" >&2; \
