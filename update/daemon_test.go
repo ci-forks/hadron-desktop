@@ -31,10 +31,12 @@ type fakeBackend struct {
 	pinSeen []string // the pin file's content when Upgrade was called
 	reboots int
 
-	lines   []string      // progress lines Upgrade prints
-	err     error         // what Upgrade returns
-	block   chan struct{} // when set, Upgrade waits for it to close
-	started chan struct{} // when set, receives once per Upgrade call
+	lines     []string      // progress lines Upgrade prints
+	err       error         // what Upgrade returns
+	during    func()        // when set, runs inside Upgrade
+	rebootErr error         // what Reboot returns
+	block     chan struct{} // when set, Upgrade waits for it to close
+	started   chan struct{} // when set, receives once per Upgrade call
 }
 
 func (b *fakeBackend) Upgrade(ctx context.Context, source string, progress func(string)) error {
@@ -49,6 +51,9 @@ func (b *fakeBackend) Upgrade(ctx context.Context, source string, progress func(
 	for _, l := range b.lines {
 		progress(l)
 	}
+	if b.during != nil {
+		b.during()
+	}
 	if b.block != nil {
 		<-b.block
 	}
@@ -59,7 +64,13 @@ func (b *fakeBackend) Reboot() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.reboots++
-	return nil
+	return b.rebootErr
+}
+
+func (b *fakeBackend) rebootCount() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.reboots
 }
 
 func (b *fakeBackend) calls() []string {
@@ -610,5 +621,151 @@ func TestKairosBackendMergesOutput(t *testing.T) {
 	t.Setenv("CODE", "3")
 	if err := (kairosBackend{}).Upgrade(context.Background(), "oci:x", func(string) {}); err == nil {
 		t.Fatal("a failing kairos-agent returned nil")
+	}
+}
+
+func TestApplyRefusesWithoutAMarker(t *testing.T) {
+	dg := daemonEnv(t, "v0.0.5")
+	// A dangling symlink: the marker reads as absent, so the daemon starts
+	// idle, but the directory cannot be created, even by root.
+	run := filepath.Join(t.TempDir(), "run")
+	if err := os.Symlink(filepath.Join(t.TempDir(), "gone", "run"), run); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HADRON_UPDATE_RUN_DIR", run)
+	b := &fakeBackend{}
+	d := NewDaemon(b)
+	ref := ghcrRepo + ":sway-v0.0.6"
+	if err := d.Apply(context.Background(), ref, dg[ref], false); err != nil {
+		t.Fatal(err)
+	}
+	s := waitState(t, d, StateError)
+	if !strings.Contains(s.Detail, "pending install") {
+		t.Fatalf("detail %q", s.Detail)
+	}
+	d.wg.Wait()
+	if len(b.calls()) != 0 {
+		t.Fatal("backend called without a reboot-pending marker")
+	}
+}
+
+func TestMarkerIsWrittenBeforeTheUpgrade(t *testing.T) {
+	dg := daemonEnv(t, "v0.0.5")
+	b := &fakeBackend{block: make(chan struct{})}
+	d := NewDaemon(b)
+	ref := ghcrRepo + ":sway-v0.0.6"
+	if err := d.Apply(context.Background(), ref, dg[ref], false); err != nil {
+		t.Fatal(err)
+	}
+	waitState(t, d, StateApplying)
+
+	// The daemon dies mid-install and a new one starts.
+	d2 := NewDaemon(b)
+	if s := d2.Status(); s.State != StateRebootPending {
+		t.Fatalf("daemon started mid-install: %+v", s)
+	}
+	if err := d2.Apply(context.Background(), ref, dg[ref], false); !errors.Is(err, ErrRebootPending) {
+		t.Fatalf("Apply mid-install: %v, want ErrRebootPending", err)
+	}
+	got, err := os.ReadFile(filepath.Join(os.Getenv("HADRON_UPDATE_RUN_DIR"), "reboot-pending"))
+	if want := "oci:" + ghcrRepo + "@" + dg[ref] + "\n"; err != nil || string(got) != want {
+		t.Fatalf("marker %q, %v; want %q", got, err, want)
+	}
+	close(b.block)
+	waitState(t, d, StateRebootPending)
+	if n := len(b.calls()); n != 1 {
+		t.Fatalf("%d upgrades, want 1", n)
+	}
+}
+
+func TestFailedUpgradeKeepsAMarkerItCannotRemove(t *testing.T) {
+	dg := daemonEnv(t, "v0.0.5")
+	marker := filepath.Join(os.Getenv("HADRON_UPDATE_RUN_DIR"), "reboot-pending")
+	b := &fakeBackend{err: errors.New("exit status 1"), during: func() {
+		// A non-empty directory in its place makes os.Remove fail.
+		os.Remove(marker)
+		os.MkdirAll(filepath.Join(marker, "x"), 0o755)
+	}}
+	d := NewDaemon(b)
+	ref := ghcrRepo + ":sway-v0.0.6"
+	if err := d.Apply(context.Background(), ref, dg[ref], false); err != nil {
+		t.Fatal(err)
+	}
+	s := waitState(t, d, StateRebootPending)
+	if !strings.Contains(s.Detail, "could not be removed") {
+		t.Fatalf("detail %q", s.Detail)
+	}
+	if s := NewDaemon(b).Status(); s.State != StateRebootPending {
+		t.Fatalf("restarted daemon: %+v", s)
+	}
+}
+
+func TestRebootRefusedWhileAJobRuns(t *testing.T) {
+	dg := daemonEnv(t, "v0.0.5")
+	arrived := blockingGitHub(t)
+	b := &fakeBackend{}
+	d := NewDaemon(b)
+	ref := ghcrRepo + ":sway-v0.0.6"
+	if err := d.Apply(context.Background(), ref, dg[ref], false); err != nil {
+		t.Fatal(err)
+	}
+	<-arrived
+	if s := d.Status(); s.State != StateInspecting {
+		t.Fatalf("status %+v", s)
+	}
+	if err := d.Reboot(); !errors.Is(err, ErrBusy) {
+		t.Fatalf("Reboot while inspecting: %v, want ErrBusy", err)
+	}
+	if n := b.rebootCount(); n != 0 {
+		t.Fatalf("%d reboots, want 0", n)
+	}
+	if err := d.Cancel(); err != nil {
+		t.Fatal(err)
+	}
+	d.wg.Wait()
+	if len(b.calls()) != 0 {
+		t.Fatal("backend upgraded")
+	}
+}
+
+func TestNoApplyAfterReboot(t *testing.T) {
+	dg := daemonEnv(t, "v0.0.5")
+	ref := ghcrRepo + ":sway-v0.0.6"
+
+	b := &fakeBackend{}
+	d := NewDaemon(b)
+	if err := d.Reboot(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Apply(context.Background(), ref, dg[ref], false); err == nil {
+		t.Fatal("Apply after Reboot accepted")
+	}
+	if len(b.calls()) != 0 || b.rebootCount() != 1 {
+		t.Fatalf("upgrades %q, reboots %d", b.calls(), b.rebootCount())
+	}
+
+	// A reboot that fails does not lock installs out.
+	b2 := &fakeBackend{rebootErr: errors.New("systemctl reboot: exit status 1")}
+	d2 := NewDaemon(b2)
+	if err := d2.Reboot(); err == nil {
+		t.Fatal("failed Reboot returned nil")
+	}
+	if err := d2.Apply(context.Background(), ref, dg[ref], false); err != nil {
+		t.Fatalf("Apply after a failed Reboot: %v", err)
+	}
+	waitState(t, d2, StateRebootPending)
+}
+
+func TestKairosBackendReportsAnUnreadableLine(t *testing.T) {
+	agent := filepath.Join(t.TempDir(), "kairos-agent")
+	script := "#!/bin/sh\nhead -c 2000000 /dev/zero | tr '\\0' a\n"
+	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HADRON_UPDATE_AGENT", agent)
+	var lines []string
+	err := kairosBackend{}.Upgrade(context.Background(), "oci:x", func(l string) { lines = append(lines, l) })
+	if err != nil || len(lines) != 1 || !strings.Contains(lines[0], "stopped reading") {
+		t.Fatalf("got %q, %v", lines, err)
 	}
 }

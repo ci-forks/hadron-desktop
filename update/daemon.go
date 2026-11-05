@@ -61,6 +61,7 @@ var (
 
 	errUnmanaged       = errors.New("this system has no hadron-desktop release file, so it is not updated from here")
 	errNothingToCancel = errors.New("no job to cancel")
+	errRebooting       = errors.New("the system is rebooting")
 )
 
 func runDir() string {
@@ -107,6 +108,9 @@ type Daemon struct {
 	onProgress []func(string)
 	events     []event
 	delivering bool
+	// rebooting is set from a Reboot call until backend.Reboot fails: nothing
+	// may start kairos-agent while systemd shuts the system down.
+	rebooting bool
 
 	wg sync.WaitGroup // running Apply jobs; tests wait on it
 }
@@ -342,6 +346,8 @@ func (d *Daemon) Apply(ctx context.Context, ref, digest string, advanced bool) e
 	switch {
 	case !d.managed:
 		return errUnmanaged
+	case d.rebooting:
+		return errRebooting
 	case d.state == StateRebootPending:
 		return ErrRebootPending
 	case d.busyLocked():
@@ -372,6 +378,19 @@ func (d *Daemon) run(ctx context.Context, j *job, r ImageRef, ref, digest string
 		d.mu.Unlock() // cancelled; Cancel restored the state
 		return
 	}
+	if err == nil && d.rebooting {
+		err = errRebooting
+	}
+	// Install the digest, never the tag: the tag may have moved since Inspect.
+	source := "oci:" + info.Ref.Repo() + "@" + info.Digest
+	// The marker goes down before kairos-agent starts, so a daemon that dies
+	// or restarts mid-install comes back refusing a second install over a
+	// half-written or never-booted slot. No marker, no install.
+	if err == nil {
+		if werr := writeRebootMarker(source); werr != nil {
+			err = fmt.Errorf("could not record the pending install, so it was not started: %w", werr)
+		}
+	}
 	if err != nil {
 		d.job = nil
 		d.setLocked(StateError, err.Error())
@@ -385,10 +404,14 @@ func (d *Daemon) run(ctx context.Context, j *job, r ImageRef, ref, digest string
 	d.setLocked(StateApplying, "")
 	d.mu.Unlock()
 
-	// Install the digest, never the tag: the tag may have moved since Inspect.
-	source := "oci:" + info.Ref.Repo() + "@" + info.Digest
 	err = d.backend.Upgrade(context.Background(), source, d.progress)
 	if err != nil {
+		// Only a removed marker makes the system installable again; if it
+		// stays, so does reboot-pending.
+		rmErr := os.Remove(rebootMarker())
+		if errors.Is(rmErr, os.ErrNotExist) {
+			rmErr = nil
+		}
 		d.mu.Lock()
 		defer d.mu.Unlock()
 		d.job = nil
@@ -396,16 +419,15 @@ func (d *Daemon) run(ctx context.Context, j *job, r ImageRef, ref, digest string
 		if detail == "" {
 			detail = err.Error()
 		}
+		if rmErr != nil {
+			d.setLocked(StateRebootPending, detail+"; the upgrade failed but its marker could not be removed: "+rmErr.Error())
+			return
+		}
 		d.setLocked(StateError, detail)
 		return
 	}
 
-	// The marker first: it is what keeps a restarted daemon from installing
-	// over the never-booted image.
 	var notes []string
-	if err := writeRebootMarker(source); err != nil {
-		notes = append(notes, "could not record the pending reboot: "+err.Error())
-	}
 	// A pin keeps "update available" quiet after a deliberate choice. The
 	// newest published release of any flavor is not a choice to keep: it is
 	// "install latest" or "switch desktop".
@@ -461,15 +483,25 @@ func (d *Daemon) Cancel() error {
 	}
 }
 
-// Reboot restarts the system, except while kairos-agent writes the image.
+// Reboot restarts the system. It refuses while an install job runs: during
+// inspecting the job could still start kairos-agent under a shutting-down
+// system. Once it is asked, no install starts until the reboot fails.
 func (d *Daemon) Reboot() error {
 	d.mu.Lock()
-	applying := d.state == StateApplying
-	d.mu.Unlock()
-	if applying {
+	if d.state == StateInspecting || d.state == StateApplying {
+		d.mu.Unlock()
 		return ErrBusy
 	}
-	return d.backend.Reboot()
+	d.rebooting = true
+	d.mu.Unlock()
+
+	if err := d.backend.Reboot(); err != nil {
+		d.mu.Lock()
+		d.rebooting = false
+		d.mu.Unlock()
+		return err
+	}
+	return nil
 }
 
 // kairosBackend is the real Backend.
@@ -500,8 +532,11 @@ func (kairosBackend) Upgrade(_ context.Context, source string, progress func(str
 			progress(l)
 		}
 	}
-	// A line over the buffer stops the scanner; keep draining so the child
-	// never blocks on a full pipe.
+	// A line over the buffer stops the scanner; say so, and keep draining so
+	// the child never blocks on a full pipe.
+	if err := sc.Err(); err != nil {
+		progress("hadron-update: stopped reading kairos-agent's output: " + err.Error())
+	}
 	io.Copy(io.Discard, r)
 	if err := cmd.Wait(); err != nil {
 		return fmt.Errorf("kairos-agent upgrade: %w", err)
@@ -522,5 +557,9 @@ func scanLinesOrCR(data []byte, atEOF bool) (int, []byte, error) {
 }
 
 func (kairosBackend) Reboot() error {
-	return exec.Command("systemctl", "reboot").Run()
+	out, err := exec.Command("systemctl", "reboot").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("systemctl reboot: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
