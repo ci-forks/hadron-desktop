@@ -10,6 +10,7 @@
 #   make images                          # build both variant images
 #   make agent-image                     # build the i3-based agent overlay
 #   make agent-iso                       # build the agent ISO
+#   make LLVM_OUT=<ref> llvm-image       # build only LLVM, for LLVM_IMAGE=<ref>
 #   make clean                           # remove build artifacts
 #
 # Knobs (override on the command line):
@@ -69,9 +70,20 @@ cache_from = --cache-from type=registry$(comma)ref=$(CACHE_REF)-$(1)
 cache_to   = --cache-to type=registry$(comma)ref=$(CACHE_REF)-$(1)$(comma)mode=max$(comma)ignore-error=true
 cache_args = $(if $(CACHE_REF),$(call cache_from,$(1)) $(if $(filter true,$(CACHE_PUSH)),$(call cache_to,$(1))))
 
+# Prebuilt LLVM, for CI. The llvm stage (only COSMIC, niri and GPU=full use it)
+# compiles LLVM and clang for about three hours. LLVM_IMAGE names an image built
+# from the llvm-dist target (`make LLVM_OUT=<ref> llvm-image`), and the build
+# uses it in place of the llvm stage. The tag from `make print-llvm-tag` is a
+# hash of the Hadron release and the llvm stage text, so a stale image is
+# never used: any change to either gives a new tag.
+LLVM_IMAGE ?=
+ifdef LLVM_IMAGE
+BUILD_ARGS += --build-context llvm=docker-image://$(LLVM_IMAGE)
+endif
+
 export DOCKER_BUILDKIT := 1
 
-.PHONY: all image images iso agent-image agent-iso vm vm-install check-boot-ux print-base-image clean
+.PHONY: all image images iso agent-image agent-iso llvm-image vm vm-install check-boot-ux print-base-image print-llvm-tag clean
 
 all: iso
 
@@ -105,6 +117,18 @@ agent-iso: agent-image
 # cmdline) so AuroraBoot keeps ours instead of writing its default Kairos menu.
 # build.sh also creates the output dir and clears stale ISOs, which these
 # targets used to do inline.
+llvm-image:
+	@[ -n "$(LLVM_OUT)" ] || { echo "set LLVM_OUT to the image reference to build" >&2; exit 1; }
+	docker build --build-arg HADRON_VERSION=$(HADRON_VERSION) --target llvm-dist -t $(LLVM_OUT) .
+
+# llvm-<version>-<key>: the key hashes the Hadron release (the toolchain the
+# stage builds on) and the stage's own text, from `FROM toolchain AS llvm` up
+# to the next FROM.
+print-llvm-tag:
+	@printf 'llvm-%s-%s\n' \
+	  "$$(awk -F= '/^ARG LLVM_VERSION=/{print $$2; exit}' Dockerfile)" \
+	  "$$({ echo '$(HADRON_VERSION)'; awk '/^FROM toolchain AS llvm$$/{p=1; print; next} p && /^FROM /{exit} p' Dockerfile; } | sha256sum | cut -c1-12)"
+
 iso: image
 	AURORA_IMAGE=$(AURORA_IMAGE) auroraboot/build.sh $(IMAGE) $(ISO_DIR)
 

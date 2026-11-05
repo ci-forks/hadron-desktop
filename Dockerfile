@@ -155,6 +155,12 @@ RUN cmake -G Ninja -S llvm -B build \
       -DCLANG_ENABLE_STATIC_ANALYZER=OFF -DCLANG_ENABLE_ARCMT=OFF
 RUN ninja -C build -j$(nproc) && DESTDIR=/llvm ninja -C build install
 
+# Only the /llvm install tree, for CI: release.yml builds this target once per
+# LLVM key (`make print-llvm-tag`) and pushes it, and later builds swap it in
+# for the llvm stage (`make LLVM_IMAGE=...`), which skips the 3-hour compile.
+FROM scratch AS llvm-dist
+COPY --from=llvm /llvm /llvm
+
 # SPIRV-LLVM-Translator (llvm-spirv). Its cmake otherwise git-clones SPIRV-Headers
 # at a pinned commit; with no git/network in the build, feed it a local checkout
 # at exactly that commit (its sources use newer SPIR-V caps than the spirv-tools
