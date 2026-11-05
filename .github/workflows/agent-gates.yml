@@ -148,6 +148,15 @@ jobs:
     needs: checks
     runs-on: ubuntu-24.04
     timeout-minutes: 330
+    permissions:
+      contents: read
+      packages: write
+    env:
+      # Registry build cache (see CACHE_REF in the Makefile), written by
+      # release.yml. The package is public, so pull requests, fork ones
+      # included, read it without a login; only the other events write it.
+      CACHE_REF: ghcr.io/${{ github.repository }}:buildcache
+      CACHE_PUSH: ${{ github.event_name != 'pull_request' }}
 
     steps:
       - name: Check out the pull request
@@ -170,6 +179,17 @@ jobs:
             /usr/share/dotnet
           docker system prune --all --force
           df -h /
+
+      - name: Use the containerd image store
+        shell: bash
+        run: scripts/ci-containerd-store.sh
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Build agent ISO
         shell: bash
