@@ -53,9 +53,21 @@ func TestAdvancedEnabled(t *testing.T) {
 		"no file":    {nil, true},
 		"false":      {ptr("advanced=false\n"), false},
 		"true":       {ptr("advanced=true\n"), true},
-		"unreadable": {ptr("advanced=maybe\n"), true},
 		"other keys": {ptr("# c\nfoo=bar\nadvanced = false\n"), false},
 		"empty":      {ptr(""), true},
+		"no key":     {ptr("foo=bar\n"), true},
+		"False":      {ptr("advanced=False\n"), false},
+		"no":         {ptr("advanced=no\n"), false},
+		"0":          {ptr("advanced=0\n"), false},
+		"OFF":        {ptr("advanced=OFF\n"), false},
+		"Yes":        {ptr("advanced=Yes\n"), true},
+		"1":          {ptr("advanced=1\n"), true},
+		"on":         {ptr("advanced=on\n"), true},
+		"TRUE":       {ptr("advanced=TRUE\n"), true},
+		// A value that is present but not a boolean turns it off: the
+		// admin meant to set something, and off is the safe reading.
+		"unreadable": {ptr("advanced=maybe\n"), false},
+		"blank":      {ptr("advanced=\n"), false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			conf := filepath.Join(t.TempDir(), "update.conf")

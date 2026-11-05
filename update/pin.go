@@ -2,9 +2,11 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 func pinFile() string {
@@ -70,9 +72,19 @@ func ClearPin() error {
 	return nil
 }
 
-// AdvancedEnabled reports whether the advanced image picker is on. It is on
-// unless update.conf says advanced=false; a missing file or a value that is
-// not a boolean keeps the default, so a typo never locks a user out.
+// badAdvanced is the last invalid advanced= value logged, so a bad
+// update.conf is logged once, not at every Status call.
+var (
+	badAdvancedMu sync.Mutex
+	badAdvanced   string
+)
+
+// AdvancedEnabled reports whether the advanced image picker is on. A missing
+// file or key keeps the default, on. The value is read without regard to
+// case: true, yes, 1 and on turn it on; false, no, 0 and off turn it off.
+// Any other value turns it off and is logged: the admin meant to set
+// something, and off is the reading that installs nothing unexpected. The
+// last advanced= line wins.
 func AdvancedEnabled() bool {
 	b, err := os.ReadFile(confFile())
 	if err != nil {
@@ -84,11 +96,19 @@ func AdvancedEnabled() bool {
 		if !ok || strings.TrimSpace(k) != "advanced" {
 			continue
 		}
-		switch strings.TrimSpace(v) {
-		case "false":
-			enabled = false
-		case "true":
+		switch v = strings.TrimSpace(v); strings.ToLower(v) {
+		case "true", "yes", "1", "on":
 			enabled = true
+		case "false", "no", "0", "off":
+			enabled = false
+		default:
+			enabled = false
+			badAdvancedMu.Lock()
+			if v != badAdvanced {
+				badAdvanced = v
+				fmt.Fprintf(os.Stderr, "hadron-update: %s: advanced=%q is not true or false; advanced mode is off\n", confFile(), v)
+			}
+			badAdvancedMu.Unlock()
 		}
 	}
 	return enabled
