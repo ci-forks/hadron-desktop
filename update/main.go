@@ -39,6 +39,8 @@ Commands:
   notify            run in a desktop session: check now and every few hours,
                     and show a notification when a new release is out
       --once             check once and exit
+  daemon            run the root update service on the system bus; started
+                    by D-Bus activation, not by hand
 `
 
 // kairosAgent is the upgrade backend. HADRON_UPDATE_AGENT replaces it, so a
@@ -67,6 +69,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return cmdUpgrade(args, stdin, stdout, stderr)
 	case "notify":
 		return cmdNotify(args, stderr)
+	case "daemon":
+		return cmdDaemon(args, stderr)
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, usage)
 		return exitOK

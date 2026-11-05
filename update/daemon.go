@@ -58,10 +58,12 @@ var (
 	// ErrNotCancellable refuses to stop kairos-agent: a kill between the A/B
 	// swap and the image write can leave no good slot.
 	ErrNotCancellable = errors.New("the upgrade is writing the image and cannot be cancelled")
+	// ErrRebooting refuses an install after Reboot was asked: kairos-agent
+	// must not start under a system that systemd is shutting down.
+	ErrRebooting = errors.New("the system is rebooting")
 
 	errUnmanaged       = errors.New("this system has no hadron-desktop release file, so it is not updated from here")
 	errNothingToCancel = errors.New("no job to cancel")
-	errRebooting       = errors.New("the system is rebooting")
 )
 
 func runDir() string {
@@ -213,6 +215,14 @@ func (d *Daemon) deliver() {
 	}
 }
 
+// Busy says whether a job runs. The bus service never exits while one does:
+// the job would die with it.
+func (d *Daemon) Busy() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.busyLocked() || d.job != nil
+}
+
 func (d *Daemon) busyLocked() bool {
 	return d.state == StateChecking || d.state == StateInspecting || d.state == StateApplying
 }
@@ -347,7 +357,7 @@ func (d *Daemon) Apply(ctx context.Context, ref, digest string, advanced bool) e
 	case !d.managed:
 		return errUnmanaged
 	case d.rebooting:
-		return errRebooting
+		return ErrRebooting
 	case d.state == StateRebootPending:
 		return ErrRebootPending
 	case d.busyLocked():
@@ -379,7 +389,7 @@ func (d *Daemon) run(ctx context.Context, j *job, r ImageRef, ref, digest string
 		return
 	}
 	if err == nil && d.rebooting {
-		err = errRebooting
+		err = ErrRebooting
 	}
 	// Install the digest, never the tag: the tag may have moved since Inspect.
 	source := "oci:" + info.Ref.Repo() + "@" + info.Digest

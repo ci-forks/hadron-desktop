@@ -1,0 +1,8 @@
+# D-Bus activation of hadron-updated: the first call starts the unit, so it
+# needs no `systemctl enable` (Kairos' /etc overlay hides links baked into
+# the image). Exec is never run; systemd starts SystemdService instead.
+[D-BUS Service]
+Name=io.kairos.HadronUpdate1
+Exec=/bin/false
+User=root
+SystemdService=hadron-updated.service

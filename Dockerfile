@@ -4146,13 +4146,18 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/hadron-
 
 
 # ---------------------------------------------------------------------------
-# hadron-update: release checker, desktop notifier and `kairos-agent upgrade`
-# wrapper. Static and dependency-free (stdlib only), like the installer TUI, and
-# for the same reasons kept out of the --no-cache-filter list. The unit tests
-# run here so a broken updater fails the image build, not a user's upgrade.
+# hadron-update: release checker, desktop notifier, `kairos-agent upgrade`
+# wrapper and the root update service on the system bus (hadron-updated). Static
+# (CGO_ENABLED=0), like the installer TUI, and for the same reasons kept out of
+# the --no-cache-filter list. Not stdlib-only any more: the D-Bus service needs
+# godbus, downloaded in its own layer so a source change does not refetch it.
+# The unit tests run here so a broken updater fails the image build, not a
+# user's upgrade; the ones that need a dbus-daemon skip, as this stage has none.
 # ---------------------------------------------------------------------------
 FROM golang:1.25.0-alpine3.22 AS update-build
 WORKDIR /src
+COPY update/go.mod update/go.sum ./
+RUN go mod download
 COPY update/ ./
 RUN CGO_ENABLED=0 go test ./... \
     && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/hadron-update . \
