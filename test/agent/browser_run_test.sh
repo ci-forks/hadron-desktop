@@ -21,6 +21,12 @@ printf '%s\n' "\$*" >> "$d/calls"
 case "\$1 \$2" in
   "info --system") [ -e "$d/installed" ] && exit 0 || exit 1 ;;
   "run "*) : > "$d/ran" ;;    # would exec; record and return so the test continues
+  "ps --columns=application")  # \$d/running holds how many more polls see Chromium
+    n="\$(cat "$d/running" 2>/dev/null || echo 0)"
+    if [ "\$n" -gt 0 ]; then
+      echo \$((n - 1)) > "$d/running"
+      printf 'org.chromium.Chromium\n'
+    fi ;;
 esac
 exit 0
 EOF
@@ -54,6 +60,21 @@ for needle in "run" "org.chromium.Chromium" "--remote-debugging-port=9222" \
   case "$calls" in *"$needle"*) : ;; *) err "launch missing $needle (got: $calls)";; esac
 done
 [ -e "$d/ran" ] && ok "installed + DISPLAY -> flatpak run with CDP port"
+rm -rf "$d"
+
+# 4. Chromium already running -> waits for it to exit, never opens a window
+#    beside it (each extra `flatpak run` adds an about:blank window)
+d="$(mktemp -d)"; make_fake_flatpak "$d"; : > "$d/installed"; echo 3 > "$d/running"
+DISPLAY=:0 HADRON_FLATPAK="$d/flatpak" HADRON_BROWSER_EXEC=1 HADRON_BROWSER_POLL=0 \
+  timeout 10 sh "$script" >/dev/null 2>&1
+polls="$(grep -c '^ps ' "$d/calls" 2>/dev/null)"
+[ "$polls" -eq 4 ] && ok "running Chromium -> polled until it exited" \
+  || err "expected 4 ps polls (3 running, 1 gone), got $polls"
+run_line="$(grep -n '^run ' "$d/calls" | cut -d: -f1)"
+last_ps="$(grep -n '^ps ' "$d/calls" | tail -1 | cut -d: -f1)"
+if [ -n "$run_line" ] && [ "$run_line" -gt "$last_ps" ]; then
+  ok "launched only after the running instance was gone"
+else err "launch order wrong (run at line '$run_line', last ps at $last_ps)"; fi
 rm -rf "$d"
 
 exit "$fail"
