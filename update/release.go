@@ -37,26 +37,8 @@ func releaseFile() string {
 // upgrade path needs must be present: a half-written file would otherwise make
 // hadron-update pull an image reference like ":-v1.0.0".
 func LoadRelease(path string) (Release, error) {
-	f, err := os.Open(path)
+	kv, err := readKV(path)
 	if err != nil {
-		return Release{}, err
-	}
-	defer f.Close()
-
-	kv := map[string]string{}
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		k, v, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		kv[strings.TrimSpace(k)] = strings.Trim(strings.TrimSpace(v), `"'`)
-	}
-	if err := sc.Err(); err != nil {
 		return Release{}, err
 	}
 
@@ -76,6 +58,32 @@ func LoadRelease(path string) (Release, error) {
 		}
 	}
 	return r, nil
+}
+
+// readKV reads a KEY=value file, the format of /etc/hadron-desktop/release
+// and /etc/hadron-desktop/session. Blank lines and # comments are skipped;
+// values may be quoted.
+func readKV(path string) (map[string]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	kv := map[string]string{}
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		kv[strings.TrimSpace(k)] = strings.Trim(strings.TrimSpace(v), `"'`)
+	}
+	return kv, sc.Err()
 }
 
 // semver is the subset of semantic versioning release tags use: vMAJOR.MINOR.PATCH

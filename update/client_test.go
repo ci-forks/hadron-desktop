@@ -4,7 +4,9 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/godbus/dbus/v5"
 )
@@ -489,5 +491,104 @@ func TestCallRetriesOnceOnExiting(t *testing.T) {
 	c = &client{obj: obj}
 	if err := c.Check(); daemonErrName(err) != "Refused" || obj.n != 1 {
 		t.Fatalf("err %v calls %d: other errors are not retried", err, obj.n)
+	}
+}
+
+// flagObj answers every call with an idle Status and records the flags.
+type flagObj struct {
+	dbus.BusObject
+	mu    sync.Mutex
+	flags []dbus.Flags
+}
+
+func (o *flagObj) Call(method string, flags dbus.Flags, args ...any) *dbus.Call {
+	o.mu.Lock()
+	o.flags = append(o.flags, flags)
+	o.mu.Unlock()
+	return &dbus.Call{Body: []any{map[string]dbus.Variant{"state": dbus.MakeVariant("idle")}}}
+}
+
+// The backstop poll must not start the service: after a crash, a watcher
+// that re-activates it would hide the crash and defeat the idle exit.
+func TestWatchPollDoesNotAutoStart(t *testing.T) {
+	conn := busConn(t, privateBus(t))
+	obj := &flagObj{}
+	c := &client{conn: conn, obj: obj}
+	old := statusPoll
+	statusPoll = 10 * time.Millisecond
+	t.Cleanup(func() { statusPoll = old })
+	events, stop, err := c.Watch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	select {
+	case ev := <-events:
+		if ev.Status == nil || ev.Status.State != StateIdle {
+			t.Fatalf("event %+v", ev)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no poll")
+	}
+	// Stop the watcher and wait for its goroutine, so no poll runs below.
+	stop()
+	for range events {
+	}
+	obj.mu.Lock()
+	for _, f := range obj.flags {
+		if f&dbus.FlagNoAutoStart == 0 {
+			obj.mu.Unlock()
+			t.Fatalf("poll flags %v lack FlagNoAutoStart", f)
+		}
+	}
+	// An explicit Status still activates the service.
+	obj.flags = nil
+	obj.mu.Unlock()
+	if _, err := c.Status(); err != nil {
+		t.Fatal(err)
+	}
+	obj.mu.Lock()
+	defer obj.mu.Unlock()
+	if len(obj.flags) != 1 || obj.flags[0]&dbus.FlagNoAutoStart != 0 {
+		t.Fatalf("Status flags %v", obj.flags)
+	}
+}
+
+// After the job started, a state no job passes through (cancelled from the
+// tray, or a restarted daemon) means it is gone: do not wait forever.
+func TestLostJobExits1(t *testing.T) {
+	for _, s := range []State{StateIdle, StateUpToDate, StateUpdateAvailable} {
+		setup(t, "v0.1.0", "v0.2.0")
+		f := okDaemon()
+		f.script = []Event{{Status: &Status{State: StateInspecting}}, {Status: &Status{State: s}},
+			{Status: &Status{State: StateRebootPending}}}
+		useDaemon(t, f)
+		code, _, errOut := runCLI("", "upgrade", "--yes", "--reboot")
+		if code != exitError || !strings.Contains(errOut, "lost the update job") || f.called("Reboot") {
+			t.Errorf("%s: code %d, stderr %q", s, code, errOut)
+		}
+	}
+}
+
+func TestUpgradeImageFromStdin(t *testing.T) {
+	setup(t, "v0.1.0", "v0.2.0")
+	f := okDaemon()
+	useDaemon(t, f)
+	code, out, errOut := runCLI("ghcr.io/me/img:1\ny\n", "upgrade", "--image", "-")
+	if code != exitOK || !strings.Contains(out, "Image reference:") || f.applied[0] != "ghcr.io/me/img:1" || f.applied[2] != "adv" {
+		t.Fatalf("code %d, out %q, stderr %q, applied %v", code, out, errOut, f.applied)
+	}
+
+	f = okDaemon()
+	useDaemon(t, f)
+	if code, out, _ := runCLI("\n", "upgrade", "--image", "-"); code != exitOK || !strings.Contains(out, "Cancelled.") || f.called("Inspect") {
+		t.Fatalf("empty answer: code %d, out %q, calls %v", code, out, f.calls)
+	}
+
+	f = okDaemon()
+	f.status.Advanced = false
+	useDaemon(t, f)
+	if code, out, _ := runCLI("ghcr.io/me/img:1\n", "upgrade", "--image", "-"); code != exitUsage || strings.Contains(out, "Image reference:") {
+		t.Fatalf("advanced off: code %d, out %q; must refuse before asking", code, out)
 	}
 }

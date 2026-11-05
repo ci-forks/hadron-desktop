@@ -103,9 +103,13 @@ func (c *client) Close() { c.conn.Close() }
 // call retries once on Exiting: the service decided to quit, and the next
 // call activates a fresh one.
 func (c *client) call(method string, out []any, args ...any) error {
+	return c.callFlags(method, 0, out, args...)
+}
+
+func (c *client) callFlags(method string, flags dbus.Flags, out []any, args ...any) error {
 	var err error
 	for i := 0; i < 2; i++ {
-		err = wrapBusErr(c.obj.Call(busInterface+"."+method, 0, args...).Store(out...))
+		err = wrapBusErr(c.obj.Call(busInterface+"."+method, flags, args...).Store(out...))
 		if daemonErrName(err) != "Exiting" {
 			return err
 		}
@@ -113,9 +117,16 @@ func (c *client) call(method string, out []any, args ...any) error {
 	return err
 }
 
-func (c *client) Status() (Status, error) {
+func (c *client) Status() (Status, error) { return c.status(0) }
+
+// pollStatus is Status for the watcher's backstop poll. It never starts the
+// service: a poll after a crash must not quietly bring it back, and a poll
+// while it is idle must not keep it from exiting.
+func (c *client) pollStatus() (Status, error) { return c.status(dbus.FlagNoAutoStart) }
+
+func (c *client) status(flags dbus.Flags) (Status, error) {
 	var m map[string]dbus.Variant
-	if err := c.call("Status", []any{&m}); err != nil {
+	if err := c.callFlags("Status", flags, []any{&m}); err != nil {
 		return Status{}, err
 	}
 	return statusFromDict(m), nil
@@ -222,7 +233,7 @@ func (c *client) Watch() (<-chan Event, func(), error) {
 			case <-done:
 				return
 			case <-tick.C:
-				if st, err := c.Status(); err == nil && !send(Event{Status: &st}) {
+				if st, err := c.pollStatus(); err == nil && !send(Event{Status: &st}) {
 					return
 				}
 			case s, ok := <-sigs:

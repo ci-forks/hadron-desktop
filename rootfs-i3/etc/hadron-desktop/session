@@ -1,2 +1,5 @@
 DESKTOP_NAME=i3
 DISPLAY_NAME=XLibre
+# The terminal hadron-update tray opens its dialogs in; split on spaces,
+# the command and its arguments follow.
+TERMINAL_EXEC="st -c HadronFloat -e"

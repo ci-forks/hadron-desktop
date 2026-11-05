@@ -34,15 +34,19 @@ Commands:
   check             like status; exits 100 when an update is available
   upgrade           install the latest release, then offer to reboot
       --version vX.Y.Z   install this release instead of the latest
-      --image REF        install any OCI image (advanced mode only)
+      --image REF        install any OCI image (advanced mode only); with
+                         REF "-", ask for the reference
       --reboot           reboot when the upgrade finishes, without asking
       --yes              do not ask for confirmation
   switch FLAVOR     install another desktop (sway, i3, cosmic, niri)
       --yes              do not ask for confirmation
       --reboot           reboot when the switch finishes, without asking
   reboot            restart the system into an installed update
-  notify            run in a desktop session: check now and every few hours,
-                    and show a notification when a new release is out
+  tray              run in a desktop session: the update icon in the panel;
+                    checks every few hours through the update service and
+                    shows a notification when a new release is out
+      --no-icon          the same, without the icon
+  notify            the same as tray --no-icon
       --once             check once and exit
   daemon            run the root update service on the system bus; started
                     by D-Bus activation, not by hand
@@ -76,6 +80,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return cmdReboot(args, stdout, stderr)
 	case "upgrade":
 		return cmdUpgrade(args, stdin, stdout, stderr)
+	case "tray":
+		return cmdTray(args, stderr)
 	case "notify":
 		return cmdNotify(args, stderr)
 	case "daemon":
@@ -281,64 +287,60 @@ func confirm(in *bufio.Reader, stdout io.Writer, question string, def bool) bool
 	}
 }
 
-// notifyInterval is how often a session re-checks. GitHub allows 60
-// unauthenticated API calls an hour per address; four a day is nothing.
+// notifyInterval is how often a session has the service check. GitHub allows
+// 60 unauthenticated API calls an hour per address; four a day is nothing.
 const notifyInterval = 6 * time.Hour
 
 // notifyDelay keeps the first check off the login path: the network may not be
 // up yet, and nobody reads a notification in the first seconds of a session.
 const notifyDelay = 2 * time.Minute
 
+// cmdNotify is the old name of `tray --no-icon`, kept so existing session
+// configs keep working; --once checks a single time.
 func cmdNotify(args []string, stderr io.Writer) int {
 	fs := newFlags("notify", stderr)
 	once := fs.Bool("once", false, "check once and exit")
 	if err := fs.Parse(args); err != nil {
 		return exitUsage
 	}
-	if *once {
-		if err := notifyOnce(); err != nil {
-			fmt.Fprintln(stderr, "hadron-update:", err)
-			return exitError
-		}
-		return exitOK
+	if !*once {
+		return runTray(true, stderr)
 	}
-
-	time.Sleep(notifyDelay)
-	for {
-		// A failed check (offline laptop) is not worth a notification; try again
-		// at the next tick.
-		if err := notifyOnce(); err != nil {
-			fmt.Fprintln(stderr, "hadron-update:", err)
-		}
-		time.Sleep(notifyInterval)
+	if err := notifyOnce(); err != nil {
+		fmt.Fprintln(stderr, "hadron-update:", err)
+		return exitError
 	}
+	return exitOK
 }
 
+// notifyOnce has the service check, then announces a new release once.
 func notifyOnce() error {
 	rel, err := LoadRelease(releaseFile())
 	if err != nil {
 		return err
 	}
-	latest, err := FetchLatest(context.Background(), rel.GitHubRepo)
-	if err != nil {
-		return err
-	}
-	if !Newer(latest.Tag, rel.Version) || alreadyNotified(latest.Tag) {
+	if rel.Flavor == flavorAgent {
 		return nil
 	}
-	// Do not announce an upgrade that cannot run: a release from before upgrade
-	// images existed, or one whose package is not public yet. The next tick
-	// retries, so an image that appears later is still announced.
-	if err := ImagePullable(context.Background(), rel.ImageFor(latest.Tag)); err != nil {
-		return fmt.Errorf("%s is out but not installable yet: %w", latest.Tag, err)
+	c, err := dialDaemon()
+	if err != nil {
+		return fmt.Errorf("the update service is not available: %w", err)
 	}
-	if err := Notify(
-		fmt.Sprintf("Hadron Desktop %s is available", latest.Tag),
-		fmt.Sprintf("You are on %s. Open a terminal and run: hadron-update upgrade", rel.Version),
-	); err != nil {
+	defer c.Close()
+	st, err := c.Status()
+	if err != nil {
+		return fmt.Errorf("the update service is not available: %w", err)
+	}
+	if st.State == StateUnmanaged {
+		return nil
+	}
+	if err := retryBusy(c.Check); err != nil {
 		return err
 	}
-	return markNotified(latest.Tag)
+	if st, err = c.Status(); err != nil {
+		return err
+	}
+	return announce(c, rel, st, true, Notify)
 }
 
 func orUnknown(s string) string {
@@ -432,6 +434,15 @@ func upgradeViaDaemon(rel Release, version, image string, yes, reboot bool, in *
 		if !st.Advanced {
 			fmt.Fprintln(stderr, "hadron-update: advanced mode is off; installing an arbitrary image is not allowed on this system.")
 			return exitUsage
+		}
+		if image == "-" {
+			// The tray's "Install an image…" lands here: ask for the reference.
+			fmt.Fprint(stdout, "Image reference: ")
+			line, _ := in.ReadString('\n')
+			if image = strings.TrimSpace(line); image == "" {
+				fmt.Fprintln(stdout, "Cancelled.")
+				return exitOK
+			}
 		}
 		return installFlow(c, rel, image, true, yes, reboot, in, stdout, stderr)
 	}
@@ -633,6 +644,11 @@ func installFlow(c daemonClient, rel Release, ref string, advanced, yes, reboot 
 			continue
 		}
 		switch ev.Status.State {
+		case StateIdle, StateUpToDate, StateUpdateAvailable:
+			// No job passes through these: it was cancelled elsewhere (the
+			// tray) or the daemon restarted and forgot it.
+			fmt.Fprintln(stderr, "hadron-update: lost the update job: it was cancelled or the update service restarted.")
+			return exitError
 		case StateRebootPending:
 			fmt.Fprintln(stdout, "\nThe update is installed and starts on the next boot.")
 			return offerReboot(c, reboot, in, stdout, stderr)

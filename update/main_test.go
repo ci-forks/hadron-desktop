@@ -307,10 +307,19 @@ func TestUpgradePinnedVersionAndFailure(t *testing.T) {
 	}
 }
 
+// notifyDaemon is a daemon that has checked and found status.
+func notifyDaemon(t *testing.T, st Status) *fakeDaemon {
+	f := okDaemon()
+	f.status = st
+	useDaemon(t, f)
+	return f
+}
+
 func TestNotifyOnceNotifiesOncePerRelease(t *testing.T) {
 	setup(t, "v0.1.0", "v0.2.0")
 	busctl, argv := fakeTool(t, 0)
 	t.Setenv("HADRON_UPDATE_BUSCTL", busctl)
+	f := notifyDaemon(t, Status{State: StateUpdateAvailable, Installed: "v0.1.0", Latest: "v0.2.0"})
 
 	if code, _, errOut := runCLI("", "notify", "--once"); code != exitOK {
 		t.Fatalf("code %d, stderr %q", code, errOut)
@@ -319,6 +328,9 @@ func TestNotifyOnceNotifiesOncePerRelease(t *testing.T) {
 	if !strings.Contains(string(got), "Hadron Desktop v0.2.0 is available") ||
 		!strings.Contains(string(got), "org.freedesktop.Notifications") {
 		t.Fatalf("busctl argv = %q", got)
+	}
+	if !f.called("Check") || !f.called("Inspect") {
+		t.Fatalf("calls %v: notify must have the daemon check and inspect the image", f.calls)
 	}
 
 	os.Remove(argv)
@@ -334,12 +346,35 @@ func TestNotifyOnceSilentWhenUpToDate(t *testing.T) {
 	setup(t, "v0.2.0", "v0.2.0")
 	busctl, argv := fakeTool(t, 0)
 	t.Setenv("HADRON_UPDATE_BUSCTL", busctl)
+	notifyDaemon(t, Status{State: StateUpToDate, Installed: "v0.2.0", Latest: "v0.2.0"})
 
 	if code, _, _ := runCLI("", "notify", "--once"); code != exitOK {
 		t.Fatal("notify failed")
 	}
 	if _, err := os.Stat(argv); !os.IsNotExist(err) {
 		t.Fatal("notified on an up-to-date system")
+	}
+}
+
+// A pinned system reports up-to-date even with a newer release out.
+func TestNotifyOnceSilentWhilePinned(t *testing.T) {
+	setup(t, "v0.1.0", "v0.2.0")
+	busctl, argv := fakeTool(t, 0)
+	t.Setenv("HADRON_UPDATE_BUSCTL", busctl)
+	notifyDaemon(t, Status{State: StateUpToDate, Installed: "v0.1.0", Latest: "v0.2.0", Pin: "ghcr.io/x/y:z"})
+
+	if code, _, _ := runCLI("", "notify", "--once"); code != exitOK {
+		t.Fatal("notify failed")
+	}
+	if _, err := os.Stat(argv); !os.IsNotExist(err) {
+		t.Fatal("notified while pinned")
+	}
+}
+
+func TestNotifyOnceWithoutTheService(t *testing.T) {
+	setup(t, "v0.1.0", "v0.2.0")
+	if code, _, errOut := runCLI("", "notify", "--once"); code != exitError || !strings.Contains(errOut, "not available") {
+		t.Fatalf("code %d, stderr %q", code, errOut)
 	}
 }
 
@@ -429,6 +464,8 @@ func TestNotifyOnceStaysQuietWithoutAnImage(t *testing.T) {
 	setup(t, "v0.1.0", "v0.3.0") // released, but no sway-v0.3.0 image
 	busctl, argv := fakeTool(t, 0)
 	t.Setenv("HADRON_UPDATE_BUSCTL", busctl)
+	f := notifyDaemon(t, Status{State: StateUpdateAvailable, Installed: "v0.1.0", Latest: "v0.3.0"})
+	f.inspectEr = []error{errors.New("manifest unknown")}
 
 	if code, _, _ := runCLI("", "notify", "--once"); code != exitError {
 		t.Fatalf("code %d, want an error naming the missing image", code)
