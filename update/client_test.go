@@ -14,14 +14,15 @@ import (
 
 // fakeDaemon is daemonClient without a bus. Apply feeds script to the watcher.
 type fakeDaemon struct {
-	status     Status
-	releases   []string
-	info       InspectInfo
-	inspectEr  []error // returned in order before success
-	applyErr   error
-	watchErr   error
-	closeAfter bool // close the channel after the script, as when the daemon dies
-	script     []Event
+	status      Status
+	releases    []string
+	info        InspectInfo
+	inspectEr   []error // returned in order before success
+	applyErr    error
+	previousErr error
+	watchErr    error
+	closeAfter  bool // close the channel after the script, as when the daemon dies
+	script      []Event
 
 	calls   []string
 	events  chan Event
@@ -70,6 +71,10 @@ func (f *fakeDaemon) Apply(ref, digest string, adv bool) error {
 }
 func (f *fakeDaemon) Cancel() error { f.rec("Cancel"); return nil }
 func (f *fakeDaemon) Reboot() error { f.rec("Reboot"); return nil }
+func (f *fakeDaemon) RebootPrevious() error {
+	f.rec("RebootPrevious")
+	return f.previousErr
+}
 func (f *fakeDaemon) Watch() (<-chan Event, func(), error) {
 	if f.watchErr != nil {
 		return nil, nil, f.watchErr
@@ -249,7 +254,7 @@ func TestSwitchWarnsAndAsks(t *testing.T) {
 
 func TestDaemonErrorMapping(t *testing.T) {
 	for name, want := range map[string]string{
-		"NotAuthorized": "Only members of the admin group can install updates.",
+		"NotAuthorized": "Only members of the admin group can install updates or restart the system.",
 		"RebootPending": "An update is already installed; restart first.",
 		"Busy":          "Another update is running.",
 	} {
@@ -642,5 +647,65 @@ func TestPauseOnError(t *testing.T) {
 	code, out, spy := runSpy("\n", "upgrade", "--pause-on-error")
 	if code != exitOK || strings.Contains(out, "Press Enter") || spy.read {
 		t.Fatalf("success: code %d, out %q, read %v", code, out, spy.read)
+	}
+}
+
+func TestRollbackAsksAndDefaultsToNo(t *testing.T) {
+	for _, in := range []string{"n\n", "\n", ""} {
+		setup(t, "v0.1.0", "v0.2.0")
+		f := okDaemon()
+		useDaemon(t, f)
+		code, out, errOut := runCLI(in, "rollback")
+		if code != exitOK || f.called("RebootPrevious") {
+			t.Fatalf("stdin %q: code %d, calls %v, stderr %q", in, code, f.calls, errOut)
+		}
+		if !strings.Contains(out, "Restart into the previous system? It is used for the next boot only. [y/N]") {
+			t.Fatalf("stdin %q: out %q", in, out)
+		}
+	}
+}
+
+func TestRollbackYes(t *testing.T) {
+	setup(t, "v0.1.0", "v0.2.0")
+	f := okDaemon()
+	useDaemon(t, f)
+	if code, _, e := runCLI("y\n", "rollback"); code != exitOK || !f.called("RebootPrevious") || f.called("Reboot") {
+		t.Fatalf("code %d, calls %v, stderr %q", code, f.calls, e)
+	}
+
+	f2 := okDaemon()
+	useDaemon(t, f2)
+	code, out, e := runCLI("", "rollback", "--yes")
+	if code != exitOK || !f2.called("RebootPrevious") || strings.Contains(out, "[y/N]") {
+		t.Fatalf("--yes: code %d, calls %v, out %q, stderr %q", code, f2.calls, out, e)
+	}
+}
+
+func TestRollbackRefusalsAreSentences(t *testing.T) {
+	for name, want := range map[string]string{
+		"RebootPending": "An update is installed and waits for a reboot; restart into it first.",
+		"Rebooting":     "The system is already restarting.",
+		"Busy":          "Another update is running.",
+		"NotAuthorized": "Only members of the admin group can install updates or restart the system.",
+	} {
+		setup(t, "v0.1.0", "v0.2.0")
+		f := okDaemon()
+		f.previousErr = &daemonError{Name: name, Msg: "raw"}
+		useDaemon(t, f)
+		code, _, errOut := runCLI("", "rollback", "--yes")
+		if code != exitError || !strings.Contains(errOut, want) {
+			t.Errorf("%s: code %d, stderr %q, want %q", name, code, errOut, want)
+		}
+	}
+}
+
+func TestRollbackOnAgentIsRefused(t *testing.T) {
+	setupAgent(t, "v0.1.0", "v0.2.0")
+	old := dialDaemon
+	dialDaemon = func() (daemonClient, error) { t.Fatal("dialled the daemon"); return nil, nil }
+	t.Cleanup(func() { dialDaemon = old })
+	code, _, errOut := runCLI("y\n", "rollback")
+	if code != exitUsage || !strings.Contains(errOut, "kairos-agent bootentry --select fallback") {
+		t.Fatalf("code %d, stderr %q", code, errOut)
 	}
 }

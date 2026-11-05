@@ -110,5 +110,11 @@ func BuildMenu(st Status, releases []Latest, flavor string) []MenuItem {
 	if st.State == StateRebootPending {
 		menu = append(menu, MenuItem{ID: "restart", Label: "Restart now", Enabled: true})
 	}
+	// Hidden, not greyed, when it cannot be used: while a job runs, and while
+	// an install waits for its reboot, when the passive slot holds the system
+	// the user runs now and "previous" would mean the wrong one.
+	if can {
+		menu = append(menu, MenuItem{ID: "rollback", Label: "Restart into the previous system", Enabled: true})
+	}
 	return menu
 }

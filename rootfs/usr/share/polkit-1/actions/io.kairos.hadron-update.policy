@@ -21,7 +21,7 @@
   </action>
 
   <action id="io.kairos.hadron-update.reboot">
-    <description>Restart the system to finish a Hadron Desktop update</description>
+    <description>Restart the system to finish a Hadron Desktop update, or into the previous system</description>
     <message>Only members of the admin group can restart the system from the updater.</message>
     <defaults>
       <allow_any>no</allow_any>

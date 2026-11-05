@@ -30,6 +30,9 @@ type fakeBackend struct {
 	sources []string
 	pinSeen []string // the pin file's content when Upgrade was called
 	reboots int
+	// previous counts RebootPrevious calls; previousErr is what it returns.
+	previous    int
+	previousErr error
 
 	lines     []string      // progress lines Upgrade prints
 	err       error         // what Upgrade returns
@@ -65,6 +68,19 @@ func (b *fakeBackend) Reboot() error {
 	defer b.mu.Unlock()
 	b.reboots++
 	return b.rebootErr
+}
+
+func (b *fakeBackend) RebootPrevious() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.previous++
+	return b.previousErr
+}
+
+func (b *fakeBackend) previousCount() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.previous
 }
 
 func (b *fakeBackend) rebootCount() int {
@@ -925,5 +941,206 @@ func TestApplyRunsWithoutAnInhibitor(t *testing.T) {
 	waitState(t, d, StateRebootPending)
 	if len(b.calls()) != 1 {
 		t.Fatal("a missing inhibitor stopped the upgrade")
+	}
+}
+
+func TestRebootPreviousCallsTheBackendOnce(t *testing.T) {
+	dg := daemonEnv(t, "v0.0.5")
+	ref := ghcrRepo + ":sway-v0.0.6"
+	b := &fakeBackend{}
+	d := NewDaemon(b)
+	if err := d.RebootPrevious(); err != nil {
+		t.Fatal(err)
+	}
+	if b.previousCount() != 1 || b.rebootCount() != 0 {
+		t.Fatalf("RebootPrevious %d, Reboot %d; want 1, 0", b.previousCount(), b.rebootCount())
+	}
+	// The system is going down: nothing may start kairos-agent, and a second
+	// rollback is not a second selection.
+	if err := d.Apply(context.Background(), ref, dg[ref], false); !errors.Is(err, ErrRebooting) {
+		t.Fatalf("Apply after RebootPrevious: %v, want ErrRebooting", err)
+	}
+	if err := d.RebootPrevious(); !errors.Is(err, ErrRebooting) {
+		t.Fatalf("second RebootPrevious: %v, want ErrRebooting", err)
+	}
+	if b.previousCount() != 1 || len(b.calls()) != 0 {
+		t.Fatalf("RebootPrevious %d, upgrades %q", b.previousCount(), b.calls())
+	}
+}
+
+func TestRebootPreviousRefusedAfterReboot(t *testing.T) {
+	daemonEnv(t, "v0.0.5")
+	b := &fakeBackend{}
+	d := NewDaemon(b)
+	if err := d.Reboot(); err != nil {
+		t.Fatal(err)
+	}
+	// A plain restart is under way; selecting the passive entry now would
+	// change what it boots behind the user's back.
+	if err := d.RebootPrevious(); !errors.Is(err, ErrRebooting) {
+		t.Fatalf("RebootPrevious after Reboot: %v, want ErrRebooting", err)
+	}
+	if b.previousCount() != 0 {
+		t.Fatal("backend asked to boot the previous system")
+	}
+}
+
+func TestRebootPreviousRefusedWhileAJobRuns(t *testing.T) {
+	dg := daemonEnv(t, "v0.0.5")
+	ref := ghcrRepo + ":sway-v0.0.6"
+
+	// Inspecting: the job could still start kairos-agent.
+	arrived := blockingGitHub(t)
+	b := &fakeBackend{block: make(chan struct{})}
+	d := NewDaemon(b)
+	if err := d.Apply(context.Background(), ref, dg[ref], false); err != nil {
+		t.Fatal(err)
+	}
+	<-arrived
+	if err := d.RebootPrevious(); !errors.Is(err, ErrBusy) {
+		t.Fatalf("RebootPrevious while inspecting: %v, want ErrBusy", err)
+	}
+	if err := d.Cancel(); err != nil {
+		t.Fatal(err)
+	}
+	d.wg.Wait()
+
+	// Applying: kairos-agent writes the passive slot.
+	fakeGitHubReleases(t, "v0.0.6", daemonReleases)
+	if err := d.Apply(context.Background(), ref, dg[ref], false); err != nil {
+		t.Fatal(err)
+	}
+	waitState(t, d, StateApplying)
+	if err := d.RebootPrevious(); !errors.Is(err, ErrBusy) {
+		t.Fatalf("RebootPrevious while applying: %v, want ErrBusy", err)
+	}
+	close(b.block)
+	waitState(t, d, StateRebootPending)
+	if b.previousCount() != 0 {
+		t.Fatal("backend asked to boot the previous system")
+	}
+}
+
+func TestRebootPreviousRefusedWhileRebootPending(t *testing.T) {
+	dg := daemonEnv(t, "v0.0.5")
+	ref := ghcrRepo + ":sway-v0.0.6"
+	b := &fakeBackend{}
+	d := NewDaemon(b)
+	if err := d.Apply(context.Background(), ref, dg[ref], false); err != nil {
+		t.Fatal(err)
+	}
+	waitState(t, d, StateRebootPending)
+	err := d.RebootPrevious()
+	if !errors.Is(err, ErrRebootPending) || !strings.Contains(err.Error(), "restart into it first") {
+		t.Fatalf("RebootPrevious while reboot-pending: %v, want ErrRebootPending with a reason", err)
+	}
+	// The marker outlives the daemon, and so does the refusal.
+	if err := NewDaemon(b).RebootPrevious(); !errors.Is(err, ErrRebootPending) {
+		t.Fatalf("restarted daemon: %v, want ErrRebootPending", err)
+	}
+	if b.previousCount() != 0 {
+		t.Fatal("backend asked to boot the previous system")
+	}
+	// A plain restart into the update is still allowed.
+	if err := d.Reboot(); err != nil || b.rebootCount() != 1 {
+		t.Fatalf("Reboot: %v, %d reboots", err, b.rebootCount())
+	}
+}
+
+func TestFailedRebootPreviousAllowsInstalls(t *testing.T) {
+	dg := daemonEnv(t, "v0.0.5")
+	ref := ghcrRepo + ":sway-v0.0.6"
+	b := &fakeBackend{previousErr: errors.New("kairos-agent bootentry: exit status 1")}
+	d := NewDaemon(b)
+	if err := d.RebootPrevious(); err == nil {
+		t.Fatal("a failed RebootPrevious returned nil")
+	}
+	if err := d.Apply(context.Background(), ref, dg[ref], false); err != nil {
+		t.Fatalf("Apply after a failed RebootPrevious: %v", err)
+	}
+	waitState(t, d, StateRebootPending)
+}
+
+// fakeRebootTools puts a kairos-agent (through HADRON_UPDATE_AGENT) and a
+// systemctl (first on PATH) in place that append their argv to one log, so
+// a test sees both commands and their order. agentCode is kairos-agent's exit
+// status. cosDir is the boot-mode sentinel directory, empty.
+func fakeRebootTools(t *testing.T, agentCode int) (logFile, cosDir string) {
+	t.Helper()
+	dir := t.TempDir()
+	logFile = filepath.Join(dir, "log")
+	agent := filepath.Join(dir, "kairos-agent")
+	script := fmt.Sprintf("#!/bin/sh\necho \"kairos-agent $*\" >> %s\nexit %d\n", logFile, agentCode)
+	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(dir, "bin")
+	if err := os.Mkdir(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sc := fmt.Sprintf("#!/bin/sh\necho \"systemctl $*\" >> %s\n", logFile)
+	if err := os.WriteFile(filepath.Join(bin, "systemctl"), []byte(sc), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HADRON_UPDATE_AGENT", agent)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	cosDir = filepath.Join(dir, "cos")
+	if err := os.Mkdir(cosDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := bootModeDir
+	bootModeDir = cosDir
+	t.Cleanup(func() { bootModeDir = old })
+	return logFile, cosDir
+}
+
+func readLog(t *testing.T, p string) string {
+	t.Helper()
+	b, err := os.ReadFile(p)
+	if errors.Is(err, os.ErrNotExist) {
+		return ""
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// TestKairosBackendRebootPrevious pins the command line: kairos-agent's own
+// one-shot selection of the "fallback" (passive) entry, then the reboot.
+func TestKairosBackendRebootPrevious(t *testing.T) {
+	logFile, _ := fakeRebootTools(t, 0)
+	if err := (kairosBackend{}).RebootPrevious(); err != nil {
+		t.Fatal(err)
+	}
+	want := "kairos-agent bootentry --select fallback\nsystemctl reboot\n"
+	if got := readLog(t, logFile); got != want {
+		t.Fatalf("ran %q, want %q", got, want)
+	}
+}
+
+func TestKairosBackendRebootPreviousStopsWhenTheSelectionFails(t *testing.T) {
+	logFile, _ := fakeRebootTools(t, 1)
+	err := (kairosBackend{}).RebootPrevious()
+	if err == nil || !strings.Contains(err.Error(), "bootentry") {
+		t.Fatalf("err %v, want the bootentry failure", err)
+	}
+	// No reboot: it would only boot the same system again.
+	if got := readLog(t, logFile); got != "kairos-agent bootentry --select fallback\n" {
+		t.Fatalf("ran %q", got)
+	}
+}
+
+func TestKairosBackendRebootPreviousRefusesOnThePassiveSystem(t *testing.T) {
+	logFile, cosDir := fakeRebootTools(t, 0)
+	if err := os.WriteFile(filepath.Join(cosDir, "passive_mode"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := (kairosBackend{}).RebootPrevious()
+	if err == nil || !strings.Contains(err.Error(), "already runs the previous system") {
+		t.Fatalf("err %v", err)
+	}
+	if got := readLog(t, logFile); got != "" {
+		t.Fatalf("ran %q, want nothing", got)
 	}
 }

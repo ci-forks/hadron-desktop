@@ -46,6 +46,9 @@ type Backend interface {
 	// calling progress for each output line.
 	Upgrade(ctx context.Context, source string, progress func(line string)) error
 	Reboot() error
+	// RebootPrevious selects the passive (previous) system for the next boot
+	// only, then reboots. The boot after that is the active system again.
+	RebootPrevious() error
 }
 
 var (
@@ -577,6 +580,40 @@ func (d *Daemon) Reboot() error {
 	return nil
 }
 
+// errPreviousAfterInstall is RebootPrevious's refusal while an install waits
+// for its reboot: the passive slot then holds the system the user runs now,
+// and the active slot the new one, so "previous" would boot neither the
+// system before this one nor the update.
+var errPreviousAfterInstall = fmt.Errorf("%w; restart into it first, then the system you run now is the previous one", ErrRebootPending)
+
+// RebootPrevious boots the previous system once. It refuses what Reboot
+// refuses, and also while a reboot was already asked (the selection would
+// change what that reboot boots) and while an install waits for its reboot.
+func (d *Daemon) RebootPrevious() error {
+	d.mu.Lock()
+	switch {
+	case d.rebooting:
+		d.mu.Unlock()
+		return ErrRebooting
+	case d.state == StateInspecting || d.state == StateApplying:
+		d.mu.Unlock()
+		return ErrBusy
+	case d.state == StateRebootPending:
+		d.mu.Unlock()
+		return errPreviousAfterInstall
+	}
+	d.rebooting = true
+	d.mu.Unlock()
+
+	if err := d.backend.RebootPrevious(); err != nil {
+		d.mu.Lock()
+		d.rebooting = false
+		d.mu.Unlock()
+		return err
+	}
+	return nil
+}
+
 // kairosBackend is the real Backend.
 type kairosBackend struct{}
 
@@ -635,4 +672,47 @@ func (kairosBackend) Reboot() error {
 		return fmt.Errorf("systemctl reboot: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// bootModeDir holds immucore's boot-mode sentinels (active_mode,
+// passive_mode, recovery_mode). A variable so tests can point it elsewhere.
+var bootModeDir = "/run/cos"
+
+// previousEntry is the boot entry of the passive slot, the same name on GRUB
+// and on systemd-boot. kairos-agent resolves it, see RebootPrevious.
+const previousEntry = "fallback"
+
+// RebootPrevious runs `kairos-agent bootentry --select fallback`, then
+// `systemctl reboot`. kairos-agent does the selection the way its own
+// upgrade does (kairos-io/kairos agent/pkg/action/upgrade.go, which selects
+// "cos" after an upgrade), and picks the boot loader itself:
+//
+//   - agent/pkg/cmd/root.go newBootentryCmd: --select calls
+//     action.SelectBootEntry with no prompt.
+//   - agent/pkg/action/bootentries.go SelectBootEntry: utils.IsUkiWithFs
+//     chooses systemd-boot (Trusted Boot) or GRUB.
+//   - GRUB (selectBootEntryGrub): checks "fallback" is a menu entry id, then
+//     writes next_entry=fallback to /oem/grubenv (to the STATE grubenv when
+//     OEM is encrypted). kairos-init's grub.cfg (kairos-init/pkg/bundled/
+//     bundled.go) boots next_entry once and clears it with save_env; the
+//     passive entry is `menuentry ... --id fallback`.
+//   - systemd-boot (selectBootEntrySystemd): "fallback" resolves to
+//     passive.conf (bootNameToSystemdConf) and is written to the
+//     LoaderEntryOneShot EFI variable, which systemd-boot uses once.
+//
+// So the selection is one-shot on both: the boot after the previous system is
+// the current one again. If the selection fails nothing reboots: the restart
+// would only boot this same system.
+func (kairosBackend) RebootPrevious() error {
+	// Booted from passive (a fallback after a failed boot, or a rollback not
+	// restarted since), "fallback" is this very system and the restart would
+	// change nothing.
+	if _, err := os.Stat(filepath.Join(bootModeDir, "passive_mode")); err == nil {
+		return errors.New("this system already runs the previous system; a normal restart returns to the current one")
+	}
+	out, err := exec.Command(kairosAgent(), "bootentry", "--select", previousEntry).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("kairos-agent bootentry --select %s: %w: %s", previousEntry, err, strings.TrimSpace(string(out)))
+	}
+	return kairosBackend{}.Reboot()
 }

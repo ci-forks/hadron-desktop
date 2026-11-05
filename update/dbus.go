@@ -42,6 +42,7 @@ const busIntrospection = introspect.IntrospectDeclarationString + `<node>
     </method>
     <method name="Cancel"/>
     <method name="Reboot"/>
+    <method name="RebootPrevious"/>
     <signal name="StateChanged"><arg name="status" type="a{sv}"/></signal>
     <signal name="Progress"><arg name="line" type="s"/></signal>
   </interface>` + introspect.IntrospectDataString + `</node>`
@@ -401,6 +402,20 @@ func (a busAPI) Reboot(sender dbus.Sender) *dbus.Error {
 		return err
 	}
 	return busError(a.s.d.Reboot())
+}
+
+// RebootPrevious shares Reboot's action: it is a restart, into the other
+// installed system, and installs nothing.
+func (a busAPI) RebootPrevious(sender dbus.Sender) *dbus.Error {
+	done, derr := a.s.enter()
+	if derr != nil {
+		return derr
+	}
+	defer done()
+	if err := a.s.authorize(sender, actionReboot); err != nil {
+		return err
+	}
+	return busError(a.s.d.RebootPrevious())
 }
 
 // serve exports d on conn as io.kairos.HadronUpdate1 and returns when the

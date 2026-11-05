@@ -237,8 +237,8 @@ func (a *trayApp) render() {
 
 // click acts on a menu item. Anything that needs details or an answer opens
 // a terminal running the CLI, which waits for Enter before closing over an
-// error (--pause-on-error); Cancel and Restart are the click itself, and
-// polkit decides. c is nil while the service is unreachable.
+// error (--pause-on-error); Cancel, Restart and Restart into the previous
+// system are the click itself, and polkit decides. c is nil while the service is unreachable.
 func (a *trayApp) click(c daemonClient, id string) {
 	var err error
 	switch {
@@ -250,18 +250,24 @@ func (a *trayApp) click(c daemonClient, id string) {
 		err = a.launch("switch", strings.TrimPrefix(id, "switch/"), "--pause-on-error")
 	case id == "advanced":
 		err = a.launch("upgrade", "--pause-on-error", "--image", "-")
-	case c == nil && (id == "cancel" || id == "restart"):
+	case c == nil && (id == "cancel" || id == "restart" || id == "rollback"):
 		err = errServiceUnavailable
 	case id == "cancel":
 		err = c.Cancel()
 	case id == "restart":
 		err = c.Reboot()
+	case id == "rollback":
+		err = c.RebootPrevious()
 	default:
 		return
 	}
 	if err != nil {
 		a.log.Printf("%s: %v", id, err)
-		if nerr := a.notify("Hadron Desktop update", describeDaemonError(err)); nerr != nil {
+		msg := describeDaemonError(err)
+		if id == "rollback" {
+			msg = describeRollbackError(err)
+		}
+		if nerr := a.notify("Hadron Desktop update", msg); nerr != nil {
 			a.log.Printf("showing a notification: %v", nerr)
 		}
 	}

@@ -188,3 +188,33 @@ func TestBuildMenuStatusLines(t *testing.T) {
 		}
 	}
 }
+
+// TestBuildMenuRollback: "Restart into the previous system" is offered when
+// nothing runs and nothing waits for a reboot. While reboot-pending the
+// passive slot holds the system the user runs now, so "previous" would mean
+// the wrong one.
+func TestBuildMenuRollback(t *testing.T) {
+	for _, tc := range []struct {
+		state State
+		want  bool
+	}{
+		{StateIdle, true},
+		{StateUpToDate, true},
+		{StateUpdateAvailable, true},
+		{StateError, true},
+		{StateChecking, false},
+		{StateInspecting, false},
+		{StateApplying, false},
+		{StateRebootPending, false},
+		{StateUnmanaged, false},
+	} {
+		it, ok := find(BuildMenu(menuStatus(tc.state), menuReleases, "sway"), "rollback")
+		if ok != tc.want {
+			t.Errorf("%s: rollback present %v, want %v", tc.state, ok, tc.want)
+			continue
+		}
+		if ok && (it.Label != "Restart into the previous system" || !it.Enabled) {
+			t.Errorf("%s: rollback = %+v", tc.state, it)
+		}
+	}
+}

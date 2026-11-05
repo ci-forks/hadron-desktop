@@ -42,6 +42,8 @@ Commands:
       --yes              do not ask for confirmation
       --reboot           reboot when the switch finishes, without asking
   reboot            restart the system into an installed update
+  rollback          restart into the previous system, for the next boot only
+      --yes              do not ask for confirmation
   tray              run in a desktop session: the update icon in the panel;
                     checks every few hours through the update service and
                     shows a notification when a new release is out
@@ -78,6 +80,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return cmdSwitch(args, stdin, stdout, stderr)
 	case "reboot":
 		return cmdReboot(args, stdout, stderr)
+	case "rollback":
+		return cmdRollback(args, stdin, stdout, stderr)
 	case "upgrade":
 		return cmdUpgrade(args, stdin, stdout, stderr)
 	case "tray":
@@ -587,6 +591,40 @@ func cmdReboot(args []string, stdout, stderr io.Writer) int {
 		return daemonFail(stderr, "", err)
 	}
 	fmt.Fprintln(stdout, "Restarting.")
+	return exitOK
+}
+
+// cmdRollback boots the previous system once, through the update service.
+// The agent flavor has no service, so it is refused there with the commands
+// to run by hand.
+func cmdRollback(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	fs := newFlags("rollback", stderr)
+	yes := fs.Bool("yes", false, "do not ask")
+	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+	if fs.NArg() > 0 {
+		fmt.Fprintf(stderr, "hadron-update rollback: unexpected argument %q\n", fs.Arg(0))
+		return exitUsage
+	}
+	if rel, err := LoadRelease(releaseFile()); err == nil && rel.Flavor == flavorAgent {
+		fmt.Fprintf(stderr, "hadron-update: rollback is not available on the agent flavor; run `sudo kairos-agent bootentry --select %s` and then `sudo systemctl reboot`.\n", previousEntry)
+		return exitUsage
+	}
+	if !*yes && !confirm(bufio.NewReader(stdin), stdout, "Restart into the previous system? It is used for the next boot only.", false) {
+		fmt.Fprintln(stdout, "Cancelled.")
+		return exitOK
+	}
+	c, ok := dialOrExplain(stderr)
+	if !ok {
+		return exitError
+	}
+	defer c.Close()
+	if err := c.RebootPrevious(); err != nil {
+		fmt.Fprintln(stderr, "hadron-update:", describeRollbackError(err))
+		return exitError
+	}
+	fmt.Fprintln(stdout, "Restarting into the previous system.")
 	return exitOK
 }
 

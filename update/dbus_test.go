@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -175,13 +176,13 @@ func TestBusRefusesUnauthorized(t *testing.T) {
 	if got := errName(err); got != "io.kairos.HadronUpdate1.Error.NotAuthorized" {
 		t.Fatalf("Apply error %q (%v), want NotAuthorized", got, err)
 	}
-	for _, m := range []string{"Cancel", "Reboot"} {
+	for _, m := range []string{"Cancel", "Reboot", "RebootPrevious"} {
 		if got := errName(f.call(m).Err); got != "io.kairos.HadronUpdate1.Error.NotAuthorized" {
 			t.Fatalf("%s error %q, want NotAuthorized", m, got)
 		}
 	}
 	me := f.client.Names()[0]
-	want := []string{me + " " + actionApply, me + " " + actionApply, me + " " + actionReboot}
+	want := []string{me + " " + actionApply, me + " " + actionApply, me + " " + actionReboot, me + " " + actionReboot}
 	if got := auth.questions(); strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("asked %q, want %q", got, want)
 	}
@@ -196,10 +197,10 @@ func TestBusRefusesUnauthorized(t *testing.T) {
 			t.Fatalf("status key %q is %v, want a string", k, st[k])
 		}
 	}
-	if len(b.calls()) != 0 || b.rebootCount() != 0 {
+	if len(b.calls()) != 0 || b.rebootCount() != 0 || b.previousCount() != 0 {
 		t.Fatal("the backend was called for an unauthorized client")
 	}
-	if n := len(auth.questions()); n != 3 {
+	if n := len(auth.questions()); n != 4 {
 		t.Fatalf("Status asked polkit: %d questions", n)
 	}
 }
@@ -780,5 +781,41 @@ func TestLogindInhibitor(t *testing.T) {
 	lc.ReleaseName("org.freedesktop.login1")
 	if _, err := inh.Inhibit(); err == nil {
 		t.Fatal("Inhibit without logind succeeded")
+	}
+}
+
+func TestBusRebootPrevious(t *testing.T) {
+	dg := daemonEnv(t, "v0.0.5")
+	b := &fakeBackend{}
+	auth := &fakeAuth{allow: true}
+	f := startService(t, NewDaemon(b), auth)
+	if err := f.call("RebootPrevious").Err; err != nil {
+		t.Fatalf("RebootPrevious: %v", err)
+	}
+	if b.previousCount() != 1 || b.rebootCount() != 0 {
+		t.Fatalf("RebootPrevious %d, Reboot %d", b.previousCount(), b.rebootCount())
+	}
+	me := f.client.Names()[0]
+	if got := auth.questions(); len(got) != 1 || got[0] != me+" "+actionReboot {
+		t.Fatalf("asked %q, want %s", got, actionReboot)
+	}
+	if got := errName(f.call("RebootPrevious").Err); got != "io.kairos.HadronUpdate1.Error.Rebooting" {
+		t.Fatalf("second RebootPrevious: %q, want Rebooting", got)
+	}
+
+	// After an install, "previous" is ambiguous: refused by name.
+	b2 := &fakeBackend{}
+	d2 := NewDaemon(b2)
+	f2 := startService(t, d2, &fakeAuth{allow: true})
+	ref := ghcrRepo + ":sway-v0.0.6"
+	if err := d2.Apply(context.Background(), ref, dg[ref], false); err != nil {
+		t.Fatal(err)
+	}
+	waitState(t, d2, StateRebootPending)
+	if got := errName(f2.call("RebootPrevious").Err); got != "io.kairos.HadronUpdate1.Error.RebootPending" {
+		t.Fatalf("RebootPrevious while reboot-pending: %q, want RebootPending", got)
+	}
+	if b2.previousCount() != 0 {
+		t.Fatal("backend asked to boot the previous system")
 	}
 }

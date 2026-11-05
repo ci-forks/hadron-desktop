@@ -38,6 +38,8 @@ type daemonClient interface {
 	Apply(ref, digest string, advanced bool) error
 	Cancel() error
 	Reboot() error
+	// RebootPrevious boots the previous system once.
+	RebootPrevious() error
 	// Watch subscribes to StateChanged and Progress. Subscribe before Apply,
 	// so a fast job cannot finish unseen. stop ends the subscription and
 	// closes the channel.
@@ -157,6 +159,9 @@ func (c *client) Apply(ref, digest string, advanced bool) error {
 }
 func (c *client) Cancel() error { return c.call("Cancel", nil) }
 func (c *client) Reboot() error { return c.call("Reboot", nil) }
+func (c *client) RebootPrevious() error {
+	return c.call("RebootPrevious", nil)
+}
 
 // statusPoll is the backstop for a missed signal: Watch also asks Status this
 // often. A variable so tests can shorten it.
@@ -278,11 +283,23 @@ func statusFromDict(m map[string]dbus.Variant) Status {
 func describeDaemonError(err error) string {
 	switch daemonErrName(err) {
 	case "NotAuthorized":
-		return "Only members of the admin group can install updates."
+		return "Only members of the admin group can install updates or restart the system."
 	case "RebootPending":
 		return "An update is already installed; restart first."
 	case "Busy":
 		return "Another update is running."
 	}
 	return fmt.Sprint(err)
+}
+
+// describeRollbackError is describeDaemonError for RebootPrevious, whose
+// refusals mean something else: a pending install makes "previous" ambiguous.
+func describeRollbackError(err error) string {
+	switch daemonErrName(err) {
+	case "RebootPending":
+		return "An update is installed and waits for a reboot; restart into it first. The system you run now is then the previous one."
+	case "Rebooting":
+		return "The system is already restarting."
+	}
+	return describeDaemonError(err)
 }

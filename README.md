@@ -114,6 +114,7 @@ kept under `build/sway-desktop/` and `build/i3-desktop/`.
   hadron-update upgrade --version v0.1.2   # a specific release (also rolls back)
   hadron-update switch <flavor> # move to another flavor's image line
   hadron-update reboot          # reboot into the installed upgrade
+  hadron-update rollback        # boot the previous system once (no download)
   ```
 
   Installing and rebooting go through a root service, `hadron-updated`, and

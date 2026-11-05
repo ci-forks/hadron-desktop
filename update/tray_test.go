@@ -17,16 +17,17 @@ import (
 // trayFake is a daemonClient safe to use from the tray's goroutine and the
 // test at once. Check moves the status to afterCheck, as the daemon would.
 type trayFake struct {
-	mu         sync.Mutex
-	st         Status
-	afterCheck *Status
-	tags       []string
-	inspectErr error
-	refusal    string
-	rebootErr  error
-	calls      []string
-	events     chan Event
-	watches    int
+	mu          sync.Mutex
+	st          Status
+	afterCheck  *Status
+	tags        []string
+	inspectErr  error
+	refusal     string
+	rebootErr   error
+	previousErr error
+	calls       []string
+	events      chan Event
+	watches     int
 }
 
 func (f *trayFake) rec(s string) { f.mu.Lock(); f.calls = append(f.calls, s); f.mu.Unlock() }
@@ -67,6 +68,12 @@ func (f *trayFake) Inspect(ref string, adv bool) (InspectInfo, error) {
 func (f *trayFake) Apply(ref, digest string, adv bool) error { f.rec("Apply"); return nil }
 func (f *trayFake) Cancel() error                            { f.rec("Cancel"); return nil }
 func (f *trayFake) Reboot() error                            { f.rec("Reboot"); return f.rebootErr }
+func (f *trayFake) RebootPrevious() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "RebootPrevious")
+	return f.previousErr
+}
 func (f *trayFake) Watch() (<-chan Event, func(), error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -474,5 +481,43 @@ func TestIcons(t *testing.T) {
 				t.Errorf("%s/%d: corner not transparent", kind, size)
 			}
 		}
+	}
+}
+
+func TestTrayRollbackClick(t *testing.T) {
+	f := &trayFake{st: Status{State: StateUpToDate, Installed: "v0.1.0"}}
+	h := startTray(t, dialFake(f), time.Hour, time.Hour)
+	h.ui.waitView(t, "rollback", func(v trayView) bool { _, ok := find(v.Menu, "rollback"); return ok })
+	h.app.clicks <- "rollback"
+	deadline := time.Now().Add(5 * time.Second)
+	for f.count("RebootPrevious") == 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if f.count("RebootPrevious") != 1 || f.count("Reboot") != 0 || len(h.launched()) != 0 {
+		t.Fatalf("RebootPrevious %d, Reboot %d, launched %q", f.count("RebootPrevious"), f.count("Reboot"), h.launched())
+	}
+
+	f.mu.Lock()
+	f.previousErr = &daemonError{Name: "RebootPending", Msg: "raw"}
+	f.mu.Unlock()
+	h.app.clicks <- "rollback"
+	for len(h.notified()) == 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if n := h.notified(); len(n) != 1 || !strings.Contains(n[0], "restart into it first") {
+		t.Fatalf("notes %q", n)
+	}
+}
+
+func TestTrayRollbackWithoutTheService(t *testing.T) {
+	h := startTray(t, func() (daemonClient, error) { return nil, errors.New("no bus") }, time.Hour, time.Hour)
+	h.ui.waitView(t, "unavailable", func(v trayView) bool { return v.Tooltip == unavailableText })
+	h.app.clicks <- "rollback"
+	deadline := time.Now().Add(5 * time.Second)
+	for len(h.notified()) == 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if n := h.notified(); len(n) != 1 || !strings.Contains(n[0], "not available") {
+		t.Fatalf("notes %q", n)
 	}
 }
