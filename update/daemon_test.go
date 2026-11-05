@@ -349,11 +349,7 @@ func TestApplyPinRules(t *testing.T) {
 			if err := d.Apply(context.Background(), c.ref, dg[c.ref], c.advanced); err != nil {
 				t.Fatal(err)
 			}
-			want := StateRebootPending
-			if c.fail {
-				want = StateError
-			}
-			waitState(t, d, want)
+			waitState(t, d, StateRebootPending)
 			if b.pinSeen[0] != "old" {
 				t.Fatalf("pin changed before the upgrade ran: %q", b.pinSeen[0])
 			}
@@ -546,7 +542,12 @@ func TestCancelOnlyBeforeUpgrade(t *testing.T) {
 	})
 }
 
-func TestBackendFailureGoesToError(t *testing.T) {
+// TestBackendFailureKeepsTheMarker: kairos-agent renames active to passive
+// and the new image to active before its after-upgrade hook, whose error it
+// returns. A failure can therefore come after the swap, and a retry would
+// push the never-booted image over the known-good one. So any failure once
+// Upgrade ran keeps the marker and asks for a restart.
+func TestBackendFailureKeepsTheMarker(t *testing.T) {
 	dg := daemonEnv(t, "v0.0.5")
 	b := &fakeBackend{lines: []string{"pulling image", "error: no space left on device"}, err: errors.New("exit status 1")}
 	d := NewDaemon(b)
@@ -557,31 +558,99 @@ func TestBackendFailureGoesToError(t *testing.T) {
 	if err := d.Apply(context.Background(), ref, dg[ref], false); err != nil {
 		t.Fatal(err)
 	}
-	s := waitState(t, d, StateError)
-	if s.Detail != "error: no space left on device" {
-		t.Fatalf("detail %q", s.Detail)
+	s := waitState(t, d, StateRebootPending)
+	if s.Detail != "The update failed; restart before trying again." || s.Pending != pendingFailed {
+		t.Fatalf("status %+v", s)
 	}
-	// A failed upgrade leaves no reboot-pending marker, and may be retried.
-	if s := NewDaemon(b).Status(); s.State != StateIdle {
+	marker := filepath.Join(os.Getenv("HADRON_UPDATE_RUN_DIR"), "reboot-pending")
+	if got, err := os.ReadFile(marker); err != nil || !strings.HasPrefix(string(got), "failed ") {
+		t.Fatalf("marker %q, %v", got, err)
+	}
+	if err := d.Apply(context.Background(), ref, dg[ref], false); !errors.Is(err, ErrRebootPending) {
+		t.Fatalf("retry: %v, want ErrRebootPending", err)
+	}
+	if err := d.RebootPrevious(); !errors.Is(err, ErrRebootPending) {
+		t.Fatalf("RebootPrevious: %v, want ErrRebootPending", err)
+	}
+	// The marker outlives the daemon, and so do the refusals.
+	d2 := NewDaemon(b)
+	if s := d2.Status(); s.State != StateRebootPending || s.Pending != pendingFailed ||
+		s.Detail != "The update failed; restart before trying again." {
 		t.Fatalf("restarted daemon: %+v", s)
 	}
-	b.err = nil
-	if err := d.Apply(context.Background(), ref, dg[ref], false); err != nil {
-		t.Fatalf("retry: %v", err)
+	if err := d2.Apply(context.Background(), ref, dg[ref], false); !errors.Is(err, ErrRebootPending) {
+		t.Fatalf("restarted daemon Apply: %v, want ErrRebootPending", err)
 	}
-	waitState(t, d, StateRebootPending)
+	if err := d2.RebootPrevious(); !errors.Is(err, ErrRebootPending) {
+		t.Fatalf("restarted daemon RebootPrevious: %v, want ErrRebootPending", err)
+	}
+	// A Check keeps the state too.
+	if err := d2.Check(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if s := d2.Status(); s.State != StateRebootPending {
+		t.Fatalf("after Check: %+v", s)
+	}
+	if n := len(b.calls()); n != 1 || b.previousCount() != 0 {
+		t.Fatalf("%d upgrades, %d previous; want 1, 0", n, b.previousCount())
+	}
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		mu.Lock()
 		n := len(progress)
 		mu.Unlock()
-		if n == 4 {
+		if n == 2 {
 			break
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("progress lines %q", progress)
 		}
 		time.Sleep(2 * time.Millisecond)
+	}
+}
+
+// TestMarkerSaysHowTheInstallEnded: started before kairos-agent runs,
+// installed after it succeeds. A daemon that finds "started" died mid-write.
+func TestMarkerSaysHowTheInstallEnded(t *testing.T) {
+	dg := daemonEnv(t, "v0.0.5")
+	b := &fakeBackend{block: make(chan struct{})}
+	d := NewDaemon(b)
+	ref := ghcrRepo + ":sway-v0.0.6"
+	if err := d.Apply(context.Background(), ref, dg[ref], false); err != nil {
+		t.Fatal(err)
+	}
+	waitState(t, d, StateApplying)
+	d2 := NewDaemon(b)
+	if err := d2.Apply(context.Background(), ref, dg[ref], false); !errors.Is(err, ErrRebootPending) {
+		t.Fatalf("Apply mid-install: %v, want ErrRebootPending", err)
+	}
+	s := d2.Status()
+	if s.State != StateRebootPending || s.Pending != pendingStarted ||
+		s.Detail != "The update was interrupted; restart before trying again." {
+		t.Fatalf("daemon started mid-install: %+v", s)
+	}
+	close(b.block)
+	s = waitState(t, d, StateRebootPending)
+	if s.Pending != pendingInstalled {
+		t.Fatalf("after success: %+v", s)
+	}
+	marker := filepath.Join(os.Getenv("HADRON_UPDATE_RUN_DIR"), "reboot-pending")
+	if got, _ := os.ReadFile(marker); string(got) != "installed oci:"+ghcrRepo+"@"+dg[ref]+"\n" {
+		t.Fatalf("marker %q", got)
+	}
+	if s := NewDaemon(b).Status(); s.Pending != pendingInstalled || s.Detail != "" {
+		t.Fatalf("restarted after success: %+v", s)
+	}
+	if n := len(b.calls()); n != 1 {
+		t.Fatalf("%d upgrades, want 1", n)
+	}
+	// A marker this daemon cannot read is a pending install of unknown
+	// outcome: interrupted.
+	if err := os.WriteFile(marker, []byte("garbage"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if s := NewDaemon(b).Status(); s.State != StateRebootPending || s.Pending != pendingStarted {
+		t.Fatalf("unreadable marker: %+v", s)
 	}
 }
 
@@ -665,57 +734,6 @@ func TestApplyRefusesWithoutAMarker(t *testing.T) {
 	d.wg.Wait()
 	if len(b.calls()) != 0 {
 		t.Fatal("backend called without a reboot-pending marker")
-	}
-}
-
-func TestMarkerIsWrittenBeforeTheUpgrade(t *testing.T) {
-	dg := daemonEnv(t, "v0.0.5")
-	b := &fakeBackend{block: make(chan struct{})}
-	d := NewDaemon(b)
-	ref := ghcrRepo + ":sway-v0.0.6"
-	if err := d.Apply(context.Background(), ref, dg[ref], false); err != nil {
-		t.Fatal(err)
-	}
-	waitState(t, d, StateApplying)
-
-	// The daemon dies mid-install and a new one starts.
-	d2 := NewDaemon(b)
-	if s := d2.Status(); s.State != StateRebootPending {
-		t.Fatalf("daemon started mid-install: %+v", s)
-	}
-	if err := d2.Apply(context.Background(), ref, dg[ref], false); !errors.Is(err, ErrRebootPending) {
-		t.Fatalf("Apply mid-install: %v, want ErrRebootPending", err)
-	}
-	got, err := os.ReadFile(filepath.Join(os.Getenv("HADRON_UPDATE_RUN_DIR"), "reboot-pending"))
-	if want := "oci:" + ghcrRepo + "@" + dg[ref] + "\n"; err != nil || string(got) != want {
-		t.Fatalf("marker %q, %v; want %q", got, err, want)
-	}
-	close(b.block)
-	waitState(t, d, StateRebootPending)
-	if n := len(b.calls()); n != 1 {
-		t.Fatalf("%d upgrades, want 1", n)
-	}
-}
-
-func TestFailedUpgradeKeepsAMarkerItCannotRemove(t *testing.T) {
-	dg := daemonEnv(t, "v0.0.5")
-	marker := filepath.Join(os.Getenv("HADRON_UPDATE_RUN_DIR"), "reboot-pending")
-	b := &fakeBackend{err: errors.New("exit status 1"), during: func() {
-		// A non-empty directory in its place makes os.Remove fail.
-		os.Remove(marker)
-		os.MkdirAll(filepath.Join(marker, "x"), 0o755)
-	}}
-	d := NewDaemon(b)
-	ref := ghcrRepo + ":sway-v0.0.6"
-	if err := d.Apply(context.Background(), ref, dg[ref], false); err != nil {
-		t.Fatal(err)
-	}
-	s := waitState(t, d, StateRebootPending)
-	if !strings.Contains(s.Detail, "could not be removed") {
-		t.Fatalf("detail %q", s.Detail)
-	}
-	if s := NewDaemon(b).Status(); s.State != StateRebootPending {
-		t.Fatalf("restarted daemon: %+v", s)
 	}
 }
 

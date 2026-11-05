@@ -181,6 +181,9 @@ func TestBuildMenuStatusLines(t *testing.T) {
 		{Status{State: StateUpdateAvailable, Installed: "v0.0.5", Latest: "v0.0.6"}, "Hadron Desktop v0.0.6 is available"},
 		{Status{State: StateApplying}, "Installing the update"},
 		{Status{State: StateRebootPending}, "Update installed; restart to use it"},
+		{Status{State: StateRebootPending, Pending: pendingInstalled}, "Update installed; restart to use it"},
+		{Status{State: StateRebootPending, Pending: pendingFailed}, "Update failed; restart before trying again"},
+		{Status{State: StateRebootPending, Pending: pendingStarted}, "Update interrupted; restart before trying again"},
 		{Status{State: StateError, Detail: "github down"}, "Error: github down"},
 	} {
 		if got := BuildMenu(tc.st, nil, "sway")[0].Label; !strings.HasPrefix(got, tc.want) {

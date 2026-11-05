@@ -265,7 +265,7 @@ func (a *trayApp) click(c daemonClient, id string) {
 		a.log.Printf("%s: %v", id, err)
 		msg := describeDaemonError(err)
 		if id == "rollback" {
-			msg = describeRollbackError(err)
+			msg = describeRollbackError(err, a.st.Pending)
 		}
 		if nerr := a.notify("Hadron Desktop update", msg); nerr != nil {
 			a.log.Printf("showing a notification: %v", nerr)

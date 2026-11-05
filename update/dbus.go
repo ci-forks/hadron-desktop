@@ -165,6 +165,7 @@ func statusDict(s Status) map[string]dbus.Variant {
 		"pin":       dbus.MakeVariant(s.Pin),
 		"detail":    dbus.MakeVariant(s.Detail),
 		"advanced":  dbus.MakeVariant(s.Advanced),
+		"pending":   dbus.MakeVariant(s.Pending),
 	}
 }
 

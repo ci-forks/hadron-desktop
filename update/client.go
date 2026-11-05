@@ -276,6 +276,7 @@ func statusFromDict(m map[string]dbus.Variant) Status {
 	return Status{
 		State: State(str(m, "state")), Installed: str(m, "installed"), Latest: str(m, "latest"),
 		Pin: str(m, "pin"), Detail: str(m, "detail"), Advanced: boolean(m, "advanced"),
+		Pending: str(m, "pending"),
 	}
 }
 
@@ -285,7 +286,8 @@ func describeDaemonError(err error) string {
 	case "NotAuthorized":
 		return "Only members of the admin group can install updates or restart the system."
 	case "RebootPending":
-		return "An update is already installed; restart first."
+		// Installed, failed or interrupted: a restart comes first in all three.
+		return "The last update waits for a restart; restart first."
 	case "Busy":
 		return "Another update is running."
 	}
@@ -294,9 +296,14 @@ func describeDaemonError(err error) string {
 
 // describeRollbackError is describeDaemonError for RebootPrevious, whose
 // refusals mean something else: a pending install makes "previous" ambiguous.
-func describeRollbackError(err error) string {
+// pending is Status.Pending at the time of the refusal: after a failed or
+// interrupted install, which slot holds what is unknown until a restart.
+func describeRollbackError(err error, pending string) string {
 	switch daemonErrName(err) {
 	case "RebootPending":
+		if pending == pendingFailed || pending == pendingStarted {
+			return "The last update did not finish; restart before choosing a system."
+		}
 		return "An update is installed and waits for a reboot; restart into it first. The system you run now is then the previous one."
 	case "Rebooting":
 		return "The system is already restarting."

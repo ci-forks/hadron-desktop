@@ -621,7 +621,13 @@ func cmdRollback(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	defer c.Close()
 	if err := c.RebootPrevious(); err != nil {
-		fmt.Fprintln(stderr, "hadron-update:", describeRollbackError(err))
+		var pending string
+		if daemonErrName(err) == "RebootPending" {
+			if st, serr := c.Status(); serr == nil {
+				pending = st.Pending
+			}
+		}
+		fmt.Fprintln(stderr, "hadron-update:", describeRollbackError(err, pending))
 		return exitError
 	}
 	fmt.Fprintln(stdout, "Restarting into the previous system.")
@@ -703,9 +709,17 @@ func installFlow(c daemonClient, rel Release, ref string, advanced, yes, reboot 
 			fmt.Fprintln(stderr, "hadron-update: lost the update job: it was cancelled or the update service restarted.")
 			return exitError
 		case StateRebootPending:
+			if p := ev.Status.Pending; p == pendingFailed || p == pendingStarted {
+				// kairos-agent may have swapped the slots before it failed;
+				// the service refuses another install until a restart.
+				fmt.Fprintln(stderr, "hadron-update: the update failed after it started writing.")
+				fmt.Fprintln(stderr, pendingDetail(p))
+				return exitError
+			}
 			fmt.Fprintln(stdout, "\nThe update is installed and starts on the next boot.")
 			return offerReboot(c, reboot, in, stdout, stderr)
 		case StateError:
+			// Only a failure before kairos-agent started ends here.
 			fmt.Fprintln(stderr, "hadron-update: the update failed:", ev.Status.Detail)
 			fmt.Fprintln(stderr, "Nothing changed on the running system; you can retry safely.")
 			return exitError

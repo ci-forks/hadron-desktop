@@ -41,6 +41,14 @@ func statusLine(st Status) string {
 	case StateApplying:
 		return "Installing the update…"
 	case StateRebootPending:
+		// After a failed or interrupted install the slots may already be
+		// swapped: no retry before a restart.
+		switch st.Pending {
+		case pendingFailed:
+			return "Update failed; restart before trying again"
+		case pendingStarted:
+			return "Update interrupted; restart before trying again"
+		}
 		return "Update installed; restart to use it"
 	case StateError:
 		return "Error: " + shorten(st.Detail, 80)

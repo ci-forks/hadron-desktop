@@ -255,7 +255,7 @@ func TestSwitchWarnsAndAsks(t *testing.T) {
 func TestDaemonErrorMapping(t *testing.T) {
 	for name, want := range map[string]string{
 		"NotAuthorized": "Only members of the admin group can install updates or restart the system.",
-		"RebootPending": "An update is already installed; restart first.",
+		"RebootPending": "The last update waits for a restart; restart first.",
 		"Busy":          "Another update is running.",
 	} {
 		setup(t, "v0.1.0", "v0.2.0")
@@ -301,6 +301,23 @@ func TestInstallErrorStateExits1(t *testing.T) {
 	code, _, errOut := runCLI("", "upgrade", "--yes", "--reboot")
 	if code != exitError || !strings.Contains(errOut, "disk full") || f.called("Reboot") {
 		t.Fatalf("code %d, stderr %q", code, errOut)
+	}
+}
+
+// TestInstallFailureAfterTheWriteAsksForARestart: once kairos-agent ran, a
+// failure lands in reboot-pending, and a retry is refused until a restart.
+// The CLI must not call it installed, offer the reboot as success, or say
+// nothing changed.
+func TestInstallFailureAfterTheWriteAsksForARestart(t *testing.T) {
+	setup(t, "v0.1.0", "v0.2.0")
+	f := okDaemon()
+	f.script = []Event{{Status: &Status{State: StateApplying}}, {Line: "error: hook failed"},
+		{Status: &Status{State: StateRebootPending, Pending: pendingFailed, Detail: pendingDetail(pendingFailed)}}}
+	useDaemon(t, f)
+	code, out, errOut := runCLI("y\n", "upgrade", "--yes", "--reboot")
+	if code != exitError || f.called("Reboot") || strings.Contains(out, "is installed") ||
+		strings.Contains(errOut, "retry safely") || !strings.Contains(errOut, "restart before trying again") {
+		t.Fatalf("code %d, stdout %q, stderr %q, calls %v", code, out, errOut, f.calls)
 	}
 }
 
@@ -422,10 +439,14 @@ func TestStatusFromDict(t *testing.T) {
 		"state": dbus.MakeVariant("applying"), "installed": dbus.MakeVariant("v1"),
 		"latest": dbus.MakeVariant("v2"), "pin": dbus.MakeVariant("p"),
 		"detail": dbus.MakeVariant("d"), "advanced": dbus.MakeVariant(true),
+		"pending": dbus.MakeVariant("failed"),
 	})
-	want := Status{State: StateApplying, Installed: "v1", Latest: "v2", Pin: "p", Detail: "d", Advanced: true}
+	want := Status{State: StateApplying, Installed: "v1", Latest: "v2", Pin: "p", Detail: "d", Advanced: true, Pending: "failed"}
 	if st != want {
 		t.Fatalf("%+v", st)
+	}
+	if got := statusFromDict(statusDict(want)); got != want {
+		t.Fatalf("round trip %+v", got)
 	}
 	if statusFromDict(nil) != (Status{}) {
 		t.Fatal("nil dict")
@@ -684,13 +705,21 @@ func TestRollbackYes(t *testing.T) {
 func TestRollbackRefusalsAreSentences(t *testing.T) {
 	for name, want := range map[string]string{
 		"RebootPending": "An update is installed and waits for a reboot; restart into it first.",
+		"Unfinished":    "The last update did not finish; restart before choosing a system.",
 		"Rebooting":     "The system is already restarting.",
 		"Busy":          "Another update is running.",
 		"NotAuthorized": "Only members of the admin group can install updates or restart the system.",
 	} {
 		setup(t, "v0.1.0", "v0.2.0")
 		f := okDaemon()
-		f.previousErr = &daemonError{Name: name, Msg: "raw"}
+		errName := name
+		if name == "Unfinished" {
+			// RebootPending after a failed install: the CLI asks Status
+			// which one it is.
+			errName = "RebootPending"
+			f.status = Status{State: StateRebootPending, Pending: pendingFailed}
+		}
+		f.previousErr = &daemonError{Name: errName, Msg: "raw"}
 		useDaemon(t, f)
 		code, _, errOut := runCLI("", "rollback", "--yes")
 		if code != exitError || !strings.Contains(errOut, want) {

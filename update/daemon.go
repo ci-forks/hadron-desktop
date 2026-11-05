@@ -36,6 +36,29 @@ type Status struct {
 	State                          State
 	Installed, Latest, Pin, Detail string
 	Advanced                       bool
+	// Pending says how the install behind reboot-pending ended: one of the
+	// pending* words, "" in every other state.
+	Pending string
+}
+
+// The reboot marker's first word, and Status.Pending. Only "installed" means
+// the new system is ready; the other two mean the slots are in an unknown
+// state until the next boot.
+const (
+	pendingStarted   = "started"   // kairos-agent was started and has not finished
+	pendingInstalled = "installed" // kairos-agent finished without an error
+	pendingFailed    = "failed"    // kairos-agent returned an error
+)
+
+// pendingDetail is the sentence a client shows for a pending word.
+func pendingDetail(word string) string {
+	switch word {
+	case pendingInstalled:
+		return ""
+	case pendingFailed:
+		return "The update failed; restart before trying again."
+	}
+	return "The update was interrupted; restart before trying again."
 }
 
 // Backend installs an image and reboots. The real one is kairos-agent; tests
@@ -59,6 +82,10 @@ var (
 	// second upgrade would push the never-booted image into the passive slot
 	// and overwrite the known-good one.
 	ErrRebootPending = errors.New("an update is installed and waits for a reboot")
+	// errUnfinishedPending is ErrRebootPending after an install that failed
+	// or was interrupted: the slots are not known to be in order until a
+	// restart.
+	errUnfinishedPending = fmt.Errorf("%w: the last update did not finish; restart before trying again", ErrRebootPending)
 	// ErrNotCancellable refuses to stop kairos-agent: a kill between the A/B
 	// swap and the image write can leave no good slot.
 	ErrNotCancellable = errors.New("the upgrade is writing the image and cannot be cancelled")
@@ -77,9 +104,11 @@ func runDir() string {
 	return "/run/hadron-update"
 }
 
-// rebootMarker exists from a successful install until the next boot. The
-// daemon exits when idle, so the state cannot live in memory only; /run is a
-// tmpfs, so the reboot itself clears it.
+// rebootMarker exists from the moment kairos-agent is about to start until
+// the next boot, whatever the outcome: kairos-agent swaps the slots before
+// its last step can fail. The daemon exits when idle, so the state cannot
+// live in memory only; /run is a tmpfs, so the reboot itself clears it. The
+// file is "<pending word> <source>".
 func rebootMarker() string { return filepath.Join(runDir(), "reboot-pending") }
 
 // Inhibitor blocks shutdown and sleep while kairos-agent writes the passive
@@ -120,6 +149,7 @@ type Daemon struct {
 
 	mu         sync.Mutex
 	state      State
+	pending    string // the marker's word while state is reboot-pending
 	latest     string
 	detail     string
 	job        *job
@@ -156,8 +186,8 @@ func NewDaemon(b Backend) *Daemon {
 	d.rel, d.managed = rel, true
 	// Any answer but "does not exist" counts as pending: refusing an install
 	// is recoverable, overwriting the known-good slot is not.
-	if _, err := os.Stat(rebootMarker()); !errors.Is(err, os.ErrNotExist) {
-		d.state = StateRebootPending
+	if word, ok := readRebootMarker(); ok {
+		d.state, d.pending, d.detail = StateRebootPending, word, pendingDetail(word)
 	}
 	return d
 }
@@ -193,7 +223,23 @@ func (d *Daemon) statusLocked() Status {
 		Pin:       pin,
 		Detail:    d.detail,
 		Advanced:  AdvancedEnabled(),
+		Pending:   d.pendingLocked(),
 	}
+}
+
+func (d *Daemon) pendingLocked() string {
+	if d.state != StateRebootPending {
+		return ""
+	}
+	return d.pending
+}
+
+// rebootPendingErrLocked is the refusal while reboot-pending holds.
+func (d *Daemon) rebootPendingErrLocked() error {
+	if d.pending == pendingInstalled {
+		return ErrRebootPending
+	}
+	return errUnfinishedPending
 }
 
 // setLocked changes the state and queues an OnChange event.
@@ -408,7 +454,7 @@ func (d *Daemon) Apply(ctx context.Context, ref, digest string, advanced bool) e
 	case d.rebooting:
 		return ErrRebooting
 	case d.state == StateRebootPending:
-		return ErrRebootPending
+		return d.rebootPendingErrLocked()
 	case d.busyLocked():
 		return ErrBusy
 	}
@@ -446,7 +492,7 @@ func (d *Daemon) run(ctx context.Context, j *job, r ImageRef, ref, digest string
 	// or restarts mid-install comes back refusing a second install over a
 	// half-written or never-booted slot. No marker, no install.
 	if err == nil {
-		if werr := writeRebootMarker(source); werr != nil {
+		if werr := writeRebootMarker(pendingStarted, source); werr != nil {
 			err = fmt.Errorf("could not record the pending install, so it was not started: %w", werr)
 		}
 	}
@@ -467,25 +513,30 @@ func (d *Daemon) run(ctx context.Context, j *job, r ImageRef, ref, digest string
 	err = d.backend.Upgrade(context.Background(), source, d.progress)
 	release()
 	if err != nil {
-		// Only a removed marker makes the system installable again; if it
-		// stays, so does reboot-pending.
-		rmErr := os.Remove(rebootMarker())
-		if errors.Is(rmErr, os.ErrNotExist) {
-			rmErr = nil
+		// No retry before a restart. kairos-agent (kairos-io/kairos
+		// agent/pkg/action/upgrade.go, UpgradeAction.Run) renames
+		// active.img to passive.img and the new image to active.img, and
+		// only then runs the after-upgrade hook, whose error it returns. So
+		// an error can come after the swap: the passive slot then holds the
+		// system that runs now, and a second install would push the
+		// never-booted image over it. The marker stays, and so does
+		// reboot-pending, on every failure.
+		fmt.Fprintf(os.Stderr, "hadron-update: the upgrade to %s failed: %v (last line: %q)\n", source, err, d.lastLine())
+		if werr := writeRebootMarker(pendingFailed, source); werr != nil {
+			// The marker still says started: reboot-pending all the same.
+			fmt.Fprintln(os.Stderr, "hadron-update: could not record the failure in the marker:", werr)
 		}
 		d.mu.Lock()
 		defer d.mu.Unlock()
 		d.job = nil
-		detail := d.detail // kairos-agent's last line says more than "exit status 1"
-		if detail == "" {
-			detail = err.Error()
-		}
-		if rmErr != nil {
-			d.setLocked(StateRebootPending, detail+"; the upgrade failed but its marker could not be removed: "+rmErr.Error())
-			return
-		}
-		d.setLocked(StateError, detail)
+		d.pending = pendingFailed
+		d.setLocked(StateRebootPending, pendingDetail(pendingFailed))
 		return
+	}
+	if werr := writeRebootMarker(pendingInstalled, source); werr != nil {
+		// The marker still says started; a restarted daemon words the
+		// state as interrupted. The install itself succeeded.
+		fmt.Fprintln(os.Stderr, "hadron-update: could not record the finished install in the marker:", werr)
 	}
 
 	var notes []string
@@ -504,10 +555,11 @@ func (d *Daemon) run(ctx context.Context, j *job, r ImageRef, ref, digest string
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.job = nil
-	detail := d.detail
+	detail := d.detail // kairos-agent's last line
 	if len(notes) > 0 {
 		detail = strings.Join(notes, "; ")
 	}
+	d.pending = pendingInstalled
 	d.setLocked(StateRebootPending, detail)
 }
 
@@ -533,11 +585,58 @@ func (d *Daemon) progress(line string) {
 	d.queueLocked(event{line: line, progress: true})
 }
 
-func writeRebootMarker(source string) error {
-	if err := os.MkdirAll(runDir(), 0o755); err != nil {
+// lastLine is kairos-agent's last progress line, for the log.
+func (d *Daemon) lastLine() string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.detail
+}
+
+// writeRebootMarker writes "<word> <source>" through a temp file and a
+// rename, so the marker is never empty or half-written.
+func writeRebootMarker(word, source string) error {
+	return writeRunFile(rebootMarker(), word+" "+source+"\n")
+}
+
+func writeRunFile(path, content string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(rebootMarker(), []byte(source+"\n"), 0o644)
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".tmp-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name()) // no-op once renamed
+	if _, err := tmp.WriteString(content); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(0o644); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
+}
+
+// readRebootMarker says whether a marker exists and its word. Any answer but
+// "does not exist" counts as pending: refusing an install is recoverable,
+// overwriting the known-good slot is not. A marker that cannot be read or
+// names no known word is an install of unknown outcome: started.
+func readRebootMarker() (word string, ok bool) {
+	b, err := os.ReadFile(rebootMarker())
+	if errors.Is(err, os.ErrNotExist) {
+		return "", false
+	}
+	if err == nil {
+		w, _, _ := strings.Cut(strings.TrimSpace(string(b)), " ")
+		if w == pendingInstalled || w == pendingFailed {
+			return w, true
+		}
+	}
+	return pendingStarted, true
 }
 
 // Cancel stops a check or the inspecting phase of an install and returns to
@@ -598,9 +697,12 @@ func (d *Daemon) RebootPrevious() error {
 	case d.state == StateInspecting || d.state == StateApplying:
 		d.mu.Unlock()
 		return ErrBusy
-	case d.state == StateRebootPending:
+	case d.state == StateRebootPending && d.pending == pendingInstalled:
 		d.mu.Unlock()
 		return errPreviousAfterInstall
+	case d.state == StateRebootPending:
+		d.mu.Unlock()
+		return errUnfinishedPending
 	}
 	d.rebooting = true
 	d.mu.Unlock()
