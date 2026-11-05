@@ -7,3 +7,7 @@ export QT_QPA_PLATFORM=xcb
 export SDL_VIDEODRIVER=x11
 export MOZ_ENABLE_WAYLAND=0
 export _JAVA_AWT_WM_NONREPARENTING=1
+# Adwaita cursors at 24 px (/usr/share/icons/default inherits Adwaita; the size
+# is not in that file). sway sets the same through `seat * xcursor_theme`.
+export XCURSOR_THEME=Adwaita
+export XCURSOR_SIZE=24

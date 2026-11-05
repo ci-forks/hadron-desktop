@@ -33,6 +33,10 @@ gaps outer 2
 smart_gaps on
 smart_borders on
 
+# Adwaita cursors at 24 px; sway exports XCURSOR_THEME and XCURSOR_SIZE to
+# the apps it starts.
+seat * xcursor_theme Adwaita 24
+
 # class                 border   bg       text   indicator child_border
 client.focused          $blue    $bg      $fg    $cyan     $blue
 client.focused_inactive $border  $bg      $dim   $border   $border
