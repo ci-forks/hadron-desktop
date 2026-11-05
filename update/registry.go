@@ -110,6 +110,9 @@ func anonymousToken(ctx context.Context, challenge string) (string, error) {
 	if params["realm"] == "" {
 		return "", fmt.Errorf("the registry's challenge names no token service")
 	}
+	if !tokenRealmAllowed(params["realm"]) {
+		return "", fmt.Errorf("the registry's token service %q is not an https URL, so it is not asked", params["realm"])
+	}
 	q := url.Values{}
 	for _, k := range []string{"service", "scope"} {
 		if params[k] != "" {
@@ -140,6 +143,19 @@ func anonymousToken(ctx context.Context, challenge string) (string, error) {
 		return body.Token, nil
 	}
 	return body.AccessToken, nil
+}
+
+// tokenRealmAllowed accepts only an https realm. The realm comes from the
+// registry the caller named, and the daemon fetches it as root, so another
+// scheme would let any local user make root fetch a plain-http (or file, or
+// ftp) URL. The test registry of HADRON_UPDATE_REGISTRY may serve its token
+// over http.
+func tokenRealmAllowed(realm string) bool {
+	if u, err := url.Parse(realm); err == nil && u.Scheme == "https" && u.Host != "" {
+		return true
+	}
+	base := os.Getenv("HADRON_UPDATE_REGISTRY")
+	return base != "" && strings.HasPrefix(realm, strings.TrimRight(base, "/")+"/")
 }
 
 // ErrNeedsCredentials means the registry refused an anonymous pull. Inspect is

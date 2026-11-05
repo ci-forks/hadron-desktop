@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -160,5 +163,33 @@ func TestResolveRejectsAnOversizedBody(t *testing.T) {
 	_, err := Resolve(context.Background(), mustRef(t, testImage))
 	if err == nil || !strings.Contains(err.Error(), "larger than") {
 		t.Fatalf("err = %v, want a size-limit error", err)
+	}
+}
+
+// TestTokenRealmMustBeHTTPS: the realm comes from whatever registry the
+// caller named, and the root daemon fetches it. A plain-http (or any other
+// scheme) realm would let any local user make root fetch an arbitrary URL.
+func TestTokenRealmMustBeHTTPS(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Write([]byte(`{"token":"t"}`))
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("HADRON_UPDATE_REGISTRY", "")
+	for _, realm := range []string{srv.URL + "/token", "file:///etc/shadow", "ftp://example.com/token", "//example.com/token"} {
+		_, err := anonymousToken(context.Background(), `Bearer realm="`+realm+`",service="x"`)
+		if err == nil || !strings.Contains(err.Error(), "https") {
+			t.Errorf("realm %q: %v, want a refusal naming https", realm, err)
+		}
+	}
+	if n := hits.Load(); n != 0 {
+		t.Fatalf("%d requests to a refused realm", n)
+	}
+	// A test registry (HADRON_UPDATE_REGISTRY, set only by tests and the
+	// root unit's own environment) may serve its token over http.
+	t.Setenv("HADRON_UPDATE_REGISTRY", srv.URL)
+	if tok, err := anonymousToken(context.Background(), `Bearer realm="`+srv.URL+`/token",service="x"`); err != nil || tok != "t" {
+		t.Fatalf("test registry realm: %q, %v", tok, err)
 	}
 }
