@@ -1,7 +1,8 @@
 name: CI
 
 # Fast checks that need no image build: the Go tools' unit tests, the Hadron
-# pin consistency check, and syntax checks on the session scripts and configs.
+# pin consistency check, the palette drift check, and syntax checks on the
+# session scripts and configs.
 # The image itself is built by release.yml and, for the agent, agent-gates.yml.
 
 on:
@@ -40,6 +41,9 @@ jobs:
       - name: Version pins are tracked by Renovate
         run: scripts/check-renovate-pins.sh
 
+      - name: Configs match the Hadron palette
+        run: python3 tools/gen-theme.py --check
+
       - name: Session scripts and configs parse
         shell: bash
         run: |
@@ -48,3 +52,4 @@ jobs:
             if head -n1 "$f" | grep -q bash; then bash -n "$f"; else sh -n "$f"; fi
           done
           jq empty rootfs-sway/etc/xdg/waybar/config
+          jq empty rootfs-niri/usr/share/hadron-desktop/noctalia-palettes/Hadron.json

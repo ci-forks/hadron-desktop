@@ -1,4 +1,5 @@
-# mako notifications for the Sway variant — Tokyo Night
+# mako notifications for the Sway variant: the Hadron palette.
+# Colours: generated from theme/palette.toml by tools/gen-theme.py.
 font=DejaVu Sans 10
 background-color=#1a1b26f2
 text-color=#c0caf5

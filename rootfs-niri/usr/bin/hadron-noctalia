@@ -1,7 +1,10 @@
 #!/bin/sh
 # Start the Noctalia shell with Hadron Desktop's defaults. Noctalia has no
 # system-wide config, so the defaults are refreshed into the user's config
-# directory as one file that sorts before any config the user writes.
+# directory as one file that sorts before any config the user writes. The
+# Hadron palette those defaults select goes to palettes/, where Noctalia looks
+# for custom palettes.
 d="${XDG_CONFIG_HOME:-$HOME/.config}/noctalia"
-mkdir -p "$d" && cp /usr/share/hadron-desktop/noctalia-defaults.toml "$d/00-hadron-defaults.toml"
+mkdir -p "$d/palettes" && cp /usr/share/hadron-desktop/noctalia-defaults.toml "$d/00-hadron-defaults.toml"
+cp /usr/share/hadron-desktop/noctalia-palettes/Hadron.json "$d/palettes/Hadron.json"
 exec noctalia "$@"
