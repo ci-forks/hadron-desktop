@@ -1,6 +1,6 @@
 # mako notifications for the Sway variant: the Hadron palette.
 # Colours: generated from theme/palette.toml by tools/gen-theme.py.
-font=DejaVu Sans 10
+font=Inter Variable 10.5
 background-color=#1a1b26f2
 text-color=#c0caf5
 border-color=#7aa2f7

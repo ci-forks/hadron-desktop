@@ -2,7 +2,7 @@
 # Colours: generated from theme/palette.toml by tools/gen-theme.py.
 # A user's ~/.config/swaylock/config replaces this file.
 color=1a1b26
-font=DejaVu Sans
+font=Inter Variable
 indicator-radius=90
 indicator-thickness=8
 show-failed-attempts

@@ -1359,6 +1359,34 @@ RUN curl -fL --retry 5 --retry-delay 3 --retry-all-errors https://github.com/rya
     && tar -xf n.tar.xz -C /nerdfont/usr/share/fonts/nerd-fonts SymbolsNerdFont-Regular.ttf SymbolsNerdFontMono-Regular.ttf \
     && rm n.tar.xz
 
+# The Hadron typefaces: Inter for the interface, JetBrains Mono for terminals,
+# both SIL OFL 1.1, with their licences. Data only: the variable TTFs (one file
+# covers every weight), no static cuts, no web fonts. rootfs/etc/fonts/conf.d/
+# 60-hadron.conf makes them the sans-serif and monospace defaults; DejaVu and
+# the Nerd Font symbols stay as fallbacks. Neither project publishes checksums,
+# so the release zips are checked against SHA256s computed when pinned: a
+# Renovate bump fails here until the PR updates the matching *_SHA256 too.
+# The toolchain has no unzip; Python's zipfile module extracts the zips.
+FROM toolchain AS hadron-fonts
+# renovate: datasource=github-releases depName=rsms/inter extractVersion=^v(?<version>\d+(\.\d+)*)$
+ARG INTER_VERSION=4.1
+ARG INTER_SHA256=9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e
+# renovate: datasource=github-releases depName=JetBrains/JetBrainsMono extractVersion=^v(?<version>\d+(\.\d+)*)$
+ARG JETBRAINS_MONO_VERSION=2.304
+ARG JETBRAINS_MONO_SHA256=6f6376c6ed2960ea8a963cd7387ec9d76e3f629125bc33d1fdcd7eb7012f7bbf
+WORKDIR /tmp
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://github.com/rsms/inter/releases/download/v${INTER_VERSION}/Inter-${INTER_VERSION}.zip -o inter.zip && \
+    echo "${INTER_SHA256}  inter.zip" | sha256sum -c - && \
+    curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://github.com/JetBrains/JetBrainsMono/releases/download/v${JETBRAINS_MONO_VERSION}/JetBrainsMono-${JETBRAINS_MONO_VERSION}.zip -o jbm.zip && \
+    echo "${JETBRAINS_MONO_SHA256}  jbm.zip" | sha256sum -c - && \
+    python3 -m zipfile -e inter.zip inter && python3 -m zipfile -e jbm.zip jbm && \
+    f=/hadron-fonts/usr/share/fonts l=/hadron-fonts/usr/share/licenses && \
+    install -Dm0644 -t $f/inter inter/InterVariable.ttf inter/InterVariable-Italic.ttf && \
+    install -Dm0644 -t $l/inter inter/LICENSE.txt && \
+    install -Dm0644 -t $f/jetbrains-mono 'jbm/fonts/variable/JetBrainsMono[wght].ttf' 'jbm/fonts/variable/JetBrainsMono-Italic[wght].ttf' && \
+    install -Dm0644 -t $l/jetbrains-mono jbm/OFL.txt && \
+    rm -rf inter.zip jbm.zip inter jbm
+
 # --- docker (static bundle) — rootful OCI containers ------------------------
 # Docker's daemon + CLI + containerd + runc ship as fully-static Go binaries in
 # the official static bundle (a musl-friendly, no-libc-dependency pattern).
@@ -2543,11 +2571,12 @@ ARG ST_VERSION=0.9.3
 RUN curl --retry-all-errors -fL --retry 5 https://dl.suckless.org/st/st-${ST_VERSION}.tar.gz -o st.tar.gz && \
     tar -xf st.tar.gz && cd st-${ST_VERSION} && \
     sed -i -e 's|^PREFIX = .*|PREFIX = /usr|' -e 's|^X11INC = .*|X11INC = /usr/include|' -e 's|^X11LIB = .*|X11LIB = /usr/lib|' config.mk && \
-    sed -i -e 's|Liberation Mono:pixelsize=12|DejaVu Sans Mono:pixelsize=15|' \
+    sed -i -e 's|Liberation Mono:pixelsize=12:antialias=true:autohint=true|JetBrains Mono:pixelsize=15:antialias=true:autohint=true|' \
            -e 's|static int borderpx = 2;|static int borderpx = 10;|' \
            -e 's|char \*termname = "st-256color";|char *termname = "xterm-256color";|' \
            -e 's|"gray90", /\* default foreground colour \*/|"#c0caf5", /* default foreground colour */|' \
            -e 's|"black", /\* default background colour \*/|"#1a1b26", /* default background colour */|' config.def.h && \
+    grep -q '"JetBrains Mono:pixelsize=15:' config.def.h && \
     make -j"$(nproc)" CC=cc && install -m0755 st /x11-desktop-tools/usr/bin/st
 
 # renovate: datasource=git-tags depName=https://git.suckless.org/dmenu extractVersion=^(?<version>\d+(\.\d+)*)$
@@ -2555,6 +2584,8 @@ ARG DMENU_VERSION=5.3
 RUN curl --retry-all-errors -fL --retry 5 https://dl.suckless.org/tools/dmenu-${DMENU_VERSION}.tar.gz -o dmenu.tar.gz && \
     tar -xf dmenu.tar.gz && cd dmenu-${DMENU_VERSION} && \
     sed -i -e 's|^PREFIX = .*|PREFIX = /usr|' -e 's|^X11INC = .*|X11INC = /usr/include|' -e 's|^X11LIB = .*|X11LIB = /usr/lib|' config.mk && \
+    sed -i -e 's|"monospace:size=10"|"Inter Variable:size=11"|' config.def.h && \
+    grep -q '"Inter Variable:size=11"' config.def.h && \
     make -j"$(nproc)" CC=cc && make install CC=cc DESTDIR=/x11-desktop-tools
 
 # renovate: datasource=github-tags depName=kfish/xsel extractVersion=^(?<version>\d+(\.\d+)*)$
@@ -3506,9 +3537,11 @@ RUN d=/adwaita-cursors/usr/share/icons && mkdir -p $d/Adwaita $d/default && \
 
 # GSettings schemas for the GTK portal's Settings interface, which is how
 # Flatpak apps learn the colour scheme (org.freedesktop.appearance
-# color-scheme) and, for GTK3 apps, the theme. xdg-desktop-portal-gtk reads
-# both from org.gnome.desktop.interface. Hadron's defaults are a vendor
-# override: dark colour scheme, and Adwaita-dark for GTK3. GTK3 has the dark
+# color-scheme) and, for GTK3 apps, the theme and fonts. xdg-desktop-portal-gtk
+# reads them from org.gnome.desktop.interface. Hadron's defaults are a vendor
+# override: dark colour scheme, Adwaita-dark for GTK3, and the Hadron fonts
+# (the hadron-fonts stage) by their real family names, because a Flatpak sees
+# the host's font files but not its fontconfig aliases. GTK3 has the dark
 # Adwaita built in only as a variant, so the theme named Adwaita-dark is a
 # one-line stylesheet that imports it.
 #
@@ -3530,14 +3563,17 @@ RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dintrospection=false && \
     DESTDIR=/gsettings-desktop-schemas ninja -C buildDir install
 RUN d=/gsettings-desktop-schemas/usr/share && \
-    printf '%s\n' '# Hadron Desktop defaults: dark apps, including Flatpak apps through the portal.' \
+    printf '%s\n' '# Hadron Desktop defaults: dark apps and the Hadron fonts, including Flatpak apps through the portal.' \
       '[org.gnome.desktop.interface]' "color-scheme='prefer-dark'" "gtk-theme='Adwaita-dark'" \
+      "font-name='Inter Variable 10.5'" "document-font-name='Inter Variable 10.5'" \
+      "monospace-font-name='JetBrains Mono 10.5'" \
       > $d/glib-2.0/schemas/90_hadron.gschema.override && \
     mkdir -p $d/themes/Adwaita-dark/gtk-3.0 && \
     printf '@import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css");\n' \
       > $d/themes/Adwaita-dark/gtk-3.0/gtk.css && \
     cp -a $d/glib-2.0/schemas /tmp/schemas && glib-compile-schemas --strict /tmp/schemas && \
     test "$(gsettings --schemadir /tmp/schemas get org.gnome.desktop.interface color-scheme 2>/dev/null)" = "'prefer-dark'" && \
+    test "$(gsettings --schemadir /tmp/schemas get org.gnome.desktop.interface font-name 2>/dev/null)" = "'Inter Variable 10.5'" && \
     rm -rf /tmp/schemas
 
 # xdg-desktop-portal-gtk: the file chooser (and app chooser, print, settings)
@@ -3808,6 +3844,7 @@ COPY --from=cpp-date /cpp-date /
 COPY --from=libdbusmenu /libdbusmenu /
 COPY --from=waybar /waybar /
 COPY --from=nerdfont /nerdfont /
+COPY --from=hadron-fonts /hadron-fonts /
 # Fallback icon theme and the Adwaita cursors (system default via
 # /usr/share/icons/default), as on niri.
 COPY --from=hicolor-icon-theme /hicolor-icon-theme /
@@ -3881,6 +3918,7 @@ COPY --from=sbc /sbc /
 COPY --from=bluez /bluez /
 # Shared visual assets + login manager.
 COPY --from=nerdfont /nerdfont /
+COPY --from=hadron-fonts /hadron-fonts /
 COPY --from=hicolor-icon-theme /hicolor-icon-theme /
 COPY --from=adwaita-cursors /adwaita-cursors /
 COPY --from=ly /ly /
@@ -3959,6 +3997,7 @@ COPY --from=cosmic-fonts /cosmic-fonts /
 COPY --from=hicolor-icon-theme /hicolor-icon-theme /
 COPY --from=musl-locales /musl-locales /
 COPY --from=nerdfont /nerdfont /
+COPY --from=hadron-fonts /hadron-fonts /
 
 
 FROM scratch AS niri-rootfs
@@ -4045,6 +4084,7 @@ COPY --from=foot /foot /
 COPY --from=wl-clipboard /wl-clipboard /
 COPY --from=cosmic-fonts /cosmic-fonts /
 COPY --from=nerdfont /nerdfont /
+COPY --from=hadron-fonts /hadron-fonts /
 COPY --from=hicolor-icon-theme /hicolor-icon-theme /
 COPY --from=adwaita-cursors /adwaita-cursors /
 COPY --from=ly /ly /

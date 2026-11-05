@@ -24,7 +24,7 @@ set $dim     #737aa2
 set $border  #414868
 
 ### Appearance ############################################################
-font pango:DejaVu Sans 10
+font pango:Inter Variable 10
 default_border pixel 2
 default_floating_border pixel 2
 titlebar_padding 6 3
