@@ -26,7 +26,11 @@ The baseline:
 | Network, audio, power menus | `hadron-wifi-menu`, `hadron-audio-menu`, `hadron-power-menu`, or the shell's own panels |
 | Audio | PipeWire and WirePlumber started with the session, media keys work |
 | Screenshots and screen lock | a key binding for each. Known gaps: sway and i3 have no screen locker, i3 has no screenshot key |
-| Flatpak apps with working file dialogs | flatpak, xdg-desktop-portal and a backend |
+| Flatpak apps with working file dialogs and dark mode | flatpak, xdg-desktop-portal and a backend reporting `color-scheme`. Known gap: sway and i3 have no portal yet |
+| Hardware keys | volume, mute, brightness, play/pause/next, with an on-screen level. Known gap: sway and i3 lack brightness and media keys |
+| Hadron menu on Super+Escape | one menu for apps, Wi-Fi, Bluetooth, audio, capture, update, help and power. Planned, not in any variant yet |
+| Bluetooth menu | pair, connect, power. Known gap: sway and i3 open a raw `bluetoothctl` |
+| Saved-password store | gnome-keyring, so Electron and Chromium Flatpaks do not store secrets in plain text. Planned, not in any variant yet |
 
 ## Adding a variant
 
