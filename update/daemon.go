@@ -1,0 +1,526 @@
+package main
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync"
+)
+
+// State is where the daemon's one job stands. The D-Bus API sends it as a
+// string, so the values are part of the interface.
+type State string
+
+const (
+	StateIdle            State = "idle"
+	StateChecking        State = "checking"
+	StateUpToDate        State = "up-to-date"
+	StateUpdateAvailable State = "update-available"
+	StateInspecting      State = "inspecting"
+	StateApplying        State = "applying"
+	StateRebootPending   State = "reboot-pending"
+	StateError           State = "error"
+	StateUnmanaged       State = "unmanaged"
+)
+
+// Status is everything a client shows: the tray menu, the CLI's status line.
+type Status struct {
+	State                          State
+	Installed, Latest, Pin, Detail string
+	Advanced                       bool
+}
+
+// Backend installs an image and reboots. The real one is kairos-agent; tests
+// use a fake, so the state machine, the pin and the refusals are tested
+// without root.
+type Backend interface {
+	// Upgrade installs source ("oci:<repo>@<digest>") into the passive slot,
+	// calling progress for each output line.
+	Upgrade(ctx context.Context, source string, progress func(line string)) error
+	Reboot() error
+}
+
+var (
+	// ErrBusy refuses a second job: two kairos-agent runs would race on the
+	// same partitions.
+	ErrBusy = errors.New("another update job is running")
+	// ErrRebootPending refuses an install before the last one has booted: a
+	// second upgrade would push the never-booted image into the passive slot
+	// and overwrite the known-good one.
+	ErrRebootPending = errors.New("an update is installed and waits for a reboot")
+	// ErrNotCancellable refuses to stop kairos-agent: a kill between the A/B
+	// swap and the image write can leave no good slot.
+	ErrNotCancellable = errors.New("the upgrade is writing the image and cannot be cancelled")
+
+	errUnmanaged       = errors.New("this system has no hadron-desktop release file, so it is not updated from here")
+	errNothingToCancel = errors.New("no job to cancel")
+)
+
+func runDir() string {
+	if p := os.Getenv("HADRON_UPDATE_RUN_DIR"); p != "" {
+		return p
+	}
+	return "/run/hadron-update"
+}
+
+// rebootMarker exists from a successful install until the next boot. The
+// daemon exits when idle, so the state cannot live in memory only; /run is a
+// tmpfs, so the reboot itself clears it.
+func rebootMarker() string { return filepath.Join(runDir(), "reboot-pending") }
+
+// job is the running Check or Apply. prev and prevDetail are what a cancel
+// returns to.
+type job struct {
+	cancel     context.CancelFunc
+	prev       State
+	prevDetail string
+}
+
+// event is a queued callback: a status change, or a progress line.
+type event struct {
+	status   Status
+	line     string
+	progress bool
+}
+
+// Daemon owns the one update job of the system. Every field below mu is
+// guarded by it. Callbacks never run under mu: they are queued and delivered,
+// in order, by a goroutine that holds no lock while calling them.
+type Daemon struct {
+	backend Backend
+	rel     Release // read-only after NewDaemon
+	managed bool
+
+	mu         sync.Mutex
+	state      State
+	latest     string
+	detail     string
+	job        *job
+	onChange   []func(Status)
+	onProgress []func(string)
+	events     []event
+	delivering bool
+
+	wg sync.WaitGroup // running Apply jobs; tests wait on it
+}
+
+// NewDaemon reads the release file and the reboot marker. Without a release
+// file the system is not a Hadron Desktop install this daemon may update, and
+// every mutating call is refused.
+func NewDaemon(b Backend) *Daemon {
+	d := &Daemon{backend: b, state: StateIdle}
+	rel, err := LoadRelease(releaseFile())
+	if err != nil {
+		d.state, d.detail = StateUnmanaged, err.Error()
+		return d
+	}
+	d.rel, d.managed = rel, true
+	// Any answer but "does not exist" counts as pending: refusing an install
+	// is recoverable, overwriting the known-good slot is not.
+	if _, err := os.Stat(rebootMarker()); !errors.Is(err, os.ErrNotExist) {
+		d.state = StateRebootPending
+	}
+	return d
+}
+
+// OnChange registers f to receive every state change.
+func (d *Daemon) OnChange(f func(Status)) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.onChange = append(d.onChange, f)
+}
+
+// OnProgress registers f to receive kairos-agent's output lines.
+func (d *Daemon) OnProgress(f func(string)) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.onProgress = append(d.onProgress, f)
+}
+
+// Status is a snapshot. The pin and the advanced switch are read from disk
+// each time, so an edit by hand shows up without a restart.
+func (d *Daemon) Status() Status {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.statusLocked()
+}
+
+func (d *Daemon) statusLocked() Status {
+	pin, _ := LoadPin()
+	return Status{
+		State:     d.state,
+		Installed: d.rel.Version,
+		Latest:    d.latest,
+		Pin:       pin,
+		Detail:    d.detail,
+		Advanced:  AdvancedEnabled(),
+	}
+}
+
+// setLocked changes the state and queues an OnChange event.
+func (d *Daemon) setLocked(s State, detail string) {
+	d.state, d.detail = s, detail
+	d.queueLocked(event{status: d.statusLocked()})
+}
+
+func (d *Daemon) queueLocked(ev event) {
+	d.events = append(d.events, ev)
+	if !d.delivering {
+		d.delivering = true
+		go d.deliver()
+	}
+}
+
+// deliver calls the callbacks for queued events until the queue is empty.
+// Only one deliver runs at a time, so callbacks see events in order, and a
+// callback may call back into the daemon.
+func (d *Daemon) deliver() {
+	for {
+		d.mu.Lock()
+		if len(d.events) == 0 {
+			d.delivering = false
+			d.mu.Unlock()
+			return
+		}
+		evs := d.events
+		d.events = nil
+		onChange := append([]func(Status){}, d.onChange...)
+		onProgress := append([]func(string){}, d.onProgress...)
+		d.mu.Unlock()
+
+		for _, ev := range evs {
+			if ev.progress {
+				for _, f := range onProgress {
+					f(ev.line)
+				}
+				continue
+			}
+			for _, f := range onChange {
+				f(ev.status)
+			}
+		}
+	}
+}
+
+func (d *Daemon) busyLocked() bool {
+	return d.state == StateChecking || d.state == StateInspecting || d.state == StateApplying
+}
+
+// newest is the newest published tag; FetchReleases sorts newest first.
+func newest(published []Latest) string {
+	if len(published) == 0 {
+		return ""
+	}
+	return published[0].Tag
+}
+
+// Check asks GitHub for the published releases. On an unmanaged system it
+// does nothing, not even a request. While a reboot is pending it only updates
+// Latest: the pending install matters more than any newer release.
+func (d *Daemon) Check(ctx context.Context) error {
+	d.mu.Lock()
+	if !d.managed {
+		d.mu.Unlock()
+		return nil
+	}
+	if d.busyLocked() {
+		d.mu.Unlock()
+		return ErrBusy
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	pending := d.state == StateRebootPending
+	j := &job{cancel: cancel, prev: d.state, prevDetail: d.detail}
+	if !pending {
+		d.job = j
+		d.setLocked(StateChecking, "")
+	}
+	d.mu.Unlock()
+
+	published, err := FetchReleases(ctx, d.rel.GitHubRepo)
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if pending {
+		if err != nil {
+			return err
+		}
+		d.latest = newest(published)
+		d.queueLocked(event{status: d.statusLocked()})
+		return nil
+	}
+	if d.job != j {
+		// Cancel already restored the previous state.
+		return fmt.Errorf("check cancelled: %w", context.Canceled)
+	}
+	d.job = nil
+	if err != nil {
+		d.setLocked(StateError, "could not check for updates: "+err.Error())
+		return err
+	}
+	d.latest = newest(published)
+	pin, _ := LoadPin()
+	// A pin means the user chose this image on purpose; "latest" stays in
+	// Status for the menu, but no update is announced.
+	if pin == "" && Newer(d.latest, d.rel.Version) {
+		d.setLocked(StateUpdateAvailable, "")
+	} else {
+		d.setLocked(StateUpToDate, "")
+	}
+	return nil
+}
+
+// Releases lists the published releases, newest first.
+func (d *Daemon) Releases(ctx context.Context) ([]Latest, error) {
+	if !d.managed {
+		return nil, errUnmanaged
+	}
+	return FetchReleases(ctx, d.rel.GitHubRepo)
+}
+
+// evaluate resolves r and decides whether it may be installed. Only
+// ErrNotHadron yields to advanced mode, and only when the caller asked for it
+// and update.conf allows it; an agent image, a wrong platform or a private
+// image is refused whatever the caller says. info is returned whenever Resolve
+// succeeded, so a refusal can still show what the image is.
+func (d *Daemon) evaluate(ctx context.Context, r ImageRef, advanced bool) (ImageInfo, Verdict, []Latest, error) {
+	info, err := Resolve(ctx, r)
+	if err != nil {
+		return ImageInfo{}, Verdict{}, nil, err
+	}
+	published, err := FetchReleases(ctx, d.rel.GitHubRepo)
+	if err != nil {
+		return info, Verdict{}, nil, fmt.Errorf("could not list the published releases: %w", err)
+	}
+	v, err := Classify(info, d.rel, published)
+	if errors.Is(err, ErrNotHadron) && advanced && AdvancedEnabled() {
+		return info, Verdict{}, published, nil
+	}
+	if err != nil {
+		return info, Verdict{}, published, fmt.Errorf("%s: %w", r, err)
+	}
+	return info, v, published, nil
+}
+
+// Inspect says what ref is and whether Apply would install it. It changes no
+// state and needs no authorization.
+func (d *Daemon) Inspect(ctx context.Context, ref string, advanced bool) (ImageInfo, Verdict, error) {
+	if !d.managed {
+		return ImageInfo{}, Verdict{}, errUnmanaged
+	}
+	r, err := ParseRef(ref)
+	if err != nil {
+		return ImageInfo{}, Verdict{}, err
+	}
+	info, v, _, err := d.evaluate(ctx, r, advanced)
+	return info, v, err
+}
+
+// Apply starts installing ref and returns at once; the outcome shows up as
+// the reboot-pending or error state. It trusts nothing the caller says: it
+// resolves and classifies the image again, and installs only if ref still
+// resolves to digest, the one the user reviewed. Bad input is refused here,
+// before a job starts.
+func (d *Daemon) Apply(ctx context.Context, ref, digest string, advanced bool) error {
+	r, err := ParseRef(ref)
+	if err != nil {
+		return err
+	}
+	if !sha256Digest.MatchString(digest) {
+		return fmt.Errorf("%q is not a sha256 digest", digest)
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	switch {
+	case !d.managed:
+		return errUnmanaged
+	case d.state == StateRebootPending:
+		return ErrRebootPending
+	case d.busyLocked():
+		return ErrBusy
+	}
+	// The job outlives the call (a D-Bus method returns at once), so it gets
+	// its own context; Cancel is the only way to stop it.
+	jctx, cancel := context.WithCancel(context.Background())
+	j := &job{cancel: cancel, prev: d.state, prevDetail: d.detail}
+	d.job = j
+	d.setLocked(StateInspecting, "")
+	d.wg.Add(1)
+	go d.run(jctx, j, r, ref, digest, advanced)
+	return nil
+}
+
+func (d *Daemon) run(ctx context.Context, j *job, r ImageRef, ref, digest string, advanced bool) {
+	defer d.wg.Done()
+	defer j.cancel()
+
+	info, v, published, err := d.evaluate(ctx, r, advanced)
+	if err == nil && info.Digest != digest {
+		err = fmt.Errorf("%s now resolves to digest %s, not the reviewed %s; inspect it again", ref, info.Digest, digest)
+	}
+
+	d.mu.Lock()
+	if d.job != j {
+		d.mu.Unlock() // cancelled; Cancel restored the state
+		return
+	}
+	if err != nil {
+		d.job = nil
+		d.setLocked(StateError, err.Error())
+		d.mu.Unlock()
+		return
+	}
+	if l := newest(published); l != "" {
+		d.latest = l
+	}
+	// From here on Cancel refuses, so the job cannot be abandoned mid-write.
+	d.setLocked(StateApplying, "")
+	d.mu.Unlock()
+
+	// Install the digest, never the tag: the tag may have moved since Inspect.
+	source := "oci:" + info.Ref.Repo() + "@" + info.Digest
+	err = d.backend.Upgrade(context.Background(), source, d.progress)
+	if err != nil {
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		d.job = nil
+		detail := d.detail // kairos-agent's last line says more than "exit status 1"
+		if detail == "" {
+			detail = err.Error()
+		}
+		d.setLocked(StateError, detail)
+		return
+	}
+
+	// The marker first: it is what keeps a restarted daemon from installing
+	// over the never-booted image.
+	var notes []string
+	if err := writeRebootMarker(source); err != nil {
+		notes = append(notes, "could not record the pending reboot: "+err.Error())
+	}
+	// A pin keeps "update available" quiet after a deliberate choice. The
+	// newest published release of any flavor is not a choice to keep: it is
+	// "install latest" or "switch desktop".
+	if v.Trusted && v.Version == newest(published) {
+		err = ClearPin()
+	} else {
+		err = SavePin(ref)
+	}
+	if err != nil {
+		notes = append(notes, "could not update the pin: "+err.Error())
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.job = nil
+	detail := d.detail
+	if len(notes) > 0 {
+		detail = strings.Join(notes, "; ")
+	}
+	d.setLocked(StateRebootPending, detail)
+}
+
+func (d *Daemon) progress(line string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.detail = line
+	d.queueLocked(event{line: line, progress: true})
+}
+
+func writeRebootMarker(source string) error {
+	if err := os.MkdirAll(runDir(), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(rebootMarker(), []byte(source+"\n"), 0o644)
+}
+
+// Cancel stops a check or the inspecting phase of an install and returns to
+// the state before it. Once kairos-agent runs it refuses.
+func (d *Daemon) Cancel() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	switch d.state {
+	case StateChecking, StateInspecting:
+		j := d.job
+		d.job = nil
+		j.cancel()
+		d.setLocked(j.prev, j.prevDetail)
+		return nil
+	case StateApplying:
+		return ErrNotCancellable
+	default:
+		return errNothingToCancel
+	}
+}
+
+// Reboot restarts the system, except while kairos-agent writes the image.
+func (d *Daemon) Reboot() error {
+	d.mu.Lock()
+	applying := d.state == StateApplying
+	d.mu.Unlock()
+	if applying {
+		return ErrBusy
+	}
+	return d.backend.Reboot()
+}
+
+// kairosBackend is the real Backend.
+type kairosBackend struct{}
+
+// Upgrade runs kairos-agent with stdout and stderr merged into one pipe, so
+// progress lines keep their order. ctx is ignored on purpose: the upgrade is
+// not cancellable once started (see ErrNotCancellable).
+func (kairosBackend) Upgrade(_ context.Context, source string, progress func(string)) error {
+	cmd := exec.Command(kairosAgent(), "upgrade", "--source", source)
+	r, w, err := os.Pipe()
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	cmd.Stdout, cmd.Stderr = w, w
+	if err := cmd.Start(); err != nil {
+		w.Close()
+		return err
+	}
+	w.Close() // the child holds its own copy; EOF comes when it exits
+
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 64<<10), 1<<20)
+	sc.Split(scanLinesOrCR)
+	for sc.Scan() {
+		if l := strings.TrimSpace(sc.Text()); l != "" {
+			progress(l)
+		}
+	}
+	// A line over the buffer stops the scanner; keep draining so the child
+	// never blocks on a full pipe.
+	io.Copy(io.Discard, r)
+	if err := cmd.Wait(); err != nil {
+		return fmt.Errorf("kairos-agent upgrade: %w", err)
+	}
+	return nil
+}
+
+// scanLinesOrCR splits on \n and on \r, so a progress bar that redraws one
+// line with \r still yields its updates.
+func scanLinesOrCR(data []byte, atEOF bool) (int, []byte, error) {
+	if i := bytes.IndexAny(data, "\r\n"); i >= 0 {
+		return i + 1, data[:i], nil
+	}
+	if atEOF && len(data) > 0 {
+		return len(data), data, nil
+	}
+	return 0, nil, nil
+}
+
+func (kairosBackend) Reboot() error {
+	return exec.Command("systemctl", "reboot").Run()
+}
