@@ -15,15 +15,29 @@ import (
 	"testing"
 )
 
-// fakeGitHub serves /repos/<repo>/releases/latest with the given tag.
+// fakeGitHub serves /repos/<repo>/releases/latest with the given tag, and an
+// empty /releases list.
 func fakeGitHub(t *testing.T, tag string) {
 	t.Helper()
+	fakeGitHubReleases(t, tag, `[]`)
+}
+
+// fakeGitHubReleases is fakeGitHub with a chosen /releases list body.
+func fakeGitHubReleases(t *testing.T, tag, releases string) {
+	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/repos/kairos-community/hadron-desktop/releases/latest" {
+		switch r.URL.Path {
+		case "/repos/kairos-community/hadron-desktop/releases/latest":
+			fmt.Fprintf(w, `{"tag_name":%q,"html_url":"https://example.invalid/%s"}`, tag, tag)
+		case "/repos/kairos-community/hadron-desktop/releases":
+			if r.URL.Query().Get("per_page") != "100" {
+				http.Error(w, "want per_page=100", http.StatusBadRequest)
+				return
+			}
+			fmt.Fprint(w, releases)
+		default:
 			http.NotFound(w, r)
-			return
 		}
-		fmt.Fprintf(w, `{"tag_name":%q,"html_url":"https://example.invalid/%s"}`, tag, tag)
 	}))
 	t.Cleanup(srv.Close)
 	t.Setenv("HADRON_UPDATE_API", srv.URL)
