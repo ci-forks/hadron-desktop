@@ -40,8 +40,81 @@ env:
   CACHE_PUSH: "true"
 
 jobs:
+  # LLVM and clang compile for about three hours, and COSMIC and niri both need
+  # them. Built on their own runner, they no longer share one job's 330-minute
+  # budget with the rest of a variant. The image is tagged by a hash of its
+  # inputs (`make print-llvm-tag`), so it is built only when LLVM, its stage or
+  # the Hadron release changes, and is reused by every later release.
+  llvm:
+    name: Prebuild LLVM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    permissions:
+      contents: read
+      packages: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    outputs:
+      image: ${{ steps.ref.outputs.image }}
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+
+      - name: Log in to GHCR
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Look for a published LLVM image
+        id: ref
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${IMAGE_REPO}:$(make -s print-llvm-tag)"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          if docker buildx imagetools inspect "$image" >/dev/null 2>&1; then
+            echo "Reusing $image"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No $image yet; building it"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Reclaim runner disk space
+        if: steps.ref.outputs.found != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo rm -rf \
+            /opt/ghc \
+            /opt/hostedtoolcache/CodeQL \
+            /usr/local/.ghcup \
+            /usr/local/lib/android \
+            /usr/share/dotnet
+          docker system prune --all --force
+          df -h /
+
+      - name: Build and push the LLVM image
+        if: steps.ref.outputs.found != 'true'
+        shell: bash
+        env:
+          LLVM_OUT: ${{ steps.ref.outputs.image }}
+        run: |
+          set -euo pipefail
+          make llvm-image
+          docker push "$LLVM_OUT"
+
   build:
     name: Build ${{ matrix.desktop }} ISO
+    needs: llvm
+    # A failed LLVM job does not stop the release: LLVM_IMAGE is then empty and
+    # the variants that need LLVM build it themselves, as before.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 330
     permissions:
@@ -58,6 +131,7 @@ jobs:
     env:
       DESKTOP: ${{ matrix.desktop }}
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      LLVM_IMAGE: ${{ needs.llvm.result == 'success' && needs.llvm.outputs.image || '' }}
 
     steps:
       - name: Validate release tag
@@ -413,6 +487,9 @@ jobs:
     needs:
       - build
       - build-agent
+    # Spelled out because the default would also skip this job when only the
+    # LLVM prebuild failed, which the builds recover from.
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.build-agent.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       actions: read
