@@ -6,6 +6,7 @@
 #   make              # both (image, then iso)
 #   make DESKTOP=i3 image               # XLibre + i3 variant
 #   make DESKTOP=cosmic image           # COSMIC (stacking, for newcomers)
+#   make DESKTOP=niri image             # niri + Noctalia (scrolling tiling)
 #   make images                          # build both variant images
 #   make agent-image                     # build the i3-based agent overlay
 #   make agent-iso                       # build the agent ISO
@@ -29,7 +30,7 @@ AGENT_IMAGE      ?= agent-desktop:dev
 AGENT_WORK       := build/agent-desktop
 AGENT_ISO_DIR    := $(AGENT_WORK)/iso
 
-VALID_DESKTOPS := sway i3 cosmic
+VALID_DESKTOPS := sway i3 cosmic niri
 ifneq ($(words $(DESKTOP)),1)
 $(error unsupported DESKTOP '$(DESKTOP)'; choose exactly one of: $(VALID_DESKTOPS))
 endif
@@ -115,6 +116,7 @@ check-boot-ux:
 	for spec in "sway-desktop:dev|sway · wayland · kairos" \
 	            "i3-desktop:dev|i3 · xlibre · kairos" \
 	            "cosmic-desktop:dev|cosmic · wayland · kairos" \
+	            "niri-desktop:dev|niri · wayland · kairos" \
 	            "agent-desktop:dev|i3 · xlibre · kairos"; do \
 	  img="$${spec%%|*}"; subtitle="$${spec#*|}"; \
 	  if docker image inspect "$$img" >/dev/null 2>&1; then \

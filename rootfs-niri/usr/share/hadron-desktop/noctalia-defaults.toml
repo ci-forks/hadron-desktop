@@ -1,0 +1,17 @@
+# Hadron Desktop's defaults for the Noctalia shell.
+#
+# hadron-noctalia copies this file to ~/.config/noctalia/00-hadron-defaults.toml
+# on every session start, so an image upgrade can change it; do not edit that
+# copy. Noctalia merges every *.toml in ~/.config/noctalia in name order, so a
+# config.toml there overrides these, and changes made in Noctalia's Settings
+# window are kept in a separate file that overrides both.
+
+[shell]
+# Show the password prompt when an app asks for privileges (date and time,
+# Flatpak system installs). Without an agent those requests fail.
+polkit_agent = true
+
+# The blurred wallpaper behind niri's overview (Super+O); /etc/niri/config.kdl
+# places it in the overview backdrop.
+[backdrop]
+enabled = true
