@@ -2,5 +2,5 @@ Welcome to Hadron Desktop: niri and Noctalia on Wayland, built from source on Ka
 
   Containers : docker run …   ·   distrobox enter
   Apps       : flatpak search <name>   ·   flatpak install flathub <id>
-  Updates    : hadron-update   ·   hadron-update upgrade
+  Updates    : tray icon   ·   hadron-update   ·   hadron-update upgrade
   Shortcuts  : Super+F1

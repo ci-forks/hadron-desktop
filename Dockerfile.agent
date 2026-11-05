@@ -180,6 +180,8 @@ RUN groupadd -r hadron-agent-control && \
 # The appliance upgrades along its own image line, not the i3 one it is built on.
 RUN sed -i 's/^FLAVOR=.*/FLAVOR=agent/' /etc/hadron-desktop/release && \
     grep -qx 'FLAVOR=agent' /etc/hadron-desktop/release
+# The label follows the file: inherited from the i3 base it would say `i3`.
+LABEL io.kairos.hadron-desktop.flavor="agent"
 # No update service: hadron-update upgrade keeps its direct sudo path on the
 # appliance, so the root daemon, its D-Bus policy and activation, and its
 # polkit action and rule from the i3 image go. The update icon that talks to

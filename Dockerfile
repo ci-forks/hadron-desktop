@@ -4509,6 +4509,14 @@ ARG DESKTOP
 RUN printf 'FLAVOR=%s\nVERSION=%s\nHADRON_VERSION=%s\nIMAGE_REPO=%s\nGITHUB_REPO=%s\n' \
       "${DESKTOP}" "${VERSION}" "${HADRON_VERSION}" "${IMAGE_REPO}" kairos-community/hadron-desktop \
       > /etc/hadron-desktop/release
+# The same identity as OCI labels, so hadron-update can tell a Hadron Desktop
+# image from any other one without pulling it (the registry config blob carries
+# them). Kept in this last stage, after every expensive one, because the value
+# changes per release and a LABEL ahead of them would invalidate their cache.
+# The keys must match the constants in update/policy.go.
+LABEL io.kairos.hadron-desktop.flavor="${DESKTOP}" \
+      io.kairos.hadron-desktop.version="${VERSION}" \
+      io.kairos.hadron-desktop.hadron-version="${HADRON_VERSION}"
 # Tokyo Night GRUB menu colours — text-mode fallback. The main menu renders from
 # /etc/cos/grub.cfg (copied to COS_STATE at install) before grubmenu.cfg switches
 # to the gfxterm theme, and these 16-colour accents also apply if gfxterm/the
