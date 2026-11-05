@@ -682,6 +682,76 @@ func TestWatchPollDoesNotAutoStart(t *testing.T) {
 	}
 }
 
+// stateObj answers every call with a Status in the given state and counts
+// the calls.
+type stateObj struct {
+	dbus.BusObject
+	mu    sync.Mutex
+	state State
+	n     int
+}
+
+func (o *stateObj) Call(method string, flags dbus.Flags, args ...any) *dbus.Call {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.n++
+	return &dbus.Call{Body: []any{map[string]dbus.Variant{"state": dbus.MakeVariant(string(o.state))}}}
+}
+
+func (o *stateObj) calls() int {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.n
+}
+
+// TestWatchPollsOnlyWhileBusy: the backstop poll is for a missed signal
+// during a job. Polling an idle service forever would keep it from exiting
+// and wake every tray every few seconds for nothing.
+func TestWatchPollsOnlyWhileBusy(t *testing.T) {
+	addr := privateBus(t)
+	conn := busConn(t, addr)
+	old := statusPoll
+	statusPoll = 10 * time.Millisecond
+	t.Cleanup(func() { statusPoll = old })
+
+	idle := &stateObj{state: StateIdle}
+	c := &client{conn: conn, obj: idle}
+	events, stop, err := c.Watch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-events // the first poll: the state was unknown
+	time.Sleep(20 * statusPoll)
+	if n := idle.calls(); n != 1 {
+		t.Fatalf("%d polls of an idle service, want 1", n)
+	}
+
+	// A StateChanged to a busy state starts the polls again.
+	server := busConn(t, addr)
+	if reply, err := server.RequestName(busName, dbus.NameFlagDoNotQueue); err != nil || reply != dbus.RequestNameReplyPrimaryOwner {
+		t.Fatalf("RequestName: %v, %v", reply, err)
+	}
+	idle.mu.Lock()
+	idle.state = StateApplying
+	idle.mu.Unlock()
+	if err := server.Emit(busPath, busInterface+".StateChanged", statusDict(Status{State: StateApplying})); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for idle.calls() < 4 {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d polls while busy", idle.calls())
+		}
+		select {
+		case <-events:
+		case <-time.After(time.Millisecond):
+		}
+	}
+	stop()
+	for range events {
+	}
+}
+
 // After the job started, a state no job passes through (cancelled from the
 // tray, or a restarted daemon) means it is gone: do not wait forever.
 func TestLostJobExits1(t *testing.T) {

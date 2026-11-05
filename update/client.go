@@ -124,8 +124,9 @@ func (c *client) callFlags(method string, flags dbus.Flags, out []any, args ...a
 func (c *client) Status() (Status, error) { return c.status(0) }
 
 // pollStatus is Status for the watcher's backstop poll. It never starts the
-// service: a poll after a crash must not quietly bring it back, and a poll
-// while it is idle must not keep it from exiting.
+// service: a poll after a crash must not quietly bring it back. Watch polls
+// only while a job runs, and the service does not count Status as activity,
+// so a watcher never keeps an idle service from exiting.
 func (c *client) pollStatus() (Status, error) { return c.status(dbus.FlagNoAutoStart) }
 
 func (c *client) status(flags dbus.Flags) (Status, error) {
@@ -165,8 +166,9 @@ func (c *client) RebootPrevious() error {
 	return c.call("RebootPrevious", nil)
 }
 
-// statusPoll is the backstop for a missed signal: Watch also asks Status this
-// often. A variable so tests can shorten it.
+// statusPoll is the backstop for a missed signal: while the last state seen
+// is a job (or not known yet), Watch also asks Status this often. A variable
+// so tests can shorten it.
 var statusPoll = 5 * time.Second
 
 // eventFromSignal decodes a StateChanged or Progress signal. ok is false for
@@ -235,19 +237,43 @@ func (c *client) Watch() (<-chan Event, func(), error) {
 		defer close(out)
 		tick := time.NewTicker(statusPoll)
 		defer tick.Stop()
+		// last is the last state seen, "" until the first answer. The poll
+		// runs only while it is a job: a missed signal then would leave the
+		// caller waiting on a finished job. Outside a job the next change
+		// comes with a signal anyway.
+		var last State
 		for {
 			select {
 			case <-done:
 				return
 			case <-tick.C:
-				if st, err := c.pollStatus(); err == nil && !send(Event{Status: &st}) {
+				if last != "" && !busyState(last) {
+					continue
+				}
+				st, err := c.pollStatus()
+				if err != nil {
+					if last == "" {
+						// Not running: no job to miss a signal of.
+						last = StateIdle
+					}
+					continue
+				}
+				last = st.State
+				if !send(Event{Status: &st}) {
 					return
 				}
 			case s, ok := <-sigs:
 				if !ok || ownerLost(s) {
 					return
 				}
-				if ev, ok := eventFromSignal(s); ok && !send(ev) {
+				ev, ok := eventFromSignal(s)
+				if !ok {
+					continue
+				}
+				if ev.Status != nil {
+					last = ev.Status.State
+				}
+				if !send(ev) {
 					return
 				}
 			}

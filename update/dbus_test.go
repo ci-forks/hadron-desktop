@@ -832,3 +832,48 @@ func TestBusRebootPrevious(t *testing.T) {
 		t.Fatal("backend asked to boot the previous system")
 	}
 }
+
+// TestStatusCallsDoNotKeepTheServiceUp: every tray polls or reads Status;
+// were that activity, the idle exit would never fire while a tray runs.
+func TestStatusCallsDoNotKeepTheServiceUp(t *testing.T) {
+	daemonEnv(t, "v0.0.5")
+	old, oldTick := idleTimeout, idleTick
+	idleTimeout, idleTick = 300*time.Millisecond, 10*time.Millisecond
+	t.Cleanup(func() { idleTimeout, idleTick = old, oldTick })
+	f := startService(t, NewDaemon(&fakeBackend{}), &fakeAuth{})
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case err := <-f.done:
+			if err != nil {
+				t.Fatalf("serve: %v", err)
+			}
+			return
+		case <-deadline:
+			t.Fatal("Status calls kept the service up")
+		case <-time.After(20 * time.Millisecond):
+			_ = f.call("Status").Err // refused once the service is exiting
+		}
+	}
+}
+
+// TestCheckKeepsTheServiceUp: Check is activity, Status is not.
+func TestCheckKeepsTheServiceUp(t *testing.T) {
+	daemonEnv(t, "v0.0.5")
+	s := newService(NewDaemon(&fakeBackend{}), &fakeAuth{})
+	s.last = time.Now().Add(-time.Hour)
+	if _, derr := (busAPI{s}).Status(); derr != nil {
+		t.Fatal(derr)
+	}
+	if !s.tryClose(time.Minute) {
+		t.Fatal("a Status call counted as activity")
+	}
+	s = newService(NewDaemon(&fakeBackend{}), &fakeAuth{})
+	s.last = time.Now().Add(-time.Hour)
+	if derr := (busAPI{s}).Check(); derr != nil {
+		t.Fatal(derr)
+	}
+	if s.tryClose(time.Minute) {
+		t.Fatal("a Check call did not count as activity")
+	}
+}

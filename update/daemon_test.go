@@ -1196,3 +1196,20 @@ func TestKairosBackendRebootPreviousRefusesOnThePassiveSystem(t *testing.T) {
 		t.Fatalf("ran %q, want nothing", got)
 	}
 }
+
+// TestLatestSurvivesARestart: the service exits when idle and D-Bus starts
+// a new one on the next call; it must still know the newest release.
+func TestLatestSurvivesARestart(t *testing.T) {
+	daemonEnv(t, "v0.0.5")
+	d := NewDaemon(&fakeBackend{})
+	if err := d.Check(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if s := NewDaemon(&fakeBackend{}).Status(); s.Latest != "v0.0.6" {
+		t.Fatalf("restarted daemon: %+v", s)
+	}
+	got, err := os.ReadFile(filepath.Join(os.Getenv("HADRON_UPDATE_RUN_DIR"), "latest"))
+	if err != nil || string(got) != "v0.0.6\n" {
+		t.Fatalf("latest file %q, %v", got, err)
+	}
+}

@@ -47,8 +47,8 @@ const busIntrospection = introspect.IntrospectDeclarationString + `<node>
     <signal name="Progress"><arg name="line" type="s"/></signal>
   </interface>` + introspect.IntrospectDataString + `</node>`
 
-// idleTimeout is how long the service stays up with no method call, no
-// state change and no job. D-Bus activation starts it again on the next
+// idleTimeout is how long the service stays up with no method call other
+// than Status, no state change and no job. D-Bus activation starts it again on the next
 // call, so a desktop that never updates does not keep a root process around.
 // Variables so tests can shorten them.
 var (
@@ -222,10 +222,16 @@ func (s *service) touch() {
 	s.mu.Unlock()
 }
 
-// enter marks a method call in progress; the returned func ends it. Once the
-// service has decided to exit it refuses, so no job starts in a process that
-// is about to go away.
-func (s *service) enter() (func(), *dbus.Error) {
+// enter marks a method call in progress; the returned func ends it, and
+// counts as activity for the idle exit. Once the service has decided to exit
+// it refuses, so no job starts in a process that is about to go away.
+func (s *service) enter() (func(), *dbus.Error) { return s.enterCall(true) }
+
+// enterQuiet is enter for Status: every tray reads it, so counting it as
+// activity would keep the service up for as long as any tray runs.
+func (s *service) enterQuiet() (func(), *dbus.Error) { return s.enterCall(false) }
+
+func (s *service) enterCall(activity bool) (func(), *dbus.Error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closing {
@@ -235,7 +241,9 @@ func (s *service) enter() (func(), *dbus.Error) {
 	return func() {
 		s.mu.Lock()
 		s.active--
-		s.last = time.Now()
+		if activity {
+			s.last = time.Now()
+		}
 		s.mu.Unlock()
 	}, nil
 }
@@ -276,7 +284,7 @@ func (s *service) authorize(sender dbus.Sender, action string) *dbus.Error {
 type busAPI struct{ s *service }
 
 func (a busAPI) Status() (map[string]dbus.Variant, *dbus.Error) {
-	done, derr := a.s.enter()
+	done, derr := a.s.enterQuiet()
 	if derr != nil {
 		return nil, derr
 	}

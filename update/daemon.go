@@ -111,6 +111,22 @@ func runDir() string {
 // file is "<pending word> <source>".
 func rebootMarker() string { return filepath.Join(runDir(), "reboot-pending") }
 
+// latestFile keeps the newest published tag across the daemon's idle exits,
+// so a service started again by D-Bus still reports it.
+func latestFile() string { return filepath.Join(runDir(), "latest") }
+
+// setLatestLocked records the newest tag in memory and in the run dir. A
+// failed write only costs the tag after the next idle exit.
+func (d *Daemon) setLatestLocked(tag string) {
+	if tag == d.latest {
+		return
+	}
+	d.latest = tag
+	if err := writeRunFile(latestFile(), tag+"\n"); err != nil {
+		fmt.Fprintln(os.Stderr, "hadron-update: could not record the newest release:", err)
+	}
+}
+
 // Inhibitor blocks shutdown and sleep while kairos-agent writes the passive
 // slot. The real one is logind; tests use a fake.
 type Inhibitor interface {
@@ -184,6 +200,11 @@ func NewDaemon(b Backend) *Daemon {
 		return d
 	}
 	d.rel, d.managed = rel, true
+	if b, err := os.ReadFile(latestFile()); err == nil {
+		if tag := strings.TrimSpace(string(b)); strictTag.MatchString(tag) {
+			d.latest = tag
+		}
+	}
 	// Any answer but "does not exist" counts as pending: refusing an install
 	// is recoverable, overwriting the known-good slot is not.
 	if word, ok := readRebootMarker(); ok {
@@ -361,7 +382,7 @@ func (d *Daemon) Check(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		d.latest = newest(published)
+		d.setLatestLocked(newest(published))
 		d.queueLocked(event{status: d.statusLocked()})
 		return nil
 	}
@@ -374,7 +395,7 @@ func (d *Daemon) Check(ctx context.Context) error {
 		d.setLocked(StateError, "could not check for updates: "+err.Error())
 		return err
 	}
-	d.latest = newest(published)
+	d.setLatestLocked(newest(published))
 	pin, _ := LoadPin()
 	// A pin means the user chose this image on purpose; "latest" stays in
 	// Status for the menu, but no update is announced.
@@ -509,7 +530,7 @@ func (d *Daemon) run(ctx context.Context, j *job, r ImageRef, ref, digest string
 		return
 	}
 	if l := newest(published); l != "" {
-		d.latest = l
+		d.setLatestLocked(l)
 	}
 	// From here on Cancel refuses, so the job cannot be abandoned mid-write.
 	d.setLocked(StateApplying, "")
