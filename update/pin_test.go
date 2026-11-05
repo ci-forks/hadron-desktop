@@ -84,4 +84,17 @@ func TestAdvancedEnabled(t *testing.T) {
 	}
 }
 
+// TestAdvancedOffWhenUpdateConfIsUnreadable: the file is there, so the
+// admin set something; not knowing what, the safe reading is off.
+func TestAdvancedOffWhenUpdateConfIsUnreadable(t *testing.T) {
+	conf := filepath.Join(t.TempDir(), "update.conf")
+	if err := os.Mkdir(conf, 0o755); err != nil { // reading a directory fails
+		t.Fatal(err)
+	}
+	t.Setenv("HADRON_UPDATE_CONF", conf)
+	if AdvancedEnabled() {
+		t.Fatal("advanced mode on with an unreadable update.conf")
+	}
+}
+
 func ptr(s string) *string { return &s }

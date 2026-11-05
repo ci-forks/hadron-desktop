@@ -72,23 +72,32 @@ func ClearPin() error {
 	return nil
 }
 
-// badAdvanced is the last invalid advanced= value logged, so a bad
-// update.conf is logged once, not at every Status call.
+// badAdvanced is the last update.conf problem logged (an invalid advanced=
+// value, or a read error), so it is logged once, not at every Status call.
 var (
 	badAdvancedMu sync.Mutex
 	badAdvanced   string
 )
 
 // AdvancedEnabled reports whether the advanced image picker is on. A missing
-// file or key keeps the default, on. The value is read without regard to
+// file or key keeps the default, on; a file that exists but cannot be read
+// turns it off, and is logged. The value is read without regard to
 // case: true, yes, 1 and on turn it on; false, no, 0 and off turn it off.
 // Any other value turns it off and is logged: the admin meant to set
 // something, and off is the reading that installs nothing unexpected. The
 // last advanced= line wins.
 func AdvancedEnabled() bool {
 	b, err := os.ReadFile(confFile())
-	if err != nil {
+	if errors.Is(err, os.ErrNotExist) {
 		return true
+	}
+	if err != nil {
+		// The file is there but unreadable: the admin set something, and
+		// off is the reading that installs nothing unexpected.
+		logBadAdvanced("unreadable: "+err.Error(), func() {
+			fmt.Fprintf(os.Stderr, "hadron-update: cannot read %s: %v; advanced mode is off\n", confFile(), err)
+		})
+		return false
 	}
 	enabled := true
 	for _, line := range strings.Split(string(b), "\n") {
@@ -103,13 +112,20 @@ func AdvancedEnabled() bool {
 			enabled = false
 		default:
 			enabled = false
-			badAdvancedMu.Lock()
-			if v != badAdvanced {
-				badAdvanced = v
+			logBadAdvanced(v, func() {
 				fmt.Fprintf(os.Stderr, "hadron-update: %s: advanced=%q is not true or false; advanced mode is off\n", confFile(), v)
-			}
-			badAdvancedMu.Unlock()
+			})
 		}
 	}
 	return enabled
+}
+
+// logBadAdvanced calls log unless key is the problem logged last.
+func logBadAdvanced(key string, log func()) {
+	badAdvancedMu.Lock()
+	defer badAdvancedMu.Unlock()
+	if key != badAdvanced {
+		badAdvanced = key
+		log()
+	}
 }
