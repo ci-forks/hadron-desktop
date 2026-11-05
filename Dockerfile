@@ -52,7 +52,9 @@ RUN cd /build/splash && make clean && make && \
 
 
 FROM toolchain AS wayland
+# renovate: datasource=gitlab-tags depName=wayland/wayland registryUrl=https://gitlab.freedesktop.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG WAYLAND_VERSION=1.24.0
+# renovate: datasource=gitlab-tags depName=wayland/wayland-protocols registryUrl=https://gitlab.freedesktop.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG WAYLAND_PROTOCOLS_VERSION=1.46
 RUN mkdir -p /wayland
 WORKDIR /build
@@ -69,6 +71,7 @@ RUN DESTDIR=/wayland ninja -C buildDir install
 
 
 FROM toolchain AS libdrm
+# renovate: datasource=gitlab-tags depName=mesa/drm registryUrl=https://gitlab.freedesktop.org extractVersion=^libdrm-(?<version>\d+(\.\d+)*)$
 ARG LIBDRM_VERSION=2.4.129
 RUN mkdir -p /libdrm
 WORKDIR /build
@@ -83,6 +86,7 @@ RUN DESTDIR=/libdrm ninja -C buildDir install
 # Build it explicitly so every stage using those toolchain libraries can link
 # reliably, and copy it into both desktop runtime roots below.
 FROM toolchain AS libucontext
+# renovate: datasource=github-tags depName=kaniini/libucontext extractVersion=^libucontext-(?<version>\d+(\.\d+)*)$
 ARG LIBUCONTEXT_VERSION=1.5.1
 RUN mkdir -p /libucontext
 WORKDIR /build
@@ -109,7 +113,9 @@ RUN make ARCH=x86_64 DESTDIR=/libucontext install
 # ===========================================================================
 
 FROM toolchain AS spirv-tools
+# renovate: datasource=github-tags depName=KhronosGroup/SPIRV-Headers versioning=regex:^vulkan-sdk-(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)\.(?<build>\d+)$
 ARG SPIRV_HEADERS_VERSION=vulkan-sdk-1.4.309.0
+# renovate: datasource=github-tags depName=KhronosGroup/SPIRV-Tools versioning=regex:^vulkan-sdk-(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)\.(?<build>\d+)$
 ARG SPIRV_TOOLS_VERSION=vulkan-sdk-1.4.309.0
 RUN pip3 install ninja
 WORKDIR /b
@@ -130,6 +136,7 @@ RUN cd spirv-tools && cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE
 # need llvm-spirv at configure time (circular dep on LLVM), so libclc builds the
 # amdgcn targets only — enough for radeonsi + Mesa's libclc dependency.
 FROM toolchain AS llvm
+# renovate: datasource=github-tags depName=llvm/llvm-project extractVersion=^llvmorg-(?<version>\d+(\.\d+)*)$
 ARG LLVM_VERSION=20.1.8
 RUN pip3 install ninja
 WORKDIR /build
@@ -153,6 +160,7 @@ RUN ninja -C build -j$(nproc) && DESTDIR=/llvm ninja -C build install
 # at exactly that commit (its sources use newer SPIR-V caps than the spirv-tools
 # headers tag).
 FROM toolchain AS spirv-llvm-translator
+# renovate: datasource=github-tags depName=KhronosGroup/SPIRV-LLVM-Translator extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG SPIRV_LLVM_TRANSLATOR_VERSION=20.1.3
 ARG SPIRV_HEADERS_TRANSLATOR_COMMIT=0e710677989b4326ac974fd80c5308191ed80965
 RUN pip3 install ninja
@@ -193,6 +201,7 @@ COPY --from=libdrm /libdrm /
 COPY --from=llvm-stack /llvm-out /llvm-out
 RUN rsync -aHAX --keep-dirlinks /llvm-out/. / && rm -rf /llvm-out
 COPY --from=wayland /wayland /
+# renovate: datasource=gitlab-tags depName=mesa/mesa registryUrl=https://gitlab.freedesktop.org extractVersion=^mesa-(?<version>\d+(\.\d+)*)$
 ARG MESA_VERSION=25.3.0
 RUN mkdir -p /mesa
 WORKDIR /build
@@ -234,6 +243,7 @@ RUN if [ "$GPU" = "full" ]; then \
 
 
 FROM toolchain AS xkeyboard-config
+# renovate: datasource=gitlab-tags depName=xkeyboard-config/xkeyboard-config registryUrl=https://gitlab.freedesktop.org extractVersion=^xkeyboard-config-(?<version>\d+(\.\d+)*)$
 ARG XKEYBOARD_CONFIG_VERSION=2.44
 RUN mkdir -p /xkeyboard-config
 WORKDIR /build
@@ -247,6 +257,7 @@ RUN DESTDIR=/xkeyboard-config ninja -C buildDir install
 FROM toolchain AS libxkb
 COPY --from=wayland /wayland /
 COPY --from=xkeyboard-config /xkeyboard-config /
+# renovate: datasource=github-tags depName=xkbcommon/libxkbcommon extractVersion=^xkbcommon-(?<version>\d+(\.\d+)*)$
 ARG LIBXKBCOMMON_VERSION=1.13.0
 RUN mkdir -p /libxkb
 WORKDIR /build
@@ -258,6 +269,7 @@ RUN DESTDIR=/libxkb ninja -C buildDir install
 
 
 FROM toolchain AS pixman
+# renovate: datasource=gitlab-tags depName=pixman/pixman registryUrl=https://gitlab.freedesktop.org extractVersion=^pixman-(?<version>\d+(\.\d+)*)$
 ARG PIXMAN_VERSION=0.46.0
 RUN mkdir -p /pixman
 WORKDIR /build
@@ -269,6 +281,7 @@ RUN DESTDIR=/pixman ninja -C buildDir install
 
 
 FROM toolchain AS libevdev
+# renovate: datasource=gitlab-tags depName=libevdev/libevdev registryUrl=https://gitlab.freedesktop.org extractVersion=^libevdev-(?<version>\d+(\.\d+)*)$
 ARG LIBEVDEV_VERSION=1.13.5
 RUN mkdir -p /libevdev
 WORKDIR /build
@@ -282,6 +295,7 @@ RUN DESTDIR=/libevdev ninja -C buildDir install
 FROM toolchain AS libinput
 COPY --from=libucontext /libucontext /
 COPY --from=libevdev /libevdev /
+# renovate: datasource=gitlab-tags depName=libinput/libinput registryUrl=https://gitlab.freedesktop.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG LIBINPUT_VERSION=1.30.0
 RUN mkdir -p /libinput
 WORKDIR /build
@@ -293,6 +307,7 @@ RUN DESTDIR=/libinput ninja -C buildDir install
 
 
 FROM toolchain AS hwdata
+# renovate: datasource=github-tags depName=vcrhonek/hwdata extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG HWDATA_VERSION=0.401
 RUN mkdir -p /hwdata
 WORKDIR /build
@@ -304,6 +319,7 @@ RUN make -j$(nproc) && make install DESTDIR=/hwdata
 
 FROM toolchain AS libdisplay-info
 COPY --from=hwdata /hwdata /
+# renovate: datasource=gitlab-tags depName=emersion/libdisplay-info registryUrl=https://gitlab.freedesktop.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG LIBDISPLAY_INFO_VERSION=0.3.0
 RUN mkdir -p /libdisplay-info
 WORKDIR /build
@@ -320,6 +336,7 @@ RUN DESTDIR=/libdisplay-info ninja -C buildDir install
 
 # PCRE2 — required by glib
 FROM toolchain AS pcre2
+# renovate: datasource=github-tags depName=PCRE2Project/pcre2 extractVersion=^pcre2-(?<version>\d+(\.\d+)*)$
 ARG PCRE2_VERSION=10.44
 RUN mkdir -p /pcre2
 WORKDIR /build
@@ -331,6 +348,7 @@ RUN make -j$(nproc) && make install DESTDIR=/pcre2
 
 # libpng — needed by grim (PNG screenshots)
 FROM toolchain AS libpng
+# renovate: datasource=github-tags depName=pnggroup/libpng extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG LIBPNG_VERSION=1.6.44
 RUN mkdir -p /libpng
 WORKDIR /build
@@ -348,6 +366,7 @@ RUN sed -i 's/^pnglibconf\.h: pnglibconf\.out$/pnglibconf.h:/' Makefile && \
 # GLib — libffi/expat/zlib already provided by the toolchain
 FROM toolchain AS glib2
 COPY --from=pcre2 /pcre2 /
+# renovate: datasource=gitlab-tags depName=GNOME/glib registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG GLIB_VERSION=2.82.5
 RUN mkdir -p /glib2
 WORKDIR /build
@@ -392,6 +411,7 @@ FROM toolchain AS harfbuzz
 COPY --from=freetype /freetype /
 COPY --from=glib2 /glib2 /
 COPY --from=pcre2 /pcre2 /
+# renovate: datasource=github-tags depName=harfbuzz/harfbuzz extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG HARFBUZZ_VERSION=10.1.0
 RUN mkdir -p /harfbuzz
 WORKDIR /build
@@ -404,6 +424,7 @@ RUN DESTDIR=/harfbuzz ninja -C buildDir install
 
 # FriBidi — bidirectional text, needed by pango
 FROM toolchain AS fribidi
+# renovate: datasource=github-tags depName=fribidi/fribidi extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG FRIBIDI_VERSION=1.0.16
 RUN mkdir -p /fribidi
 WORKDIR /build
@@ -431,6 +452,7 @@ RUN make -j$(nproc) CFLAGS="-std=gnu17 -O2 -g" && make install DESTDIR=/gperf
 FROM toolchain AS fontconfig
 COPY --from=freetype /freetype /
 COPY --from=gperf /gperf /
+# renovate: datasource=gitlab-tags depName=fontconfig/fontconfig registryUrl=https://gitlab.freedesktop.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG FONTCONFIG_VERSION=2.15.0
 RUN mkdir -p /fontconfig
 WORKDIR /build
@@ -458,6 +480,7 @@ COPY --from=libpng /libpng /
 COPY --from=pcre2 /pcre2 /
 COPY --from=glib2 /glib2 /
 # 1.18.4 fixes the COLRv1 / FreeType 2.13.x cairo-ft detection bug.
+# renovate: datasource=gitlab-tags depName=cairo/cairo registryUrl=https://gitlab.freedesktop.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG CAIRO_VERSION=1.18.4
 RUN mkdir -p /cairo
 WORKDIR /build
@@ -482,6 +505,7 @@ COPY --from=fribidi /fribidi /
 COPY --from=cairo /cairo /
 COPY --from=pixman /pixman /
 COPY --from=libpng /libpng /
+# renovate: datasource=gitlab-tags depName=GNOME/pango registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG PANGO_VERSION=1.54.0
 RUN mkdir -p /pango
 WORKDIR /build
@@ -501,6 +525,7 @@ RUN DESTDIR=/pango ninja -C buildDir install
 # libepoxy — GL/EGL dispatch used by GTK's GL renderer.
 FROM toolchain AS libepoxy
 COPY --from=mesa /mesa /
+# renovate: datasource=github-tags depName=anholt/libepoxy extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG LIBEPOXY_VERSION=1.5.10
 RUN mkdir -p /libepoxy
 WORKDIR /build
@@ -515,6 +540,7 @@ FROM toolchain AS gdk-pixbuf
 COPY --from=glib2 /glib2 /
 COPY --from=pcre2 /pcre2 /
 COPY --from=libpng /libpng /
+# renovate: datasource=gitlab-tags depName=GNOME/gdk-pixbuf registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG GDKPIXBUF_VERSION=2.42.12
 RUN mkdir -p /gdk-pixbuf
 WORKDIR /build
@@ -556,6 +582,7 @@ COPY --from=libepoxy /libepoxy /
 COPY --from=wayland /wayland /
 COPY --from=libxkb /libxkb /
 COPY --from=mesa /mesa /
+# renovate: datasource=gitlab-tags depName=GNOME/gtk registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG GTK3_VERSION=3.24.43
 RUN mkdir -p /gtk3
 WORKDIR /build
@@ -570,10 +597,11 @@ RUN DESTDIR=/gtk3 ninja -C buildDir install
 
 # --- gtkmm3 C++ wrappers (waybar links these) ------------------------------
 FROM toolchain AS libsigcpp
+# renovate: datasource=github-tags depName=libsigcplusplus/libsigcplusplus extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG LIBSIGCPP_VERSION=2.12.1
 RUN mkdir -p /libsigcpp
 WORKDIR /build
-RUN curl -fL https://download.gnome.org/sources/libsigc++/2.12/libsigc++-${LIBSIGCPP_VERSION}.tar.xz -o s.tar.xz && tar -xf s.tar.xz && rm s.tar.xz && mv libsigc++-* src
+RUN curl -fL https://download.gnome.org/sources/libsigc++/${LIBSIGCPP_VERSION%.*}/libsigc++-${LIBSIGCPP_VERSION}.tar.xz -o s.tar.xz && tar -xf s.tar.xz && rm s.tar.xz && mv libsigc++-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dbuild-documentation=false -Dbuild-examples=false
@@ -583,10 +611,11 @@ FROM toolchain AS glibmm
 COPY --from=glib2 /glib2 /
 COPY --from=pcre2 /pcre2 /
 COPY --from=libsigcpp /libsigcpp /
+# renovate: datasource=gitlab-tags depName=GNOME/glibmm registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG GLIBMM_VERSION=2.66.7
 RUN mkdir -p /glibmm
 WORKDIR /build
-RUN curl -fL https://download.gnome.org/sources/glibmm/2.66/glibmm-${GLIBMM_VERSION}.tar.xz -o g.tar.xz && tar -xf g.tar.xz && rm g.tar.xz && mv glibmm-* src
+RUN curl -fL https://download.gnome.org/sources/glibmm/${GLIBMM_VERSION%.*}/glibmm-${GLIBMM_VERSION}.tar.xz -o g.tar.xz && tar -xf g.tar.xz && rm g.tar.xz && mv glibmm-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dbuild-documentation=false
@@ -601,6 +630,7 @@ COPY --from=fontconfig /fontconfig /
 COPY --from=libpng /libpng /
 COPY --from=pixman /pixman /
 COPY --from=libsigcpp /libsigcpp /
+# renovate: datasource=gitlab-tags depName=cairo/cairomm registryUrl=https://gitlab.freedesktop.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG CAIROMM_VERSION=1.14.5
 RUN mkdir -p /cairomm
 WORKDIR /build
@@ -624,10 +654,11 @@ COPY --from=pixman /pixman /
 COPY --from=libsigcpp /libsigcpp /
 COPY --from=glibmm /glibmm /
 COPY --from=cairomm /cairomm /
+# renovate: datasource=gitlab-tags depName=GNOME/pangomm registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG PANGOMM_VERSION=2.46.4
 RUN mkdir -p /pangomm
 WORKDIR /build
-RUN curl -fL https://download.gnome.org/sources/pangomm/2.46/pangomm-${PANGOMM_VERSION}.tar.xz -o p.tar.xz && tar -xf p.tar.xz && rm p.tar.xz && mv pangomm-* src
+RUN curl -fL https://download.gnome.org/sources/pangomm/${PANGOMM_VERSION%.*}/pangomm-${PANGOMM_VERSION}.tar.xz -o p.tar.xz && tar -xf p.tar.xz && rm p.tar.xz && mv pangomm-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dbuild-documentation=false
@@ -639,10 +670,11 @@ COPY --from=pcre2 /pcre2 /
 COPY --from=atk /atk /
 COPY --from=libsigcpp /libsigcpp /
 COPY --from=glibmm /glibmm /
+# renovate: datasource=gitlab-tags depName=GNOME/atkmm registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG ATKMM_VERSION=2.28.4
 RUN mkdir -p /atkmm
 WORKDIR /build
-RUN curl -fL https://download.gnome.org/sources/atkmm/2.28/atkmm-${ATKMM_VERSION}.tar.xz -o a.tar.xz && tar -xf a.tar.xz && rm a.tar.xz && mv atkmm-* src
+RUN curl -fL https://download.gnome.org/sources/atkmm/${ATKMM_VERSION%.*}/atkmm-${ATKMM_VERSION}.tar.xz -o a.tar.xz && tar -xf a.tar.xz && rm a.tar.xz && mv atkmm-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dbuild-documentation=false
@@ -671,10 +703,11 @@ COPY --from=glibmm /glibmm /
 COPY --from=cairomm /cairomm /
 COPY --from=pangomm /pangomm /
 COPY --from=atkmm /atkmm /
+# renovate: datasource=gitlab-tags depName=GNOME/gtkmm registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG GTKMM_VERSION=3.24.9
 RUN mkdir -p /gtkmm3
 WORKDIR /build
-RUN curl -fL https://download.gnome.org/sources/gtkmm/3.24/gtkmm-${GTKMM_VERSION}.tar.xz -o gm.tar.xz && tar -xf gm.tar.xz && rm gm.tar.xz && mv gtkmm-* src
+RUN curl -fL https://download.gnome.org/sources/gtkmm/${GTKMM_VERSION%.*}/gtkmm-${GTKMM_VERSION}.tar.xz -o gm.tar.xz && tar -xf gm.tar.xz && rm gm.tar.xz && mv gtkmm-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dbuild-documentation=false -Dbuild-demos=false -Dbuild-tests=false
@@ -699,6 +732,7 @@ COPY --from=wayland /wayland /
 COPY --from=libxkb /libxkb /
 COPY --from=mesa /mesa /
 COPY --from=gtk3 /gtk3 /
+# renovate: datasource=github-tags depName=wmww/gtk-layer-shell extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG GTKLAYERSHELL_VERSION=0.8.2
 RUN mkdir -p /gtk-layer-shell
 WORKDIR /build
@@ -709,6 +743,7 @@ RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dintrospection=false -Dvapi=fals
 RUN DESTDIR=/gtk-layer-shell ninja -C buildDir install
 
 FROM toolchain AS jsoncpp
+# renovate: datasource=github-tags depName=open-source-parsers/jsoncpp extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG JSONCPP_VERSION=1.9.6
 RUN mkdir -p /jsoncpp
 WORKDIR /build
@@ -719,6 +754,7 @@ RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dtests=false
 RUN DESTDIR=/jsoncpp ninja -C buildDir install
 
 FROM toolchain AS libfmt
+# renovate: datasource=github-tags depName=fmtlib/fmt extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG FMT_VERSION=10.2.1
 RUN mkdir -p /libfmt
 WORKDIR /build
@@ -729,6 +765,7 @@ RUN cmake --build buildDir -j"$(nproc)" && DESTDIR=/libfmt cmake --install build
 
 FROM toolchain AS spdlog
 COPY --from=libfmt /libfmt /
+# renovate: datasource=github-tags depName=gabime/spdlog extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG SPDLOG_VERSION=1.13.0
 RUN mkdir -p /spdlog
 WORKDIR /build
@@ -740,6 +777,7 @@ RUN cmake --build buildDir -j"$(nproc)" && DESTDIR=/spdlog cmake --install build
 # Howard Hinnant date — waybar's clock module timezone support (header + tz lib).
 # Provided as a system dep so waybar's meson doesn't reach out to wrapdb.
 FROM toolchain AS cpp-date
+# renovate: datasource=github-tags depName=HowardHinnant/date extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG DATE_VERSION=3.0.1
 RUN mkdir -p /cpp-date
 WORKDIR /build
@@ -815,6 +853,7 @@ RUN make -C libdbusmenu-glib -j"$(nproc)" && make -C libdbusmenu-gtk -j"$(nproc)
 # DRM and gets bounced straight back to the login manager.
 FROM toolchain AS libseat
 COPY --from=libucontext /libucontext /
+# renovate: datasource=git-tags depName=https://git.sr.ht/~kennylevinsen/seatd extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG SEATD_VERSION=0.9.1
 RUN mkdir -p /libseat
 WORKDIR /build
@@ -839,6 +878,7 @@ COPY --from=libevdev /libevdev /
 COPY --from=mesa /mesa /
 COPY --from=hwdata /hwdata /
 COPY --from=libdisplay-info /libdisplay-info /
+# renovate: datasource=gitlab-tags depName=wlroots/wlroots registryUrl=https://gitlab.freedesktop.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG WLROOTS_VERSION=0.18.2
 WORKDIR /build
 RUN curl -L https://gitlab.freedesktop.org/wlroots/wlroots/-/archive/${WLROOTS_VERSION}/wlroots-${WLROOTS_VERSION}.tar -o wlroots.tar && tar -xf wlroots.tar && rm wlroots.tar && mv wlroots-* wlroots-src
@@ -871,6 +911,7 @@ COPY --from=fribidi /fribidi /
 COPY --from=hwdata /hwdata /
 COPY --from=libdisplay-info /libdisplay-info /
 COPY --from=libpng /libpng /
+# renovate: datasource=github-tags depName=swaywm/sway extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG SWAY_VERSION=1.10.1
 RUN mkdir -p /sway
 WORKDIR /build
@@ -884,6 +925,7 @@ RUN DESTDIR=/sway ninja -C buildDir install
 
 # tllist — foot dependency (header-only-ish)
 FROM toolchain AS tllist
+# renovate: datasource=gitea-tags depName=dnkl/tllist registryUrl=https://codeberg.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG TLLIST_VERSION=1.1.0
 RUN mkdir -p /tllist
 WORKDIR /build
@@ -903,6 +945,7 @@ COPY --from=harfbuzz /harfbuzz /
 COPY --from=glib2 /glib2 /
 COPY --from=pcre2 /pcre2 /
 COPY --from=tllist /tllist /
+# renovate: datasource=gitea-tags depName=dnkl/fcft registryUrl=https://codeberg.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG FCFT_VERSION=3.3.1
 RUN mkdir -p /fcft
 WORKDIR /build
@@ -925,6 +968,7 @@ COPY --from=tllist /tllist /
 COPY --from=harfbuzz /harfbuzz /
 COPY --from=glib2 /glib2 /
 COPY --from=pcre2 /pcre2 /
+# renovate: datasource=gitea-tags depName=dnkl/foot registryUrl=https://codeberg.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG FOOT_VERSION=1.20.2
 RUN mkdir -p /foot
 WORKDIR /build
@@ -940,6 +984,7 @@ FROM toolchain AS grim
 COPY --from=wayland /wayland /
 COPY --from=pixman /pixman /
 COPY --from=libpng /libpng /
+# renovate: datasource=gitlab-tags depName=emersion/grim registryUrl=https://gitlab.freedesktop.org extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG GRIM_VERSION=1.4.1
 RUN mkdir -p /grim
 WORKDIR /build
@@ -1044,6 +1089,7 @@ RUN make install DESTDIR=/hostapd BINDIR=/usr/bin
 
 # libndp — IPv6 router/neighbour discovery, required by NetworkManager
 FROM toolchain AS libndp
+# renovate: datasource=github-tags depName=jpirko/libndp extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG LIBNDP_VERSION=1.9
 RUN mkdir -p /libndp
 WORKDIR /build
@@ -1087,10 +1133,11 @@ RUN make -j$(nproc) libs && make install.libs install.includes DESTDIR=/ncurses
 
 # libxslt — provides xsltproc, a build-time requirement of NetworkManager
 FROM toolchain AS libxslt
+# renovate: datasource=gitlab-tags depName=GNOME/libxslt registryUrl=https://gitlab.gnome.org extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG LIBXSLT_VERSION=1.1.42
 RUN mkdir -p /libxslt
 WORKDIR /build
-RUN curl -L https://download.gnome.org/sources/libxslt/1.1/libxslt-${LIBXSLT_VERSION}.tar.xz -o libxslt.tar.xz && tar -xf libxslt.tar.xz && rm libxslt.tar.xz && mv libxslt-* libxslt-src
+RUN curl -L https://download.gnome.org/sources/libxslt/${LIBXSLT_VERSION%.*}/libxslt-${LIBXSLT_VERSION}.tar.xz -o libxslt.tar.xz && tar -xf libxslt.tar.xz && rm libxslt.tar.xz && mv libxslt-* libxslt-src
 WORKDIR /build/libxslt-src
 RUN ./configure ${COMMON_CONFIGURE_ARGS} --disable-dependency-tracking --without-python
 RUN make -j$(nproc) && make install DESTDIR=/libxslt
@@ -1108,10 +1155,11 @@ COPY --from=ncurses /ncurses /
 # The toolchain's libreadline needs termcap symbols from libncurses; make the
 # readline pkg-config dependency pull it in so nmcli links cleanly.
 RUN sed -i 's/-lreadline/-lreadline -lncurses/' /usr/lib/pkgconfig/readline.pc /usr/lib64/pkgconfig/readline.pc 2>/dev/null || true
+# renovate: datasource=gitlab-tags depName=NetworkManager/NetworkManager registryUrl=https://gitlab.freedesktop.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG NM_VERSION=1.50.0
 RUN mkdir -p /networkmanager
 WORKDIR /build
-RUN curl -L https://download.gnome.org/sources/NetworkManager/1.50/NetworkManager-${NM_VERSION}.tar.xz -o nm.tar.xz && tar -xf nm.tar.xz && rm nm.tar.xz && mv NetworkManager-* nm-src
+RUN curl -L https://download.gnome.org/sources/NetworkManager/${NM_VERSION%.*}/NetworkManager-${NM_VERSION}.tar.xz -o nm.tar.xz && tar -xf nm.tar.xz && rm nm.tar.xz && mv NetworkManager-* nm-src
 WORKDIR /build/nm-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} --sbindir=bin \
@@ -1131,6 +1179,7 @@ RUN DESTDIR=/networkmanager ninja -C buildDir install
 
 # ALSA library
 FROM toolchain AS alsa-lib
+# renovate: datasource=github-tags depName=alsa-project/alsa-lib extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG ALSA_VERSION=1.2.12
 RUN mkdir -p /alsa-lib
 WORKDIR /build
@@ -1142,6 +1191,7 @@ RUN make -j$(nproc) && make install DESTDIR=/alsa-lib
 
 # ALSA UCM configuration (data files describing sound cards)
 FROM toolchain AS alsa-ucm-conf
+# renovate: datasource=github-tags depName=alsa-project/alsa-ucm-conf extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG ALSA_UCM_VERSION=1.2.12
 RUN mkdir -p /alsa-ucm-conf
 WORKDIR /build
@@ -1167,6 +1217,7 @@ COPY --from=glib2 /glib2 /
 COPY --from=pcre2 /pcre2 /
 COPY --from=ncurses /ncurses /
 RUN sed -i 's/-lreadline/-lreadline -lncurses/' /usr/lib/pkgconfig/readline.pc /usr/lib64/pkgconfig/readline.pc 2>/dev/null || true
+# renovate: datasource=github-tags depName=bluez/bluez extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG BLUEZ_VERSION=5.79
 RUN mkdir -p /bluez
 WORKDIR /build
@@ -1193,6 +1244,7 @@ COPY --from=glib2 /glib2 /
 COPY --from=pcre2 /pcre2 /
 COPY --from=sbc /sbc /
 COPY --from=bluez /bluez /
+# renovate: datasource=gitlab-tags depName=pipewire/pipewire registryUrl=https://gitlab.freedesktop.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG PIPEWIRE_VERSION=1.2.7
 RUN mkdir -p /pipewire
 WORKDIR /build
@@ -1217,6 +1269,7 @@ COPY --from=glib2 /glib2 /
 COPY --from=pcre2 /pcre2 /
 COPY --from=pipewire /pipewire /
 COPY --from=alsa-lib /alsa-lib /
+# renovate: datasource=gitlab-tags depName=pipewire/wireplumber registryUrl=https://gitlab.freedesktop.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG WIREPLUMBER_VERSION=0.5.7
 RUN mkdir -p /wireplumber
 WORKDIR /build
@@ -1272,6 +1325,7 @@ COPY --from=cpp-date /cpp-date /
 COPY --from=libdbusmenu /libdbusmenu /
 COPY --from=pipewire /pipewire /
 COPY --from=wireplumber /wireplumber /
+# renovate: datasource=github-tags depName=Alexays/Waybar extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG WAYBAR_VERSION=0.10.4
 RUN mkdir -p /waybar
 WORKDIR /build
@@ -1291,6 +1345,7 @@ RUN DESTDIR=/waybar ninja -C buildDir install
 # Nerd Font symbols — waybar/foot glyphs (wifi/bt/volume icons). Symbols-only
 # subset keeps it small; installed to /usr/share/fonts and picked up by fc-cache.
 FROM toolchain AS nerdfont
+# renovate: datasource=github-tags depName=ryanoasis/nerd-fonts extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG NERDFONT_VERSION=3.1.1
 RUN mkdir -p /nerdfont/usr/share/fonts/nerd-fonts
 WORKDIR /tmp
@@ -1306,6 +1361,7 @@ RUN curl -fL --retry 5 --retry-delay 3 --retry-all-errors https://github.com/rya
 # and the kernel ships nf_conntrack/bridge/br_netfilter, so docker's bridge+NAT
 # networking works without vendoring a separate network stack.
 FROM toolchain AS docker
+# renovate: datasource=github-tags depName=docker/cli extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG DOCKER_VERSION=29.5.3
 RUN mkdir -p /docker/usr/bin
 WORKDIR /build
@@ -1319,6 +1375,7 @@ RUN curl -fL --retry 5 --retry-delay 3 --retry-all-errors https://download.docke
 # distrobox/distrobox-* scripts into <prefix>/bin and shared data into
 # <prefix>/share. It drives the `docker` CLI directly as its container backend.
 FROM toolchain AS distrobox
+# renovate: datasource=github-tags depName=89luca89/distrobox extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG DISTROBOX_VERSION=1.8.2.5
 RUN mkdir -p /distrobox/usr
 WORKDIR /build
@@ -1331,6 +1388,7 @@ RUN ./install --prefix /distrobox/usr
 # libarchive — OCI/bundle handling for ostree + flatpak (zlib/lzma/zstd/openssl
 # all come from the toolchain).
 FROM toolchain AS libarchive
+# renovate: datasource=github-tags depName=libarchive/libarchive extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG LIBARCHIVE_VERSION=3.8.7
 RUN mkdir -p /libarchive
 WORKDIR /build
@@ -1342,16 +1400,18 @@ RUN make -j"$(nproc)" && make DESTDIR=/libarchive install
 FROM toolchain AS json-glib
 COPY --from=glib2 /glib2 /
 COPY --from=pcre2 /pcre2 /
+# renovate: datasource=gitlab-tags depName=GNOME/json-glib registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG JSONGLIB_VERSION=1.10.8
 RUN mkdir -p /json-glib
 WORKDIR /build
-RUN curl -fL --retry 5 --retry-delay 3 --retry-all-errors https://download.gnome.org/sources/json-glib/1.10/json-glib-${JSONGLIB_VERSION}.tar.xz -o j.tar.xz && tar -xf j.tar.xz && rm j.tar.xz && mv json-glib-* src
+RUN curl -fL --retry 5 --retry-delay 3 --retry-all-errors https://download.gnome.org/sources/json-glib/${JSONGLIB_VERSION%.*}/json-glib-${JSONGLIB_VERSION}.tar.xz -o j.tar.xz && tar -xf j.tar.xz && rm j.tar.xz && mv json-glib-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dintrospection=disabled -Ddocumentation=disabled -Dgtk_doc=disabled -Dman=false -Dtests=false
 RUN DESTDIR=/json-glib ninja -C buildDir install
 
 FROM toolchain AS bubblewrap
+# renovate: datasource=github-tags depName=containers/bubblewrap extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG BWRAP_VERSION=0.11.2
 RUN mkdir -p /bubblewrap
 WORKDIR /build
@@ -1364,6 +1424,7 @@ RUN DESTDIR=/bubblewrap ninja -C buildDir install
 FROM toolchain AS xdg-dbus-proxy
 COPY --from=glib2 /glib2 /
 COPY --from=pcre2 /pcre2 /
+# renovate: datasource=github-tags depName=flatpak/xdg-dbus-proxy extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG XDP_VERSION=0.1.7
 RUN mkdir -p /xdg-dbus-proxy
 WORKDIR /build
@@ -1575,6 +1636,7 @@ RUN : > /signed-flatpak-runtime/usr/share/hadron/gnupg-runtime-size && \
 
 # AppStream trio — flatpak 1.16 hard-requires libappstream at build.
 FROM toolchain AS libyaml
+# renovate: datasource=github-tags depName=yaml/libyaml extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG LIBYAML_VERSION=0.2.5
 RUN mkdir -p /libyaml
 WORKDIR /build
@@ -1586,6 +1648,7 @@ RUN make -j"$(nproc)" && make DESTDIR=/libyaml install
 FROM toolchain AS libxmlb
 COPY --from=glib2 /glib2 /
 COPY --from=pcre2 /pcre2 /
+# renovate: datasource=github-tags depName=hughsie/libxmlb extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG LIBXMLB_VERSION=0.3.22
 RUN mkdir -p /libxmlb
 WORKDIR /build
@@ -1602,6 +1665,7 @@ COPY --from=glib2 /glib2 /
 COPY --from=pcre2 /pcre2 /
 COPY --from=libyaml /libyaml /
 COPY --from=libxmlb /libxmlb /
+# renovate: datasource=github-tags depName=ximion/appstream extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG APPSTREAM_VERSION=1.0.4
 RUN mkdir -p /appstream
 WORKDIR /build
@@ -1629,6 +1693,7 @@ RUN DESTDIR=/appstream ninja -C buildDir install
 
 # libfuse3 — flatpak requires fuse (revokefs-fuse + the document portal).
 FROM toolchain AS libfuse3
+# renovate: datasource=github-tags depName=libfuse/libfuse extractVersion=^fuse-(?<version>\d+(\.\d+)*)$
 ARG LIBFUSE_VERSION=3.16.2
 RUN mkdir -p /libfuse3
 WORKDIR /build
@@ -1644,6 +1709,7 @@ RUN if [ -d /libfuse3/usr/sbin ]; then mkdir -p /libfuse3/usr/bin && cp -a /libf
 # e2fsprogs — ostree hard-requires libe2p (ext2 attribute flags). Build only the
 # libraries; reuse the toolchain's libuuid/libblkid instead of e2fsprogs' own.
 FROM toolchain AS e2fsprogs
+# renovate: datasource=github-tags depName=tytso/e2fsprogs extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG E2FSPROGS_VERSION=1.47.2
 RUN mkdir -p /e2fsprogs
 WORKDIR /build
@@ -1663,6 +1729,7 @@ COPY --from=libgpg-error /libgpg-error /
 COPY --from=libassuan /libassuan /
 COPY --from=gpgme /gpgme /
 COPY --from=e2fsprogs /e2fsprogs /
+# renovate: datasource=github-tags depName=ostreedev/ostree extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG OSTREE_VERSION=2026.1
 RUN mkdir -p /ostree
 WORKDIR /build
@@ -1697,6 +1764,7 @@ COPY --from=libfuse3 /libfuse3 /
 COPY --from=bubblewrap /bubblewrap /
 COPY --from=xdg-dbus-proxy /xdg-dbus-proxy /
 COPY --from=ostree /ostree /
+# renovate: datasource=github-tags depName=flatpak/flatpak extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG FLATPAK_VERSION=1.16.6
 RUN mkdir -p /flatpak
 WORKDIR /build
@@ -1722,6 +1790,7 @@ RUN DESTDIR=/flatpak ninja -C buildDir install
 FROM toolchain AS shared-mime-info
 COPY --from=glib2 /glib2 /
 COPY --from=pcre2 /pcre2 /
+# renovate: datasource=gitlab-tags depName=xdg/shared-mime-info registryUrl=https://gitlab.freedesktop.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG SMI_VERSION=2.4
 RUN mkdir -p /shared-mime-info
 WORKDIR /build
@@ -1770,6 +1839,7 @@ COPY --from=pcre2 /pcre2 /
 COPY --from=freetype /freetype /
 COPY --from=fontconfig /fontconfig /
 COPY --from=libpng /libpng /
+# renovate: datasource=github-tags depName=swaywm/swaybg extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG SWAYBG_VERSION=1.2.1
 RUN mkdir -p /swaybg
 WORKDIR /build
@@ -1794,6 +1864,7 @@ COPY --from=freetype /freetype /
 COPY --from=fontconfig /fontconfig /
 COPY --from=fribidi /fribidi /
 COPY --from=libpng /libpng /
+# renovate: datasource=github-tags depName=emersion/mako extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG MAKO_VERSION=1.9.0
 RUN mkdir -p /mako
 WORKDIR /build
@@ -1817,6 +1888,7 @@ COPY --from=harfbuzz /harfbuzz /
 COPY --from=glib2 /glib2 /
 COPY --from=pcre2 /pcre2 /
 COPY --from=libpng /libpng /
+# renovate: datasource=gitea-tags depName=dnkl/fuzzel registryUrl=https://codeberg.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG FUZZEL_VERSION=1.11.0
 RUN mkdir -p /fuzzel
 WORKDIR /build
@@ -1832,6 +1904,7 @@ RUN DESTDIR=/fuzzel ninja -C buildDir install
 # wl-clipboard — clipboard utilities
 FROM toolchain AS wl-clipboard
 COPY --from=wayland /wayland /
+# renovate: datasource=github-tags depName=bugaevc/wl-clipboard extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG WLCLIP_VERSION=2.2.1
 RUN mkdir -p /wl-clipboard
 WORKDIR /build
@@ -1853,6 +1926,7 @@ COPY --from=freetype /freetype /
 COPY --from=fontconfig /fontconfig /
 COPY --from=libpng /libpng /
 COPY --from=libxkb /libxkb /
+# renovate: datasource=github-tags depName=emersion/slurp extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG SLURP_VERSION=1.5.0
 RUN mkdir -p /slurp
 WORKDIR /build
@@ -1867,6 +1941,7 @@ RUN DESTDIR=/slurp ninja -C buildDir install
 FROM toolchain AS swayidle
 COPY --from=libucontext /libucontext /
 COPY --from=wayland /wayland /
+# renovate: datasource=github-tags depName=swaywm/swayidle extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG SWAYIDLE_VERSION=1.8.0
 RUN mkdir -p /swayidle
 WORKDIR /build
@@ -1879,6 +1954,7 @@ RUN DESTDIR=/swayidle ninja -C buildDir install
 
 # X protocol libs — ly links libxcb (X11 session support) even in a Wayland setup
 FROM toolchain AS xorgproto
+# renovate: datasource=gitlab-tags depName=xorg/proto/xorgproto registryUrl=https://gitlab.freedesktop.org extractVersion=^xorgproto-(?<version>\d+(\.\d+)*)$
 ARG XORGPROTO_VERSION=2025.1
 RUN mkdir -p /xorgproto
 WORKDIR /build
@@ -1890,6 +1966,7 @@ RUN DESTDIR=/xorgproto ninja -C buildDir install
 
 FROM toolchain AS libxau
 COPY --from=xorgproto /xorgproto /
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxau registryUrl=https://gitlab.freedesktop.org extractVersion=^libXau-(?<version>\d+(\.\d+)*)$
 ARG LIBXAU_VERSION=1.0.12
 RUN mkdir -p /libxau
 WORKDIR /build
@@ -1900,6 +1977,7 @@ RUN meson setup buildDir ${COMMON_MESON_FLAGS}
 RUN DESTDIR=/libxau ninja -C buildDir install
 
 FROM toolchain AS xcbproto
+# renovate: datasource=gitlab-tags depName=xorg/proto/xcbproto registryUrl=https://gitlab.freedesktop.org extractVersion=^xcb-proto-(?<version>\d+(\.\d+)*)$
 ARG XCB_VERSION=1.17.0
 RUN mkdir -p /xcbproto
 WORKDIR /build
@@ -1912,6 +1990,7 @@ FROM toolchain AS libxcb
 COPY --from=xorgproto /xorgproto /
 COPY --from=xcbproto /xcbproto /
 COPY --from=libxau /libxau /
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxcb registryUrl=https://gitlab.freedesktop.org extractVersion=^libxcb-(?<version>\d+(\.\d+)*)$
 ARG LIBXCB_VERSION=1.17.0
 RUN mkdir -p /libxcb
 WORKDIR /build
@@ -1943,78 +2022,91 @@ COPY --from=fontconfig /fontconfig /
 RUN mkdir -p /x11-libs
 WORKDIR /build
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxtrans registryUrl=https://gitlab.freedesktop.org extractVersion=^xtrans-(?<version>\d+(\.\d+)*)$
 ARG XTRANS_VERSION=1.6.0
 RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/xtrans-${XTRANS_VERSION}.tar.xz -o xtrans.tar.xz && \
     tar -xf xtrans.tar.xz && cd xtrans-${XTRANS_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-docs && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libx11 registryUrl=https://gitlab.freedesktop.org extractVersion=^libX11-(?<version>\d+(\.\d+)*)$
 ARG LIBX11_VERSION=1.8.12
 RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libX11-${LIBX11_VERSION}.tar.xz -o libX11.tar.xz && \
     tar -xf libX11.tar.xz && cd libX11-${LIBX11_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-specs --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxext registryUrl=https://gitlab.freedesktop.org extractVersion=^libXext-(?<version>\d+(\.\d+)*)$
 ARG LIBXEXT_VERSION=1.3.6
 RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXext-${LIBXEXT_VERSION}.tar.xz -o libXext.tar.xz && \
     tar -xf libXext.tar.xz && cd libXext-${LIBXEXT_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-specs --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxrender registryUrl=https://gitlab.freedesktop.org extractVersion=^libXrender-(?<version>\d+(\.\d+)*)$
 ARG LIBXRENDER_VERSION=0.9.12
 RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXrender-${LIBXRENDER_VERSION}.tar.xz -o libXrender.tar.xz && \
     tar -xf libXrender.tar.xz && cd libXrender-${LIBXRENDER_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxfixes registryUrl=https://gitlab.freedesktop.org extractVersion=^libXfixes-(?<version>\d+(\.\d+)*)$
 ARG LIBXFIXES_VERSION=6.0.1
 RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXfixes-${LIBXFIXES_VERSION}.tar.xz -o libXfixes.tar.xz && \
     tar -xf libXfixes.tar.xz && cd libXfixes-${LIBXFIXES_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxdamage registryUrl=https://gitlab.freedesktop.org extractVersion=^libXdamage-(?<version>\d+(\.\d+)*)$
 ARG LIBXDAMAGE_VERSION=1.1.6
 RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXdamage-${LIBXDAMAGE_VERSION}.tar.xz -o libXdamage.tar.xz && \
     tar -xf libXdamage.tar.xz && cd libXdamage-${LIBXDAMAGE_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxcomposite registryUrl=https://gitlab.freedesktop.org extractVersion=^libXcomposite-(?<version>\d+(\.\d+)*)$
 ARG LIBXCOMPOSITE_VERSION=0.4.6
 RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXcomposite-${LIBXCOMPOSITE_VERSION}.tar.xz -o libXcomposite.tar.xz && \
     tar -xf libXcomposite.tar.xz && cd libXcomposite-${LIBXCOMPOSITE_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxrandr registryUrl=https://gitlab.freedesktop.org extractVersion=^libXrandr-(?<version>\d+(\.\d+)*)$
 ARG LIBXRANDR_VERSION=1.5.4
 RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXrandr-${LIBXRANDR_VERSION}.tar.xz -o libXrandr.tar.xz && \
     tar -xf libXrandr.tar.xz && cd libXrandr-${LIBXRANDR_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxi registryUrl=https://gitlab.freedesktop.org extractVersion=^libXi-(?<version>\d+(\.\d+)*)$
 ARG LIBXI_VERSION=1.8.2
 RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXi-${LIBXI_VERSION}.tar.xz -o libXi.tar.xz && \
     tar -xf libXi.tar.xz && cd libXi-${LIBXI_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxinerama registryUrl=https://gitlab.freedesktop.org extractVersion=^libXinerama-(?<version>\d+(\.\d+)*)$
 ARG LIBXINERAMA_VERSION=1.1.5
 RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXinerama-${LIBXINERAMA_VERSION}.tar.xz -o libXinerama.tar.xz && \
     tar -xf libXinerama.tar.xz && cd libXinerama-${LIBXINERAMA_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxcursor registryUrl=https://gitlab.freedesktop.org extractVersion=^libXcursor-(?<version>\d+(\.\d+)*)$
 ARG LIBXCURSOR_VERSION=1.2.3
 RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXcursor-${LIBXCURSOR_VERSION}.tar.xz -o libXcursor.tar.xz && \
     tar -xf libXcursor.tar.xz && cd libXcursor-${LIBXCURSOR_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxft registryUrl=https://gitlab.freedesktop.org extractVersion=^libXft-(?<version>\d+(\.\d+)*)$
 ARG LIBXFT_VERSION=2.3.9
 RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXft-${LIBXFT_VERSION}.tar.xz -o libXft.tar.xz && \
     tar -xf libXft.tar.xz && cd libXft-${LIBXFT_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxscrnsaver registryUrl=https://gitlab.freedesktop.org extractVersion=^libXScrnSaver-(?<version>\d+(\.\d+)*)$
 ARG LIBXSS_VERSION=1.2.4
 RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXScrnSaver-${LIBXSS_VERSION}.tar.xz -o libXScrnSaver.tar.xz && \
     tar -xf libXScrnSaver.tar.xz && cd libXScrnSaver-${LIBXSS_VERSION} && \
@@ -2022,24 +2114,28 @@ RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXScrnSaver-$
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # XLibre's mandatory font/XKB support libraries and the runtime xkb compiler.
+# renovate: datasource=gitlab-tags depName=xorg/lib/libfontenc registryUrl=https://gitlab.freedesktop.org extractVersion=^libfontenc-(?<version>\d+(\.\d+)*)$
 ARG LIBFONTENC_VERSION=1.1.8
 RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libfontenc-${LIBFONTENC_VERSION}.tar.xz -o libfontenc.tar.xz && \
     tar -xf libfontenc.tar.xz && cd libfontenc-${LIBFONTENC_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxfont registryUrl=https://gitlab.freedesktop.org extractVersion=^libXfont2-(?<version>\d+(\.\d+)*)$
 ARG LIBXFONT2_VERSION=2.0.7
 RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXfont2-${LIBXFONT2_VERSION}.tar.xz -o libXfont2.tar.xz && \
     tar -xf libXfont2.tar.xz && cd libXfont2-${LIBXFONT2_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-devel-docs --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxkbfile registryUrl=https://gitlab.freedesktop.org extractVersion=^libxkbfile-(?<version>\d+(\.\d+)*)$
 ARG LIBXKBFILE_VERSION=1.1.3
 RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libxkbfile-${LIBXKBFILE_VERSION}.tar.xz -o libxkbfile.tar.xz && \
     tar -xf libxkbfile.tar.xz && cd libxkbfile-${LIBXKBFILE_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
+# renovate: datasource=gitlab-tags depName=xorg/app/xkbcomp registryUrl=https://gitlab.freedesktop.org extractVersion=^xkbcomp-(?<version>\d+(\.\d+)*)$
 ARG XKBCOMP_VERSION=1.4.7
 RUN curl -fL --retry 5 https://www.x.org/releases/individual/app/xkbcomp-${XKBCOMP_VERSION}.tar.xz -o xkbcomp.tar.xz && \
     tar -xf xkbcomp.tar.xz && cd xkbcomp-${XKBCOMP_VERSION} && \
@@ -2048,18 +2144,21 @@ RUN curl -fL --retry 5 https://www.x.org/releases/individual/app/xkbcomp-${XKBCO
 
 # DRM/modesetting support used by the XLibre server.
 RUN pip3 install meson ninja
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxcvt registryUrl=https://gitlab.freedesktop.org extractVersion=^libxcvt-(?<version>\d+(\.\d+)*)$
 ARG LIBXCVT_VERSION=0.1.3
 RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libxcvt-${LIBXCVT_VERSION}.tar.xz -o libxcvt.tar.xz && \
     tar -xf libxcvt.tar.xz && cd libxcvt-${LIBXCVT_VERSION} && \
     meson setup buildDir ${COMMON_MESON_FLAGS} && \
     ninja -C buildDir install && DESTDIR=/x11-libs ninja -C buildDir install
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libpciaccess registryUrl=https://gitlab.freedesktop.org extractVersion=^libpciaccess-(?<version>\d+(\.\d+)*)$
 ARG LIBPCIACCESS_VERSION=0.18.1
 RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libpciaccess-${LIBPCIACCESS_VERSION}.tar.xz -o libpciaccess.tar.xz && \
     tar -xf libpciaccess.tar.xz && cd libpciaccess-${LIBPCIACCESS_VERSION} && \
     meson setup buildDir ${COMMON_MESON_FLAGS} -Dzlib=disabled && \
     ninja -C buildDir install && DESTDIR=/x11-libs ninja -C buildDir install
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxshmfence registryUrl=https://gitlab.freedesktop.org extractVersion=^libxshmfence-(?<version>\d+(\.\d+)*)$
 ARG LIBXSHMFENCE_VERSION=1.3.3
 RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libxshmfence-${LIBXSHMFENCE_VERSION}.tar.xz -o libxshmfence.tar.xz && \
     tar -xf libxshmfence.tar.xz && cd libxshmfence-${LIBXSHMFENCE_VERSION} && \
@@ -2067,36 +2166,42 @@ RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libxshmfence-${
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # i3's XCB utility dependencies.
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxcb-util registryUrl=https://gitlab.freedesktop.org extractVersion=^xcb-util-(?<version>\d+(\.\d+)*)$
 ARG XCB_UTIL_VERSION=0.4.1
 RUN curl -fL --retry 5 https://xcb.freedesktop.org/dist/xcb-util-${XCB_UTIL_VERSION}.tar.xz -o xcb-util.tar.xz && \
     tar -xf xcb-util.tar.xz && cd xcb-util-${XCB_UTIL_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxcb-image registryUrl=https://gitlab.freedesktop.org extractVersion=^xcb-util-image-(?<version>\d+(\.\d+)*)$
 ARG XCB_UTIL_IMAGE_VERSION=0.4.1
 RUN curl -fL --retry 5 https://xcb.freedesktop.org/dist/xcb-util-image-${XCB_UTIL_IMAGE_VERSION}.tar.xz -o xcb-image.tar.xz && \
     tar -xf xcb-image.tar.xz && cd xcb-util-image-${XCB_UTIL_IMAGE_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxcb-render-util registryUrl=https://gitlab.freedesktop.org extractVersion=^xcb-util-renderutil-(?<version>\d+(\.\d+)*)$
 ARG XCB_UTIL_RENDERUTIL_VERSION=0.3.10
 RUN curl -fL --retry 5 https://xcb.freedesktop.org/dist/xcb-util-renderutil-${XCB_UTIL_RENDERUTIL_VERSION}.tar.xz -o xcb-renderutil.tar.xz && \
     tar -xf xcb-renderutil.tar.xz && cd xcb-util-renderutil-${XCB_UTIL_RENDERUTIL_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxcb-cursor registryUrl=https://gitlab.freedesktop.org extractVersion=^xcb-util-cursor-(?<version>\d+(\.\d+)*)$
 ARG XCB_UTIL_CURSOR_VERSION=0.1.5
 RUN curl -fL --retry 5 https://xcb.freedesktop.org/dist/xcb-util-cursor-${XCB_UTIL_CURSOR_VERSION}.tar.xz -o xcb-cursor.tar.xz && \
     tar -xf xcb-cursor.tar.xz && cd xcb-util-cursor-${XCB_UTIL_CURSOR_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxcb-keysyms registryUrl=https://gitlab.freedesktop.org extractVersion=^xcb-util-keysyms-(?<version>\d+(\.\d+)*)$
 ARG XCB_UTIL_KEYSYMS_VERSION=0.4.1
 RUN curl -fL --retry 5 https://xcb.freedesktop.org/dist/xcb-util-keysyms-${XCB_UTIL_KEYSYMS_VERSION}.tar.xz -o xcb-keysyms.tar.xz && \
     tar -xf xcb-keysyms.tar.xz && cd xcb-util-keysyms-${XCB_UTIL_KEYSYMS_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxcb-wm registryUrl=https://gitlab.freedesktop.org extractVersion=^xcb-util-wm-(?<version>\d+(\.\d+)*)$
 ARG XCB_UTIL_WM_VERSION=0.4.2
 RUN curl -fL --retry 5 https://xcb.freedesktop.org/dist/xcb-util-wm-${XCB_UTIL_WM_VERSION}.tar.xz -o xcb-wm.tar.xz && \
     tar -xf xcb-wm.tar.xz && cd xcb-util-wm-${XCB_UTIL_WM_VERSION} && \
@@ -2105,6 +2210,7 @@ RUN curl -fL --retry 5 https://xcb.freedesktop.org/dist/xcb-util-wm-${XCB_UTIL_W
 
 # xcb-util-xrm uses the BSD queue macros. musl does not ship sys/queue.h, so
 # install the header-only compatibility pair from libbsd for this build graph.
+# renovate: datasource=gitlab-tags depName=libbsd/libbsd registryUrl=https://gitlab.freedesktop.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG LIBBSD_HEADERS_VERSION=0.12.2
 RUN curl -fL --retry 5 https://libbsd.freedesktop.org/releases/libbsd-${LIBBSD_HEADERS_VERSION}.tar.xz -o libbsd.tar.xz && \
     tar -xf libbsd.tar.xz && \
@@ -2114,6 +2220,7 @@ RUN curl -fL --retry 5 https://libbsd.freedesktop.org/releases/libbsd-${LIBBSD_H
     cp /usr/include/sys/queue.h /x11-libs/usr/include/sys/queue.h && \
     cp /usr/include/bsd/sys/cdefs.h /x11-libs/usr/include/bsd/sys/cdefs.h
 
+# renovate: datasource=github-tags depName=Airblader/xcb-util-xrm extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG XCB_UTIL_XRM_VERSION=1.3
 RUN curl -fL --retry 5 https://github.com/Airblader/xcb-util-xrm/releases/download/v${XCB_UTIL_XRM_VERSION}/xcb-util-xrm-${XCB_UTIL_XRM_VERSION}.tar.gz -o xcb-xrm.tar.gz && \
     tar -xf xcb-xrm.tar.gz && cd xcb-util-xrm-${XCB_UTIL_XRM_VERSION} && \
@@ -2132,6 +2239,7 @@ RUN curl -fL --retry 5 https://dist.schmorp.de/libev/libev-${LIBEV_VERSION}.tar.
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
+# renovate: datasource=github-tags depName=lloyd/yajl extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG YAJL_VERSION=2.1.0
 RUN curl -fL --retry 5 https://github.com/lloyd/yajl/archive/refs/tags/${YAJL_VERSION}.tar.gz -o yajl.tar.gz && \
     tar -xf yajl.tar.gz && cd yajl-${YAJL_VERSION} && \
@@ -2139,6 +2247,7 @@ RUN curl -fL --retry 5 https://github.com/lloyd/yajl/archive/refs/tags/${YAJL_VE
     cmake -G Ninja -B buildDir -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DBUILD_SHARED_LIBS=ON && \
     ninja -C buildDir && ninja -C buildDir install && DESTDIR=/x11-libs ninja -C buildDir install
 
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxxf86vm registryUrl=https://gitlab.freedesktop.org extractVersion=^libXxf86vm-(?<version>\d+(\.\d+)*)$
 ARG LIBXXF86VM_VERSION=1.1.7
 RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXxf86vm-${LIBXXF86VM_VERSION}.tar.xz -o libXxf86vm.tar.xz && \
     tar -xf libXxf86vm.tar.xz && cd libXxf86vm-${LIBXXF86VM_VERSION} && \
@@ -2154,6 +2263,7 @@ COPY --from=xorgproto /xorgproto /
 COPY --from=xcbproto /xcbproto /
 COPY --from=libxau /libxau /
 COPY --from=libxcb /libxcb /
+# renovate: datasource=github-tags depName=xkbcommon/libxkbcommon extractVersion=^xkbcommon-(?<version>\d+(\.\d+)*)$
 ARG LIBXKBCOMMON_VERSION=1.13.0
 RUN mkdir -p /libxkb-x11
 WORKDIR /build
@@ -2176,6 +2286,7 @@ COPY --from=xcbproto /xcbproto /
 COPY --from=libxau /libxau /
 COPY --from=libxcb /libxcb /
 COPY --from=x11-libs /x11-libs /
+# renovate: datasource=gitlab-tags depName=mesa/mesa registryUrl=https://gitlab.freedesktop.org extractVersion=^mesa-(?<version>\d+(\.\d+)*)$
 ARG MESA_VERSION=25.3.0
 ARG GPU=vm
 RUN mkdir -p /mesa-x11
@@ -2205,6 +2316,7 @@ COPY --from=libxau /libxau /
 COPY --from=libxcb /libxcb /
 COPY --from=x11-libs /x11-libs /
 COPY --from=mesa-x11 /mesa-x11 /
+# renovate: datasource=github-tags depName=anholt/libepoxy extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG LIBEPOXY_VERSION=1.5.10
 RUN mkdir -p /libepoxy-x11
 WORKDIR /build
@@ -2230,6 +2342,7 @@ COPY --from=fontconfig /fontconfig /
 COPY --from=libpng /libpng /
 COPY --from=pcre2 /pcre2 /
 COPY --from=glib2 /glib2 /
+# renovate: datasource=gitlab-tags depName=cairo/cairo registryUrl=https://gitlab.freedesktop.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG CAIRO_VERSION=1.18.4
 RUN mkdir -p /cairo-x11
 WORKDIR /build
@@ -2256,6 +2369,7 @@ COPY --from=fribidi /fribidi /
 COPY --from=cairo-x11 /cairo-x11 /
 COPY --from=pixman /pixman /
 COPY --from=libpng /libpng /
+# renovate: datasource=gitlab-tags depName=GNOME/pango registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG PANGO_VERSION=1.54.0
 RUN mkdir -p /pango-x11
 WORKDIR /build
@@ -2283,6 +2397,7 @@ COPY --from=libdrm /libdrm /
 COPY --from=mesa-x11 /mesa-x11 /
 COPY --from=libepoxy-x11 /libepoxy-x11 /
 COPY --from=libseat /libseat /
+# renovate: datasource=github-tags depName=X11Libre/xserver extractVersion=^xlibre-xserver-(?<version>\d+(\.\d+)*)$
 ARG XLIBRE_VERSION=25.2.0
 RUN mkdir -p /xlibre
 WORKDIR /build
@@ -2313,6 +2428,7 @@ COPY --from=pixman /pixman /
 COPY --from=freetype /freetype /
 COPY --from=x11-libs /x11-libs /
 COPY --from=xlibre /xlibre /
+# renovate: datasource=github-tags depName=X11Libre/xf86-input-libinput extractVersion=^xlibre-xf86-input-libinput-(?<version>\d+(\.\d+)*)$
 ARG XLIBRE_INPUT_LIBINPUT_VERSION=25.0.1
 RUN mkdir -p /xlibre-input-libinput
 WORKDIR /build
@@ -2341,6 +2457,7 @@ COPY --from=fribidi /fribidi /
 COPY --from=freetype /freetype /
 COPY --from=fontconfig /fontconfig /
 COPY --from=libpng /libpng /
+# renovate: datasource=github-tags depName=i3/i3 extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG I3_VERSION=4.25.1
 RUN mkdir -p /i3
 WORKDIR /build
@@ -2366,6 +2483,7 @@ COPY --from=fontconfig /fontconfig /
 COPY tools/hadron-xroot.c /build/hadron-xroot.c
 RUN mkdir -p /x11-desktop-tools/usr/bin
 WORKDIR /build
+# renovate: datasource=gitlab-tags depName=xorg/app/xauth registryUrl=https://gitlab.freedesktop.org extractVersion=^xauth-(?<version>\d+(\.\d+)*)$
 ARG XAUTH_VERSION=1.1.5
 # xauth only uses XmuGetHostname from libXmuu; that function is a thin
 # gethostname(2) wrapper. Use libc directly instead of pulling libXt and the
@@ -2380,6 +2498,7 @@ RUN curl -fL --retry 5 https://www.x.org/releases/individual/app/xauth-${XAUTH_V
     ./configure ${COMMON_CONFIGURE_ARGS} && \
     make -j"$(nproc)" && make install DESTDIR=/x11-desktop-tools
 
+# renovate: datasource=git-tags depName=https://git.suckless.org/st extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG ST_VERSION=0.9.3
 RUN curl -fL --retry 5 https://dl.suckless.org/st/st-${ST_VERSION}.tar.gz -o st.tar.gz && \
     tar -xf st.tar.gz && cd st-${ST_VERSION} && \
@@ -2391,12 +2510,14 @@ RUN curl -fL --retry 5 https://dl.suckless.org/st/st-${ST_VERSION}.tar.gz -o st.
            -e 's|"black", /\* default background colour \*/|"#1a1b26", /* default background colour */|' config.def.h && \
     make -j"$(nproc)" CC=cc && install -m0755 st /x11-desktop-tools/usr/bin/st
 
+# renovate: datasource=git-tags depName=https://git.suckless.org/dmenu extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG DMENU_VERSION=5.3
 RUN curl -fL --retry 5 https://dl.suckless.org/tools/dmenu-${DMENU_VERSION}.tar.gz -o dmenu.tar.gz && \
     tar -xf dmenu.tar.gz && cd dmenu-${DMENU_VERSION} && \
     sed -i -e 's|^PREFIX = .*|PREFIX = /usr|' -e 's|^X11INC = .*|X11INC = /usr/include|' -e 's|^X11LIB = .*|X11LIB = /usr/lib|' config.mk && \
     make -j"$(nproc)" CC=cc && make install CC=cc DESTDIR=/x11-desktop-tools
 
+# renovate: datasource=github-tags depName=kfish/xsel extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG XSEL_VERSION=1.2.1
 RUN curl -fL --retry 5 https://github.com/kfish/xsel/archive/refs/tags/${XSEL_VERSION}.tar.gz -o xsel.tar.gz && \
     tar -xf xsel.tar.gz && cd xsel-${XSEL_VERSION} && \
@@ -2425,6 +2546,7 @@ COPY --from=freetype /freetype /
 COPY --from=fontconfig /fontconfig /
 COPY --from=libpng /libpng /
 COPY --from=gdk-pixbuf /gdk-pixbuf /
+# renovate: datasource=github-tags depName=dunst-project/dunst extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG DUNST_VERSION=1.13.0
 RUN mkdir -p /dunst
 WORKDIR /build
@@ -2451,6 +2573,7 @@ ARG ZIG_VERSION=0.16.0
 # background AND dur_offset_alignment for centering a movie wider than the
 # console (1.3.x's offset is unsigned, so it can't shift left to centre). Needs
 # Zig 0.16.x.
+# renovate: datasource=github-tags depName=fairyglade/ly extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG LY_VERSION=1.4.1
 RUN mkdir -p /ly
 WORKDIR /build
@@ -2481,6 +2604,7 @@ FROM rust:1.97.0-alpine3.22 AS rust-toolchain
 # duktape: the small JavaScript engine polkit evaluates its rules with (the
 # alternative is mozjs, a browser engine's worth of build).
 FROM toolchain AS duktape
+# renovate: datasource=github-tags depName=svaarala/duktape extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG DUKTAPE_VERSION=2.7.0
 RUN mkdir -p /duktape
 WORKDIR /build
@@ -2516,6 +2640,7 @@ COPY --from=pcre2 /pcre2 /
 COPY --from=duktape /duktape /
 COPY --from=gettext-tools /gettext-tools /
 COPY --from=libucontext /libucontext /
+# renovate: datasource=github-tags depName=polkit-org/polkit extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG POLKIT_VERSION=126
 RUN mkdir -p /polkit
 WORKDIR /build
@@ -2541,6 +2666,7 @@ COPY --from=libucontext /libucontext /
 # The GitLab release Alpine builds: it carries the musl fallbacks (shadow
 # entries without fgetspent_r, the wtmp path) that the last tarball lacks.
 # Its version script reads the version from the source directory's name.
+# renovate: datasource=gitlab-tags depName=accountsservice/accountsservice registryUrl=https://gitlab.freedesktop.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG ACCOUNTSSERVICE_VERSION=26.27.3
 RUN mkdir -p /accountsservice
 WORKDIR /build
@@ -2557,6 +2683,7 @@ RUN DESTDIR=/accountsservice ninja -C buildDir install
 # and settings link against. Only the client: PipeWire's pipewire-pulse is the
 # server.
 FROM toolchain AS libsndfile
+# renovate: datasource=github-tags depName=libsndfile/libsndfile extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG LIBSNDFILE_VERSION=1.2.2
 RUN mkdir -p /libsndfile
 WORKDIR /build
@@ -2572,6 +2699,7 @@ FROM toolchain AS libpulse
 COPY --from=glib2 /glib2 /
 COPY --from=pcre2 /pcre2 /
 COPY --from=libsndfile /libsndfile /
+# renovate: datasource=gitlab-tags depName=pulseaudio/pulseaudio registryUrl=https://gitlab.freedesktop.org extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG PULSEAUDIO_VERSION=17.0
 RUN mkdir -p /libpulse
 WORKDIR /build
@@ -2591,6 +2719,7 @@ RUN DESTDIR=/libpulse ninja -C buildDir install
 # dav1d: AV1 decoding for the AVIF wallpapers COSMIC ships. No assembly, so no
 # nasm in the toolchain; the C path is plenty for a few wallpapers.
 FROM toolchain AS dav1d
+# renovate: datasource=gitlab-tags depName=videolan/dav1d registryUrl=https://code.videolan.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG DAV1D_VERSION=1.5.1
 RUN mkdir -p /dav1d
 WORKDIR /build
@@ -2604,6 +2733,7 @@ RUN DESTDIR=/dav1d ninja -C buildDir install
 # reads. Its build wants gettext for the translations, which this toolchain does
 # not have and nothing here needs.
 FROM toolchain AS iso-codes
+# renovate: datasource=gitlab-tags depName=iso-codes-team/iso-codes registryUrl=https://salsa.debian.org extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG ISO_CODES_VERSION=4.18.0
 RUN mkdir -p /iso-codes/usr/share/iso-codes/json /iso-codes/usr/share/pkgconfig
 WORKDIR /build
@@ -2617,6 +2747,7 @@ RUN curl -fL --retry 5 https://salsa.debian.org/iso-codes-team/iso-codes/-/archi
 FROM toolchain AS gstreamer
 COPY --from=glib2 /glib2 /
 COPY --from=pcre2 /pcre2 /
+# renovate: datasource=gitlab-tags depName=gstreamer/gstreamer registryUrl=https://gitlab.freedesktop.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG GSTREAMER_VERSION=1.26.7
 RUN mkdir -p /gstreamer
 WORKDIR /build
@@ -2659,6 +2790,7 @@ COPY --from=bubblewrap /bubblewrap /
 COPY --from=gstreamer /gstreamer /
 # Hadron's libsystemd links libucontext; the linker needs it to resolve it.
 COPY --from=libucontext /libucontext /
+# renovate: datasource=github-tags depName=flatpak/xdg-desktop-portal extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG XDG_DESKTOP_PORTAL_VERSION=1.20.3
 RUN mkdir -p /xdg-desktop-portal
 WORKDIR /build
@@ -2688,6 +2820,7 @@ COPY --from=x11-libs /x11-libs /
 COPY --from=freetype /freetype /
 COPY --from=libpng /libpng /
 COPY --from=libucontext /libucontext /
+# renovate: datasource=gitlab-tags depName=xorg/xserver registryUrl=https://gitlab.freedesktop.org extractVersion=^xwayland-(?<version>\d+(\.\d+)*)$
 ARG XWAYLAND_VERSION=24.1.8
 RUN mkdir -p /xwayland
 WORKDIR /build
@@ -2761,6 +2894,7 @@ ENV CARGO_HOME=/usr/local/cargo \
     CFLAGS="-O2 -pipe" CXXFLAGS="-O2 -pipe" LDFLAGS="-Wl,--as-needed" \
     CARGO_PROFILE_RELEASE_LTO=thin \
     CARGO_INCREMENTAL=0
+# renovate: datasource=crate depName=just
 ARG JUST_VERSION=1.43.0
 RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
     cargo install just --version ${JUST_VERSION} --locked --root /usr/local
@@ -2770,6 +2904,7 @@ WORKDIR /build
 # greetd, the login daemon cosmic-greeter runs under, and pop-launcher, the
 # search backend behind the COSMIC launcher.
 FROM cosmic-build AS greetd
+# renovate: datasource=git-tags depName=https://git.sr.ht/~kennylevinsen/greetd extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG GREETD_VERSION=0.10.3
 RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
     curl -fsSL --retry 5 https://git.sr.ht/~kennylevinsen/greetd/archive/${GREETD_VERSION}.tar.gz | tar -xz && \
@@ -2779,6 +2914,7 @@ RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry
     ! ldd /greetd/usr/bin/greetd | grep 'not found'
 
 FROM cosmic-build AS pop-launcher
+# renovate: datasource=github-tags depName=pop-os/cosmic-session extractVersion=^epoch-(?<version>\d+(\.\d+)*)$
 ARG COSMIC_VERSION=1.11.0
 RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
     curl -fsSL --retry 5 https://github.com/pop-os/launcher/archive/refs/tags/epoch-${COSMIC_VERSION}.tar.gz | tar -xz && \
@@ -2792,6 +2928,7 @@ RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry
 # release profiles differ (panic strategy, LTO), so little compiled code is
 # shared between them, and keeping it would grow by gigabytes per component.
 FROM cosmic-build AS cosmic
+# renovate: datasource=github-tags depName=pop-os/cosmic-session extractVersion=^epoch-(?<version>\d+(\.\d+)*)$
 ARG COSMIC_VERSION=1.11.0
 ENV COSMIC_VERSION=${COSMIC_VERSION} COSMIC_OUT=/cosmic
 ENV CARGO_TARGET_DIR=/cargo-target
@@ -2854,6 +2991,7 @@ RUN mkdir -p /build/icons /build/wallpapers && \
 # cosmic-initial-setup filters on; musl accepts any locale name.
 FROM toolchain AS musl-locales
 COPY --from=gettext-tools /gettext-tools /
+# renovate: datasource=gitlab-tags depName=adelie/musl-locales registryUrl=https://git.adelielinux.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG MUSL_LOCALES_VERSION=0.1.0
 ARG APORTS_COMMIT=65780305dd2517157357121ccddbe95c84e6d5a4
 WORKDIR /build
@@ -2870,6 +3008,7 @@ RUN curl -fsSL --retry 5 https://git.adelielinux.org/adelie/musl-locales/-/archi
 # applications install their own icons. Only its index.theme (and the empty
 # size directories it declares); without it no app icon resolves.
 FROM toolchain AS hicolor-icon-theme
+# renovate: datasource=gitlab-tags depName=xdg/default-icon-theme registryUrl=https://gitlab.freedesktop.org extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG HICOLOR_VERSION=0.18
 WORKDIR /build
 RUN curl -fsSL --retry 5 https://icon-theme.freedesktop.org/releases/hicolor-icon-theme-${HICOLOR_VERSION}.tar.xz | tar -xJ && \

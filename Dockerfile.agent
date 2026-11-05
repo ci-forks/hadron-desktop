@@ -47,9 +47,13 @@ COPY --from=rust-toolchain /sbin/ldconfig /sbin/ldconfig
 RUN sed -i '$a exit 0' /sbin/ldconfig
 RUN ldconfig
 ENV PKG_CONFIG_PATH=/usr/lib/pkgconfig:/usr/share/pkgconfig
+# renovate: datasource=gitlab-tags depName=xorg/lib/libxtst registryUrl=https://gitlab.freedesktop.org extractVersion=^libXtst-(?<version>\d+(\.\d+)*)$
 ARG LIBXTST_VERSION=1.2.5
+# renovate: datasource=gitlab-tags depName=GNOME/gsettings-desktop-schemas registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG GSETTINGS_SCHEMAS_VERSION=47.1
+# renovate: datasource=gitlab-tags depName=GNOME/at-spi2-core registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG ATSPI_VERSION=2.54.0
+# renovate: datasource=gitlab-tags depName=GNOME/gtk registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG GTK3_VERSION=3.24.43
 ARG CUA_COMMIT=3cadb5f82e7d2ed071a2082764276ec872a52135
 

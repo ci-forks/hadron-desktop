@@ -127,6 +127,15 @@ publishes a newer release (and its images are pullable), it pins it, commits to
 `main`, tags the next patch version and dispatches the release pipeline below.
 A failed release publishes nothing, so installed systems never see it.
 
+## Updating components
+
+Every other source version is an `ARG <NAME>_VERSION=` in the Dockerfiles,
+under a `# renovate:` comment that names where its releases are tagged.
+Renovate (`renovate.json`) opens update pull requests on Monday mornings;
+major updates wait for approval on its Dependency Dashboard issue. A new pin
+needs the comment, or an entry in `scripts/check-renovate-pins.sh` with the
+reason it is updated by hand. CI runs that script.
+
 ## Releases
 
 Pushing a `v`-prefixed tag runs `.github/workflows/release.yml`. The workflow

@@ -1,0 +1,179 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "enabledManagers": [
+    "custom.regex",
+    "github-actions",
+    "gomod"
+  ],
+  "postUpdateOptions": [
+    "gomodTidy"
+  ],
+  "labels": [
+    "dependencies"
+  ],
+  "schedule": [
+    "before 6am on monday"
+  ],
+  "timezone": "Europe/Rome",
+  "dependencyDashboard": true,
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+  "major": {
+    "dependencyDashboardApproval": true
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Source versions pinned as ARG FOO_VERSION=, each under a '# renovate:' comment",
+      "managerFilePatterns": [
+        "/(^|/)Dockerfile[^/]*$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: registryUrl=(?<registryUrl>\\S+))?(?: versioning=(?<versioning>\\S+))?(?: extractVersion=(?<extractVersion>\\S+))?\\s*\\nARG [A-Z0-9_]+_VERSION=(?<currentValue>\\S+)"
+      ],
+      "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}loose{{/if}}"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Release candidates numbered x.y.90 and up (wayland, libinput, Xwayland)",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "allowedVersions": "!/\\.9\\d{1,2}$/"
+    },
+    {
+      "description": "Projects whose odd minor versions are development releases",
+      "matchDepNames": [
+        "GNOME/glib",
+        "GNOME/pango",
+        "GNOME/gdk-pixbuf",
+        "GNOME/json-glib",
+        "GNOME/at-spi2-core",
+        "NetworkManager/NetworkManager",
+        "gstreamer/gstreamer",
+        "pipewire/pipewire",
+        "cairo/cairo",
+        "pixman/pixman"
+      ],
+      "allowedVersions": "/^\\d+\\.\\d*[02468]\\.\\d+$/"
+    },
+    {
+      "description": "x.90 is the development series of the next major version",
+      "matchDepNames": [
+        "GNOME/gdk-pixbuf"
+      ],
+      "allowedVersions": "<2.90"
+    },
+    {
+      "matchDepNames": [
+        "GNOME/pango"
+      ],
+      "allowedVersions": "<1.90"
+    },
+    {
+      "description": "GTK 3 and the C++ bindings of the GTK 3 stack: a newer series is a different API",
+      "groupName": "GTK 3 stack",
+      "matchDepNames": [
+        "GNOME/gtk",
+        "libsigcplusplus/libsigcplusplus",
+        "GNOME/glibmm",
+        "cairo/cairomm",
+        "GNOME/pangomm",
+        "GNOME/atkmm",
+        "GNOME/gtkmm"
+      ]
+    },
+    {
+      "matchDepNames": [
+        "GNOME/gtk",
+        "GNOME/gtkmm"
+      ],
+      "allowedVersions": "/^3\\.24\\./"
+    },
+    {
+      "matchDepNames": [
+        "libsigcplusplus/libsigcplusplus"
+      ],
+      "allowedVersions": "/^2\\.\\d*[02468]\\./"
+    },
+    {
+      "matchDepNames": [
+        "GNOME/glibmm"
+      ],
+      "allowedVersions": "/^2\\.66\\./"
+    },
+    {
+      "matchDepNames": [
+        "cairo/cairomm"
+      ],
+      "allowedVersions": "/^1\\.14\\./"
+    },
+    {
+      "matchDepNames": [
+        "GNOME/pangomm"
+      ],
+      "allowedVersions": "/^2\\.46\\./"
+    },
+    {
+      "matchDepNames": [
+        "GNOME/atkmm"
+      ],
+      "allowedVersions": "/^2\\.28\\./"
+    },
+    {
+      "description": "The SPIR-V LLVM translator must match the LLVM major",
+      "groupName": "LLVM",
+      "matchDepNames": [
+        "llvm/llvm-project",
+        "KhronosGroup/SPIRV-LLVM-Translator"
+      ]
+    },
+    {
+      "groupName": "SPIR-V",
+      "matchDepNames": [
+        "KhronosGroup/SPIRV-Headers",
+        "KhronosGroup/SPIRV-Tools"
+      ]
+    },
+    {
+      "description": "Each sway release needs one wlroots series",
+      "groupName": "sway and wlroots",
+      "matchDepNames": [
+        "swaywm/sway",
+        "wlroots/wlroots"
+      ]
+    },
+    {
+      "groupName": "PipeWire",
+      "matchDepNames": [
+        "pipewire/pipewire",
+        "pipewire/wireplumber"
+      ]
+    },
+    {
+      "groupName": "X11 libraries",
+      "matchDepNames": [
+        "xorg/lib/**",
+        "xorg/proto/**",
+        "xorg/app/**"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ]
+    },
+    {
+      "groupName": "foot",
+      "matchDepNames": [
+        "dnkl/tllist",
+        "dnkl/fcft",
+        "dnkl/foot",
+        "dnkl/fuzzel"
+      ]
+    }
+  ]
+}
