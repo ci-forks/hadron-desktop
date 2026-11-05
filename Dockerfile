@@ -853,11 +853,11 @@ RUN make -C libdbusmenu-glib -j"$(nproc)" && make -C libdbusmenu-gtk -j"$(nproc)
 # DRM and gets bounced straight back to the login manager.
 FROM toolchain AS libseat
 COPY --from=libucontext /libucontext /
-# renovate: datasource=git-tags depName=https://git.sr.ht/~kennylevinsen/seatd extractVersion=^(?<version>\d+(\.\d+)*)$
+# renovate: datasource=github-tags depName=kennylevinsen/seatd
 ARG SEATD_VERSION=0.9.1
 RUN mkdir -p /libseat
 WORKDIR /build
-RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://git.sr.ht/~kennylevinsen/seatd/archive/${SEATD_VERSION}.tar.gz -o seatd.tar.gz && tar -xf seatd.tar.gz && rm seatd.tar.gz && mv seatd-* seatd-src
+RUN curl -f --retry 5 --retry-delay 3 --retry-all-errors -L https://github.com/kennylevinsen/seatd/archive/refs/tags/${SEATD_VERSION}.tar.gz -o seatd.tar.gz && tar -xf seatd.tar.gz && rm seatd.tar.gz && mv seatd-* seatd-src
 WORKDIR /build/seatd-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} \
@@ -2904,10 +2904,10 @@ WORKDIR /build
 # greetd, the login daemon cosmic-greeter runs under, and pop-launcher, the
 # search backend behind the COSMIC launcher.
 FROM cosmic-build AS greetd
-# renovate: datasource=git-tags depName=https://git.sr.ht/~kennylevinsen/greetd extractVersion=^(?<version>\d+(\.\d+)*)$
+# renovate: datasource=github-tags depName=kennylevinsen/greetd
 ARG GREETD_VERSION=0.10.3
 RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
-    curl --retry-all-errors -fsSL --retry 5 https://git.sr.ht/~kennylevinsen/greetd/archive/${GREETD_VERSION}.tar.gz | tar -xz && \
+    curl --retry-all-errors -fsSL --retry 5 https://github.com/kennylevinsen/greetd/archive/refs/tags/${GREETD_VERSION}.tar.gz | tar -xz && \
     cd greetd-${GREETD_VERSION} && cargo build --release --locked && \
     install -Dm755 target/release/greetd /greetd/usr/bin/greetd && \
     install -Dm755 target/release/agreety /greetd/usr/bin/agreety && \
