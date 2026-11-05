@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -202,7 +203,10 @@ func setupFlavor(t *testing.T, flavor, installed, latest string) {
 	needRoot = func() bool { return false }
 	// Never let a test reach the real `systemctl reboot`.
 	rebootCommand = func() *exec.Cmd { return exec.Command("false") }
-	t.Cleanup(func() { needRoot, rebootCommand = oldRoot, oldReboot })
+	// No test may open the real system bus; tests that want a daemon use useDaemon.
+	oldDial := dialDaemon
+	dialDaemon = func() (daemonClient, error) { return nil, errors.New("no daemon in this test") }
+	t.Cleanup(func() { needRoot, rebootCommand, dialDaemon = oldRoot, oldReboot, oldDial })
 }
 
 func runCLI(stdin string, args ...string) (int, string, string) {

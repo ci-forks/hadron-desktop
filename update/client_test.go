@@ -5,16 +5,20 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/godbus/dbus/v5"
 )
 
 // fakeDaemon is daemonClient without a bus. Apply feeds script to the watcher.
 type fakeDaemon struct {
-	status    Status
-	releases  []string
-	info      InspectInfo
-	inspectEr []error // returned in order before success
-	applyErr  error
-	script    []Event
+	status     Status
+	releases   []string
+	info       InspectInfo
+	inspectEr  []error // returned in order before success
+	applyErr   error
+	watchErr   error
+	closeAfter bool // close the channel after the script, as when the daemon dies
+	script     []Event
 
 	calls   []string
 	events  chan Event
@@ -56,13 +60,19 @@ func (f *fakeDaemon) Apply(ref, digest string, adv bool) error {
 	for _, e := range f.script {
 		f.events <- e
 	}
+	if f.closeAfter {
+		close(f.events)
+	}
 	return nil
 }
 func (f *fakeDaemon) Cancel() error { f.rec("Cancel"); return nil }
 func (f *fakeDaemon) Reboot() error { f.rec("Reboot"); return nil }
-func (f *fakeDaemon) Watch() (<-chan Event, func()) {
+func (f *fakeDaemon) Watch() (<-chan Event, func(), error) {
+	if f.watchErr != nil {
+		return nil, nil, f.watchErr
+	}
 	f.events = make(chan Event, 16)
-	return f.events, func() {}
+	return f.events, func() {}, nil
 }
 func (f *fakeDaemon) Close() {}
 
@@ -82,7 +92,7 @@ func okDaemon() *fakeDaemon {
 		releases: []string{"v0.1.0", "v0.2.0"},
 		info:     InspectInfo{Digest: digestA, Flavor: "sway", Version: "v0.2.0", Trusted: true},
 		script: []Event{
-			{Line: "pulling"}, {Status: &Status{State: StateApplying}},
+			{Line: "pulling"}, {Status: &Status{State: StateInspecting}}, {Status: &Status{State: StateApplying}},
 			{Status: &Status{State: StateRebootPending}},
 		},
 	}
@@ -226,7 +236,7 @@ func TestSwitchWarnsAndAsks(t *testing.T) {
 	}
 	f = okDaemon()
 	useDaemon(t, f)
-	if code, _, e := runCLI("y\ny\nn\n", "switch", "niri"); code != exitOK {
+	if code, _, e := runCLI("y\nn\n", "switch", "niri"); code != exitOK {
 		t.Fatalf("code %d %s", code, e)
 	}
 	if !strings.HasSuffix(f.applied[0], ":niri-v0.2.0") {
@@ -278,7 +288,7 @@ func TestInspectBusyRetriesThenGivesUp(t *testing.T) {
 func TestInstallErrorStateExits1(t *testing.T) {
 	setup(t, "v0.1.0", "v0.2.0")
 	f := okDaemon()
-	f.script = []Event{{Status: &Status{State: StateError, Detail: "disk full"}}}
+	f.script = []Event{{Status: &Status{State: StateApplying}}, {Status: &Status{State: StateError, Detail: "disk full"}}}
 	useDaemon(t, f)
 	code, _, errOut := runCLI("", "upgrade", "--yes", "--reboot")
 	if code != exitError || !strings.Contains(errOut, "disk full") || f.called("Reboot") {
@@ -335,5 +345,149 @@ func TestStatusPrintsThePin(t *testing.T) {
 	f.status.Pin = ""
 	if _, out, _ := runCLI("", "status"); !strings.Contains(out, "Pin:        none") {
 		t.Fatalf("out %q", out)
+	}
+}
+
+func TestLostConnectionExits1(t *testing.T) {
+	setup(t, "v0.1.0", "v0.2.0")
+	f := okDaemon()
+	f.script = []Event{{Status: &Status{State: StateApplying}}}
+	f.closeAfter = true
+	useDaemon(t, f)
+	code, _, errOut := runCLI("", "upgrade", "--yes", "--reboot")
+	if code != exitError || !strings.Contains(errOut, "lost the connection") || f.called("Reboot") {
+		t.Fatalf("code %d, stderr %q", code, errOut)
+	}
+}
+
+func TestWatchErrorStopsBeforeApply(t *testing.T) {
+	setup(t, "v0.1.0", "v0.2.0")
+	f := okDaemon()
+	f.watchErr = errors.New("no match")
+	useDaemon(t, f)
+	if code, _, _ := runCLI("", "upgrade", "--yes"); code != exitError || f.called("Apply") {
+		t.Fatalf("code %d, calls %v", code, f.calls)
+	}
+}
+
+// A failed Check between Watch and Apply leaves StateError; it is not this job.
+func TestStaleErrorBeforeTheJobStartsIsIgnored(t *testing.T) {
+	setup(t, "v0.1.0", "v0.2.0")
+	f := okDaemon()
+	f.script = []Event{
+		{Status: &Status{State: StateError, Detail: "github down"}},
+		{Status: &Status{State: StateInspecting}}, {Status: &Status{State: StateApplying}},
+		{Status: &Status{State: StateRebootPending}},
+	}
+	useDaemon(t, f)
+	if code, _, e := runCLI("", "upgrade", "--yes"); code != exitOK {
+		t.Fatalf("code %d, stderr %q", code, e)
+	}
+}
+
+func TestWrapBusErr(t *testing.T) {
+	name := busInterface + ".Error.Busy"
+	for label, err := range map[string]error{
+		"value":   dbus.Error{Name: name, Body: []any{"slot taken"}},
+		"pointer": &dbus.Error{Name: name, Body: []any{"slot taken"}},
+	} {
+		got := wrapBusErr(err)
+		if daemonErrName(got) != "Busy" || got.Error() != "slot taken" {
+			t.Errorf("%s: %v (%q)", label, got, daemonErrName(got))
+		}
+	}
+	if got := wrapBusErr(dbus.Error{Name: name}); daemonErrName(got) != "Busy" || got.Error() != name {
+		t.Errorf("missing body: %v", got)
+	}
+	other := dbus.Error{Name: "org.freedesktop.DBus.Error.ServiceUnknown", Body: []any{"x"}}
+	if got := wrapBusErr(other); daemonErrName(got) != "" {
+		t.Errorf("foreign error mapped: %v", got)
+	}
+	plain := errors.New("plain")
+	if wrapBusErr(plain) != plain {
+		t.Error("plain error changed")
+	}
+}
+
+func TestStatusFromDict(t *testing.T) {
+	st := statusFromDict(map[string]dbus.Variant{
+		"state": dbus.MakeVariant("applying"), "installed": dbus.MakeVariant("v1"),
+		"latest": dbus.MakeVariant("v2"), "pin": dbus.MakeVariant("p"),
+		"detail": dbus.MakeVariant("d"), "advanced": dbus.MakeVariant(true),
+	})
+	want := Status{State: StateApplying, Installed: "v1", Latest: "v2", Pin: "p", Detail: "d", Advanced: true}
+	if st != want {
+		t.Fatalf("%+v", st)
+	}
+	if statusFromDict(nil) != (Status{}) {
+		t.Fatal("nil dict")
+	}
+}
+
+func TestEventFromSignal(t *testing.T) {
+	d := map[string]dbus.Variant{"state": dbus.MakeVariant("error"), "detail": dbus.MakeVariant("boom")}
+	ev, ok := eventFromSignal(&dbus.Signal{Name: busInterface + ".StateChanged", Body: []any{d}})
+	if !ok || ev.Status == nil || ev.Status.State != StateError || ev.Status.Detail != "boom" {
+		t.Fatalf("%+v %v", ev, ok)
+	}
+	ev, ok = eventFromSignal(&dbus.Signal{Name: busInterface + ".Progress", Body: []any{"line 1"}})
+	if !ok || ev.Line != "line 1" || ev.Status != nil {
+		t.Fatalf("%+v %v", ev, ok)
+	}
+	for _, s := range []*dbus.Signal{
+		{Name: busInterface + ".Progress", Body: []any{1}},
+		{Name: busInterface + ".StateChanged", Body: []any{"x"}},
+		{Name: busInterface + ".StateChanged"},
+		{Name: "other.Signal", Body: []any{"x"}},
+	} {
+		if _, ok := eventFromSignal(s); ok {
+			t.Errorf("decoded %+v", s)
+		}
+	}
+}
+
+func TestOwnerLost(t *testing.T) {
+	n := "org.freedesktop.DBus.NameOwnerChanged"
+	if !ownerLost(&dbus.Signal{Name: n, Body: []any{busName, ":1.5", ""}}) {
+		t.Error("owner loss missed")
+	}
+	if ownerLost(&dbus.Signal{Name: n, Body: []any{busName, "", ":1.6"}}) {
+		t.Error("a new owner is not a loss")
+	}
+	if ownerLost(&dbus.Signal{Name: n, Body: []any{"other.Name", ":1.5", ""}}) {
+		t.Error("another name")
+	}
+}
+
+// fakeObj is a BusObject whose Call answers from a script.
+type fakeObj struct {
+	dbus.BusObject
+	results []*dbus.Call
+	n       int
+}
+
+func (o *fakeObj) Call(method string, flags dbus.Flags, args ...any) *dbus.Call {
+	c := o.results[o.n]
+	o.n++
+	return c
+}
+
+func TestCallRetriesOnceOnExiting(t *testing.T) {
+	exiting := &dbus.Call{Err: dbus.Error{Name: busInterface + ".Error.Exiting", Body: []any{"exiting"}}}
+	obj := &fakeObj{results: []*dbus.Call{exiting, {Body: []any{[]string{"v1"}}}}}
+	c := &client{obj: obj}
+	tags, err := c.Releases()
+	if err != nil || len(tags) != 1 || obj.n != 2 {
+		t.Fatalf("tags %v err %v calls %d", tags, err, obj.n)
+	}
+	obj = &fakeObj{results: []*dbus.Call{exiting, exiting, {}}}
+	c = &client{obj: obj}
+	if err := c.Check(); daemonErrName(err) != "Exiting" || obj.n != 2 {
+		t.Fatalf("err %v calls %d: must retry exactly once", err, obj.n)
+	}
+	obj = &fakeObj{results: []*dbus.Call{{Err: dbus.Error{Name: busInterface + ".Error.Refused"}}, {}}}
+	c = &client{obj: obj}
+	if err := c.Check(); daemonErrName(err) != "Refused" || obj.n != 1 {
+		t.Fatalf("err %v calls %d: other errors are not retried", err, obj.n)
 	}
 }

@@ -532,11 +532,12 @@ func cmdSwitch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return exitError
 	}
 	fmt.Fprintln(stdout, "Your per-user desktop settings may not carry over, and the login screen may change.")
-	if !*yes && !confirm(in, stdout, fmt.Sprintf("Switch to %s?", flavor), false) {
+	// The warning's own question replaces "Continue?", default No.
+	if !*yes && !confirm(in, stdout, "Switch anyway?", false) {
 		fmt.Fprintln(stdout, "Cancelled.")
 		return exitOK
 	}
-	return installFlow(c, rel, ref.String(), false, *yes, *reboot, in, stdout, stderr)
+	return installFlow(c, rel, ref.String(), false, true, *reboot, in, stdout, stderr)
 }
 
 func cmdReboot(args []string, stdout, stderr io.Writer) int {
@@ -604,16 +605,31 @@ func installFlow(c daemonClient, rel Release, ref string, advanced, yes, reboot 
 		return exitOK
 	}
 
-	events, stop := c.Watch()
+	events, stop, err := c.Watch()
+	if err != nil {
+		fmt.Fprintln(stderr, "hadron-update:", err)
+		return exitError
+	}
 	defer stop()
 	if err := c.Apply(ref, info.Digest, advanced); err != nil {
 		return daemonFail(stderr, "", err)
 	}
+	// A Check that failed between Watch and Apply leaves StateError behind;
+	// it is not this install. Only a state this job passes through, seen
+	// after Apply, makes error and reboot-pending count.
+	started := false
 	for ev := range events {
 		if ev.Line != "" {
 			fmt.Fprintln(stdout, ev.Line)
 		}
 		if ev.Status == nil {
+			continue
+		}
+		switch ev.Status.State {
+		case StateInspecting, StateApplying:
+			started = true
+		}
+		if !started {
 			continue
 		}
 		switch ev.Status.State {

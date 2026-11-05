@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/godbus/dbus/v5"
 )
@@ -39,7 +41,7 @@ type daemonClient interface {
 	// Watch subscribes to StateChanged and Progress. Subscribe before Apply,
 	// so a fast job cannot finish unseen. stop ends the subscription and
 	// closes the channel.
-	Watch() (events <-chan Event, stop func())
+	Watch() (events <-chan Event, stop func(), err error)
 	Close()
 }
 
@@ -145,57 +147,103 @@ func (c *client) Apply(ref, digest string, advanced bool) error {
 func (c *client) Cancel() error { return c.call("Cancel", nil) }
 func (c *client) Reboot() error { return c.call("Reboot", nil) }
 
-func (c *client) Watch() (<-chan Event, func()) {
+// statusPoll is the backstop for a missed signal: Watch also asks Status this
+// often. A variable so tests can shorten it.
+var statusPoll = 5 * time.Second
+
+// eventFromSignal decodes a StateChanged or Progress signal. ok is false for
+// any other signal or a malformed body.
+func eventFromSignal(s *dbus.Signal) (ev Event, ok bool) {
+	if len(s.Body) != 1 {
+		return ev, false
+	}
+	switch s.Name {
+	case busInterface + ".StateChanged":
+		m, isMap := s.Body[0].(map[string]dbus.Variant)
+		if !isMap {
+			return ev, false
+		}
+		st := statusFromDict(m)
+		ev.Status = &st
+		return ev, true
+	case busInterface + ".Progress":
+		line, isStr := s.Body[0].(string)
+		return Event{Line: line}, isStr
+	}
+	return ev, false
+}
+
+// ownerLost reports whether s says the service's bus name has no owner any
+// more: the daemon died, and no further signal will come.
+func ownerLost(s *dbus.Signal) bool {
+	if s.Name != "org.freedesktop.DBus.NameOwnerChanged" || len(s.Body) != 3 {
+		return false
+	}
+	name, _ := s.Body[0].(string)
+	newOwner, _ := s.Body[2].(string)
+	return name == busName && newOwner == ""
+}
+
+// Watch also closes the channel when the service's name loses its owner, and
+// polls Status as a backstop, so a caller never waits on a dead job.
+func (c *client) Watch() (<-chan Event, func(), error) {
 	out := make(chan Event, 64)
 	sigs := make(chan *dbus.Signal, 64)
 	opts := []dbus.MatchOption{dbus.WithMatchSender(busName), dbus.WithMatchObjectPath(busPath), dbus.WithMatchInterface(busInterface)}
-	_ = c.conn.AddMatchSignal(opts...)
+	ownerOpts := []dbus.MatchOption{
+		dbus.WithMatchSender("org.freedesktop.DBus"),
+		dbus.WithMatchInterface("org.freedesktop.DBus"),
+		dbus.WithMatchMember("NameOwnerChanged"),
+		dbus.WithMatchArg(0, busName),
+	}
+	if err := c.conn.AddMatchSignal(opts...); err != nil {
+		return nil, nil, fmt.Errorf("subscribing to the update service: %w", err)
+	}
+	if err := c.conn.AddMatchSignal(ownerOpts...); err != nil {
+		_ = c.conn.RemoveMatchSignal(opts...)
+		return nil, nil, fmt.Errorf("watching the update service: %w", err)
+	}
 	c.conn.Signal(sigs)
 	done := make(chan struct{})
+	send := func(ev Event) bool {
+		select {
+		case out <- ev:
+			return true
+		case <-done:
+			return false
+		}
+	}
 	go func() {
 		defer close(out)
+		tick := time.NewTicker(statusPoll)
+		defer tick.Stop()
 		for {
 			select {
 			case <-done:
 				return
-			case s, ok := <-sigs:
-				if !ok {
+			case <-tick.C:
+				if st, err := c.Status(); err == nil && !send(Event{Status: &st}) {
 					return
 				}
-				var ev Event
-				switch s.Name {
-				case busInterface + ".StateChanged":
-					if len(s.Body) == 1 {
-						if m, ok := s.Body[0].(map[string]dbus.Variant); ok {
-							st := statusFromDict(m)
-							ev.Status = &st
-						}
-					}
-				case busInterface + ".Progress":
-					if len(s.Body) == 1 {
-						ev.Line, _ = s.Body[0].(string)
-					}
-				default:
-					continue
+			case s, ok := <-sigs:
+				if !ok || ownerLost(s) {
+					return
 				}
-				select {
-				case out <- ev:
-				case <-done:
+				if ev, ok := eventFromSignal(s); ok && !send(ev) {
 					return
 				}
 			}
 		}
 	}()
-	var once bool
+	var once sync.Once
 	return out, func() {
-		if once {
-			return
-		}
-		once = true
-		close(done)
-		c.conn.RemoveSignal(sigs)
-		_ = c.conn.RemoveMatchSignal(opts...)
-	}
+		once.Do(func() {
+			close(done)
+			c.conn.RemoveSignal(sigs)
+			_ = c.conn.RemoveMatchSignal(opts...)
+			_ = c.conn.RemoveMatchSignal(ownerOpts...)
+		})
+	}, nil
 }
 
 func str(m map[string]dbus.Variant, k string) string {
