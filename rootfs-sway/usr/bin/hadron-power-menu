@@ -4,9 +4,10 @@
 # unprivileged session; they go through sudo instead. The desktop user is in
 # `admin`, which Kairos' 10_accounting stage gives passwordless sudo, so -n
 # never prompts.
-sel=$(printf '%s\n' "󰍃  Log out" "󰒲  Suspend" "󰜉  Reboot" "󰐥  Power off" |
-    fuzzel --dmenu --width=24 --lines=4 --prompt='Power > ') || exit 0
+sel=$(printf '%s\n' "󰌾  Lock" "󰍃  Log out" "󰒲  Suspend" "󰜉  Reboot" "󰐥  Power off" |
+    fuzzel --dmenu --width=24 --lines=5 --prompt='Power > ') || exit 0
 case "$sel" in
+    *Lock)        swaylock -f ;;
     *"Log out")   swaymsg exit ;;
     *Suspend)     sudo -n /usr/bin/systemctl suspend ;;
     *Reboot)      sudo -n /usr/bin/systemctl reboot ;;

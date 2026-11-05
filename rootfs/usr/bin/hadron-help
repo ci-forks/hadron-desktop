@@ -60,7 +60,11 @@ section "System"
 row "Super + N"              "Wi-Fi"
 row "Super + Shift + A"      "audio output"
 row "Super + Shift + B"      "Bluetooth"
-if [ "${XDG_CURRENT_DESKTOP:-}" = sway ]; then
+row "Super + Alt + L"        "lock the screen"
+if [ "${XDG_CURRENT_DESKTOP:-}" = i3 ]; then
+row "Print"                  "screenshot to the clipboard and ~/Pictures"
+row "Super + Print"          "screenshot of an area or a window"
+else
 row "Print"                  "screenshot to the clipboard"
 row "Super + Print"          "screenshot of an area"
 fi

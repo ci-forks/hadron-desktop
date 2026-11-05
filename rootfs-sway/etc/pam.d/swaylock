@@ -1,0 +1,6 @@
+#%PAM-1.0
+# swaylock checks the user's password through Hadron's `login` stack, as
+# upstream's own file does. pam_unix runs as the user here, so it reads
+# /etc/shadow through the setuid unix_chkpwd helper (Dockerfile `default`
+# stage). Without this file PAM falls back to `other`, which denies everything.
+auth       include      login

@@ -1958,6 +1958,33 @@ RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dman-pages=disabled -Dlogind=ena
 RUN DESTDIR=/swayidle ninja -C buildDir install
 
 
+# swaylock — screen locker, run by the Super+Alt+L binding and by swayidle on
+# idle and before sleep. Built against PAM: it checks the password through the
+# service in rootfs-sway/etc/pam.d/swaylock (pam_unix's setuid unix_chkpwd
+# helper reads /etc/shadow for it), so the binary itself is not setuid.
+# Colours come from rootfs-sway/etc/swaylock/config.
+FROM toolchain AS swaylock
+COPY --from=wayland /wayland /
+COPY --from=libxkb /libxkb /
+COPY --from=cairo /cairo /
+COPY --from=pixman /pixman /
+COPY --from=glib2 /glib2 /
+COPY --from=pcre2 /pcre2 /
+COPY --from=freetype /freetype /
+COPY --from=fontconfig /fontconfig /
+COPY --from=libpng /libpng /
+# renovate: datasource=github-tags depName=swaywm/swaylock extractVersion=^v(?<version>\d+(\.\d+)*)$
+ARG SWAYLOCK_VERSION=1.8.6
+RUN mkdir -p /swaylock
+WORKDIR /build
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://github.com/swaywm/swaylock/releases/download/v${SWAYLOCK_VERSION}/swaylock-${SWAYLOCK_VERSION}.tar.gz -o swaylock.tar.gz && tar -xzf swaylock.tar.gz && rm swaylock.tar.gz && mv swaylock-* swaylock-src
+WORKDIR /build/swaylock-src
+RUN pip3 install meson ninja
+RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dpam=enabled -Dgdk-pixbuf=disabled -Dman-pages=disabled \
+      -Dzsh-completions=false -Dbash-completions=false -Dfish-completions=false
+RUN DESTDIR=/swaylock ninja -C buildDir install
+
+
 # X protocol libs — ly links libxcb (X11 session support) even in a Wayland setup
 FROM toolchain AS xorgproto
 # renovate: datasource=gitlab-tags depName=xorg/proto/xorgproto registryUrl=https://gitlab.freedesktop.org extractVersion=^xorgproto-(?<version>\d+(\.\d+)*)$
@@ -2004,6 +2031,13 @@ RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://xcb.freedesktop
 WORKDIR /build/libxcb-src
 RUN ./configure ${COMMON_CONFIGURE_ARGS} --build=${BUILD} --disable-dependency-tracking
 RUN make -j$(nproc) && make install DESTDIR=/libxcb
+
+
+# Rust compiler from the pinned Alpine image: build time only, nothing it links
+# ships. Used by the i3 screenshot tools and the COSMIC stages, the same way
+# Dockerfile.agent builds cua-driver. It is declared before both because
+# BuildKit resolves --from only against stages defined above the consumer.
+FROM rust:1.97.0-alpine3.22 AS rust-toolchain
 
 
 # ===========================================================================
@@ -2530,6 +2564,21 @@ RUN curl --retry-all-errors -fL --retry 5 https://github.com/kfish/xsel/archive/
     autoreconf -fi && ./configure ${COMMON_CONFIGURE_ARGS} && \
     make -j"$(nproc)" && make install DESTDIR=/x11-desktop-tools
 
+# xclip puts the i3 screenshots on the clipboard. xsel above cannot: it only
+# offers text targets, and a pasted screenshot needs image/png (`xclip -t`).
+# Like xauth, xclip only takes two atom macros from libXmu; define them with
+# XInternAtom instead of pulling libXmu, libXt, libSM and libICE into the image.
+# The Xmu header also brought in Xresource.h and string.h, so include those.
+# renovate: datasource=github-tags depName=astrand/xclip extractVersion=^(?<version>\d+(\.\d+)*)$
+ARG XCLIP_VERSION=0.13
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/astrand/xclip/archive/refs/tags/${XCLIP_VERSION}.tar.gz -o xclip.tar.gz && \
+    tar -xf xclip.tar.gz && cd xclip-${XCLIP_VERSION} && \
+    sed -i -e '/X11\/Xmu\/Atoms.h/d' -e '/X11\/Intrinsic.h/d' -e '/AC_CHECK_LIB(Xmu/d' configure.ac && \
+    sed -i 's/ -lXmu//' Makefile.in && \
+    sed -i 's|^#include <X11/Xmu/Atoms.h>$|#include <X11/Xresource.h>\n#include <string.h>\n#define XA_CLIPBOARD(d) XInternAtom((d), "CLIPBOARD", False)\n#define XA_UTF8_STRING(d) XInternAtom((d), "UTF8_STRING", False)|' xclip.c && \
+    autoreconf -fi && ./configure ${COMMON_CONFIGURE_ARGS} && \
+    make -j"$(nproc)" && install -m0755 xclip /x11-desktop-tools/usr/bin/xclip
+
 RUN cc -O2 -Wall -Wextra /build/hadron-xroot.c $(pkg-config --cflags --libs x11) -o /x11-desktop-tools/usr/bin/hadron-xroot
 
 
@@ -2562,6 +2611,88 @@ WORKDIR /build/src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dx11=enabled -Dwayland=disabled -Ddunstify=disabled -Dsystemd=enabled -Ddocs=disabled
 RUN DESTDIR=/dunst ninja -C buildDir install
+
+
+# i3lock — the i3 screen locker, run by Super+Alt+L and by xss-lock. Every
+# library it needs is already in the i3 image (XCB utils, xcb-xrm and libev
+# from x11-libs, xkbcommon-x11, X11 Cairo). It checks the password through PAM
+# (rootfs-i3/etc/pam.d/i3lock), so the binary is not setuid.
+FROM toolchain AS i3lock
+COPY --from=xorgproto /xorgproto /
+COPY --from=xcbproto /xcbproto /
+COPY --from=libxau /libxau /
+COPY --from=libxcb /libxcb /
+COPY --from=x11-libs /x11-libs /
+COPY --from=libxkb-x11 /libxkb-x11 /
+COPY --from=cairo-x11 /cairo-x11 /
+COPY --from=pixman /pixman /
+COPY --from=pcre2 /pcre2 /
+COPY --from=glib2 /glib2 /
+COPY --from=freetype /freetype /
+COPY --from=fontconfig /fontconfig /
+COPY --from=libpng /libpng /
+# renovate: datasource=github-tags depName=i3/i3lock extractVersion=^(?<version>\d+(\.\d+)*)$
+ARG I3LOCK_VERSION=2.16
+RUN mkdir -p /i3lock
+WORKDIR /build
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/i3/i3lock/archive/refs/tags/${I3LOCK_VERSION}.tar.gz -o i3lock.tar.gz && \
+    tar -xf i3lock.tar.gz && mv i3lock-* src
+WORKDIR /build/src
+RUN pip3 install meson ninja
+RUN meson setup buildDir ${COMMON_MESON_FLAGS}
+RUN DESTDIR=/i3lock ninja -C buildDir install
+
+
+# xss-lock — runs i3lock when the X screen saver activates (idle) and when
+# logind asks: before suspend (holding a sleep delay lock until the screen is
+# locked) and on `loginctl lock-session`. It needs only GLib/GIO and XCB.
+FROM toolchain AS xss-lock
+COPY --from=xorgproto /xorgproto /
+COPY --from=xcbproto /xcbproto /
+COPY --from=libxau /libxau /
+COPY --from=libxcb /libxcb /
+COPY --from=x11-libs /x11-libs /
+COPY --from=pcre2 /pcre2 /
+COPY --from=glib2 /glib2 /
+# renovate: datasource=github-tags depName=xdbob/xss-lock extractVersion=^v(?<version>\d+(\.\d+)*)$
+ARG XSS_LOCK_VERSION=0.3.0
+RUN mkdir -p /xss-lock
+WORKDIR /build
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/xdbob/xss-lock/archive/refs/tags/v${XSS_LOCK_VERSION}.tar.gz -o xss-lock.tar.gz && \
+    tar -xf xss-lock.tar.gz && mv xss-lock-* src
+WORKDIR /build/src
+RUN pip3 install ninja
+RUN cmake -G Ninja -B buildDir -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_INSTALL_PREFIX=/usr && \
+    ninja -C buildDir && DESTDIR=/xss-lock ninja -C buildDir install && \
+    rm -rf /xss-lock/usr/share
+
+
+# i3 screenshots: shotgun captures the screen or an area to PNG, hacksaw lets
+# the user drag out that area. They replace grim and slurp. Both are small Rust
+# programs: shotgun speaks X11 through pure-Rust x11rb, so it links only musl,
+# and hacksaw links libxcb's shape and xkb extensions, already in the image.
+# maim and slop do the same job but would add libjpeg, libwebp, glm and C++ libs
+# to the image. RUSTFLAGS links musl dynamically, like the COSMIC binaries.
+FROM toolchain AS x11-screenshot
+COPY --from=xorgproto /xorgproto /
+COPY --from=xcbproto /xcbproto /
+COPY --from=libxau /libxau /
+COPY --from=libxcb /libxcb /
+COPY --from=rust-toolchain /usr/local/cargo/ /usr/local/cargo/
+COPY --from=rust-toolchain /usr/local/rustup/ /usr/local/rustup/
+ENV CARGO_HOME=/usr/local/cargo \
+    RUSTUP_HOME=/usr/local/rustup \
+    PATH=/usr/local/cargo/bin:${PATH} \
+    RUSTFLAGS="-C target-feature=-crt-static" \
+    CARGO_INCREMENTAL=0
+# renovate: datasource=crate depName=shotgun
+ARG SHOTGUN_VERSION=2.5.1
+# renovate: datasource=crate depName=hacksaw
+ARG HACKSAW_VERSION=1.0.4
+RUN mkdir -p /x11-screenshot/usr/bin
+RUN cargo install shotgun --version ${SHOTGUN_VERSION} --locked --root /build/cargo && \
+    cargo install hacksaw --version ${HACKSAW_VERSION} --locked --root /build/cargo && \
+    install -m0755 /build/cargo/bin/shotgun /build/cargo/bin/hacksaw /x11-screenshot/usr/bin/
 
 
 # ===========================================================================
@@ -2603,9 +2734,9 @@ RUN curl -fL --retry 5 --retry-delay 3 --retry-all-errors "https://codeberg.org/
 # pinned Alpine image (only the toolchain; nothing it links ships), the same
 # way Dockerfile.agent builds cua-driver. libclang for bindgen comes from the
 # llvm stage and is used at build time only. BuildKit only evaluates these
-# stages for DESKTOP=cosmic.
+# stages for DESKTOP=cosmic. The rust-toolchain stage is declared above the
+# XLibre section, whose i3 screenshot tools use it too.
 # ===========================================================================
-FROM rust:1.97.0-alpine3.22 AS rust-toolchain
 
 # duktape: the small JavaScript engine polkit evaluates its rules with (the
 # alternative is mozjs, a browser engine's worth of build).
@@ -3484,6 +3615,7 @@ COPY --from=fuzzel /fuzzel /
 COPY --from=wl-clipboard /wl-clipboard /
 COPY --from=slurp /slurp /
 COPY --from=swayidle /swayidle /
+COPY --from=swaylock /swaylock /
 # waybar — status bar + its GTK3/gtkmm/tray runtime stack and Nerd Font glyphs
 COPY --from=gtk3 /gtk3 /
 COPY --from=gdk-pixbuf /gdk-pixbuf /
@@ -3543,6 +3675,9 @@ COPY --from=xlibre-input-libinput /xlibre-input-libinput /
 COPY --from=i3 /i3 /
 COPY --from=x11-desktop-tools /x11-desktop-tools /
 COPY --from=dunst /dunst /
+COPY --from=i3lock /i3lock /
+COPY --from=xss-lock /xss-lock /
+COPY --from=x11-screenshot /x11-screenshot /
 # M2: networking
 COPY --from=libnl /libnl /
 COPY --from=wpa-supplicant /wpa /

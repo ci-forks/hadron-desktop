@@ -1,0 +1,25 @@
+#!/bin/sh
+# Screenshot for the XLibre/i3 variant: `hadron-screenshot` takes the whole
+# screen (Print), `hadron-screenshot area` lets the user drag out an area or
+# click a window first (Super+Print; Escape cancels). The PNG goes on the
+# clipboard, like Sway's Print binding, and into ~/Pictures/Screenshots with
+# the file name niri uses.
+set -eu
+
+dir="$HOME/Pictures/Screenshots"
+file="$dir/Screenshot from $(date '+%Y-%m-%d %H-%M-%S').png"
+mkdir -p "$dir"
+
+case "${1:-}" in
+    area)
+        geometry=$(hacksaw -c '#7aa2f7' -s 2) || exit 0
+        shotgun -g "$geometry" "$file"
+        ;;
+    *)
+        shotgun "$file"
+        ;;
+esac
+
+# xclip forks and keeps serving the image until something else takes the
+# clipboard.
+xclip -selection clipboard -t image/png -i "$file"
