@@ -2891,6 +2891,350 @@ RUN d=/cosmic-fonts/usr/share/fonts/cosmic && mkdir -p $d && \
     done
 
 # ===========================================================================
+# niri + Noctalia desktop (DESKTOP=niri). See
+# docs/superpowers/specs/2026-11-04-niri-noctalia-design.md.
+#
+# niri is a scrollable-tiling Wayland compositor (Rust); Noctalia is the shell
+# around it: bar, dock, launcher, control center, notifications, lock screen,
+# wallpaper and the polkit agent (C++23, no Qt or GTK). Both build from tagged
+# releases against Hadron's musl. niri reuses COSMIC's Rust build environment;
+# Noctalia's libraries below are plain C/C++ and build on the toolchain.
+# BuildKit only evaluates these stages for DESKTOP=niri.
+# ===========================================================================
+
+# Header-only: stb's image resize and write headers, from a pinned commit.
+# Upstream has since moved the resize header under deprecated/.
+FROM toolchain AS stb
+ARG STB_COMMIT=d14d46f6b44456eb88beac58cba833a4135d4c89
+RUN mkdir -p /stb/usr/include/stb && \
+    for h in deprecated/stb_image_resize2.h stb_image_write.h; do \
+      curl -fsSL --retry 5 "https://raw.githubusercontent.com/nothings/stb/${STB_COMMIT}/$h" -o "/stb/usr/include/stb/${h##*/}" || exit 1; \
+    done
+
+FROM toolchain AS nlohmann-json
+ARG NLOHMANN_JSON_VERSION=3.12.0
+WORKDIR /build
+RUN curl -fL --retry 5 https://github.com/nlohmann/json/releases/download/v${NLOHMANN_JSON_VERSION}/json.tar.xz -o j.tar.xz && tar -xf j.tar.xz && mv json src
+WORKDIR /build/src
+RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DJSON_BuildTests=OFF -DJSON_Install=ON && \
+    DESTDIR=/nlohmann-json cmake --install build
+
+FROM toolchain AS tomlplusplus
+ARG TOMLPLUSPLUS_VERSION=3.4.0
+WORKDIR /build
+RUN curl -fL --retry 5 https://github.com/marzer/tomlplusplus/archive/refs/tags/v${TOMLPLUSPLUS_VERSION}.tar.gz -o t.tar.gz && tar -xzf t.tar.gz && mv tomlplusplus-* src
+WORKDIR /build/src
+RUN pip3 install meson ninja
+RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dbuild_tests=false -Dbuild_examples=false && \
+    DESTDIR=/tomlplusplus ninja -C buildDir install
+
+FROM toolchain AS md4c
+ARG MD4C_VERSION=0.6.0
+WORKDIR /build
+RUN curl -fL --retry 5 https://github.com/mity/md4c/archive/refs/tags/v${MD4C_VERSION}.tar.gz -o m.tar.gz && tar -xzf m.tar.gz && mv md4c-* src
+WORKDIR /build/src
+RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=MinSizeRel -DBUILD_SHARED_LIBS=ON && \
+    cmake --build build && DESTDIR=/md4c cmake --install build
+
+FROM toolchain AS libsodium
+ARG LIBSODIUM_VERSION=1.0.22
+RUN mkdir -p /libsodium
+WORKDIR /build
+RUN curl -fL --retry 5 https://github.com/jedisct1/libsodium/releases/download/${LIBSODIUM_VERSION}-RELEASE/libsodium-${LIBSODIUM_VERSION}.tar.gz -o s.tar.gz && tar -xzf s.tar.gz && mv libsodium-* src
+WORKDIR /build/src
+RUN ./configure ${COMMON_CONFIGURE_ARGS} && make -j"$(nproc)" && make DESTDIR=/libsodium install
+
+# sdbus-c++: the C++ D-Bus binding Noctalia talks to system services with.
+# Hadron's libsystemd links libucontext, so the linker needs it too.
+FROM toolchain AS sdbus-cpp
+COPY --from=libucontext /libucontext /
+ARG SDBUS_CPP_VERSION=2.3.1
+WORKDIR /build
+RUN curl -fL --retry 5 https://github.com/Kistler-Group/sdbus-cpp/archive/refs/tags/v${SDBUS_CPP_VERSION}.tar.gz -o s.tar.gz && tar -xzf s.tar.gz && mv sdbus-cpp-* src
+WORKDIR /build/src
+RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=MinSizeRel \
+      -DSDBUSCPP_BUILD_DOCS=OFF -DSDBUSCPP_BUILD_TESTS=OFF -DSDBUSCPP_BUILD_CODEGEN=OFF -DSDBUSCPP_BUILD_EXAMPLES=OFF && \
+    cmake --build build && DESTDIR=/sdbus-cpp cmake --install build
+
+# libical: calendar events (the clock panel's agenda, CalDAV). System time
+# zone data, no GLib binding.
+FROM toolchain AS libical
+ARG LIBICAL_VERSION=4.0.7
+WORKDIR /build
+RUN curl -fL --retry 5 https://github.com/libical/libical/archive/refs/tags/v${LIBICAL_VERSION}.tar.gz -o i.tar.gz && tar -xzf i.tar.gz && mv libical-* src
+WORKDIR /build/src
+RUN pip3 install ninja
+RUN cmake -B build -G Ninja -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=MinSizeRel \
+      -DLIBICAL_GLIB=OFF -DLIBICAL_GOBJECT_INTROSPECTION=OFF -DLIBICAL_JAVA_BINDINGS=OFF -DLIBICAL_CXX_BINDINGS=OFF \
+      -DLIBICAL_BUILD_DOCS=OFF -DLIBICAL_BUILD_TESTING=OFF -DLIBICAL_BUILD_EXAMPLES=OFF -DLIBICAL_STATIC=OFF \
+      -DCMAKE_DISABLE_FIND_PACKAGE_ICU=ON -DCMAKE_DISABLE_FIND_PACKAGE_BerkeleyDB=ON && \
+    cmake --build build && DESTDIR=/libical cmake --install build
+
+FROM toolchain AS libwebp
+ARG LIBWEBP_VERSION=1.6.0
+WORKDIR /build
+RUN curl -fL --retry 5 https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-${LIBWEBP_VERSION}.tar.gz -o w.tar.gz && tar -xzf w.tar.gz && mv libwebp-* src
+WORKDIR /build/src
+RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=MinSizeRel -DBUILD_SHARED_LIBS=ON \
+      -DWEBP_BUILD_ANIM_UTILS=OFF -DWEBP_BUILD_CWEBP=OFF -DWEBP_BUILD_DWEBP=OFF -DWEBP_BUILD_GIF2WEBP=OFF \
+      -DWEBP_BUILD_IMG2WEBP=OFF -DWEBP_BUILD_VWEBP=OFF -DWEBP_BUILD_WEBPINFO=OFF -DWEBP_BUILD_WEBPMUX=OFF \
+      -DWEBP_BUILD_EXTRAS=OFF && \
+    cmake --build build && DESTDIR=/libwebp cmake --install build
+
+# libjxl (JPEG XL) and the three libraries it needs, all from the system rather
+# than its git submodules, which a release tarball does not carry.
+FROM toolchain AS brotli
+ARG BROTLI_VERSION=1.2.1
+WORKDIR /build
+RUN curl -fL --retry 5 https://github.com/google/brotli/archive/refs/tags/v${BROTLI_VERSION}.tar.gz -o b.tar.gz && tar -xzf b.tar.gz && mv brotli-* src
+WORKDIR /build/src
+RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=MinSizeRel -DBUILD_SHARED_LIBS=ON -DBROTLI_DISABLE_TESTS=ON && \
+    cmake --build build && DESTDIR=/brotli cmake --install build
+
+FROM toolchain AS highway
+ARG HIGHWAY_VERSION=1.4.0
+WORKDIR /build
+RUN curl -fL --retry 5 https://github.com/google/highway/archive/refs/tags/${HIGHWAY_VERSION}.tar.gz -o h.tar.gz && tar -xzf h.tar.gz && mv highway-* src
+WORKDIR /build/src
+RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON \
+      -DBUILD_TESTING=OFF -DHWY_ENABLE_TESTS=OFF -DHWY_ENABLE_EXAMPLES=OFF -DHWY_ENABLE_CONTRIB=OFF -DHWY_ENABLE_INSTALL=ON && \
+    cmake --build build && DESTDIR=/highway cmake --install build
+
+FROM toolchain AS lcms2
+ARG LCMS2_VERSION=2.20
+WORKDIR /build
+RUN curl -fL --retry 5 https://github.com/mm2/Little-CMS/releases/download/lcms${LCMS2_VERSION}/lcms2-${LCMS2_VERSION}.tar.gz -o l.tar.gz && tar -xzf l.tar.gz && mv lcms2-* src
+WORKDIR /build/src
+RUN ./configure ${COMMON_CONFIGURE_ARGS} && make -j"$(nproc)" && make DESTDIR=/lcms2 install
+
+FROM toolchain AS libjxl
+COPY --from=brotli /brotli /
+COPY --from=highway /highway /
+COPY --from=lcms2 /lcms2 /
+ARG LIBJXL_VERSION=0.12.0
+WORKDIR /build
+RUN curl -fL --retry 5 https://github.com/libjxl/libjxl/archive/refs/tags/v${LIBJXL_VERSION}.tar.gz -o j.tar.gz && tar -xzf j.tar.gz && mv libjxl-* src
+WORKDIR /build/src
+RUN pip3 install ninja
+RUN cmake -B build -G Ninja -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON \
+      -DBUILD_TESTING=OFF -DJPEGXL_ENABLE_TOOLS=OFF -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF \
+      -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_EXAMPLES=OFF -DJPEGXL_ENABLE_JNI=OFF -DJPEGXL_ENABLE_SJPEG=OFF \
+      -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_SKCMS=OFF -DJPEGXL_ENABLE_JPEGLI=OFF -DJPEGXL_ENABLE_FUZZERS=OFF \
+      -DJPEGXL_FORCE_SYSTEM_BROTLI=ON -DJPEGXL_FORCE_SYSTEM_HWY=ON -DJPEGXL_FORCE_SYSTEM_LCMS2=ON && \
+    cmake --build build && DESTDIR=/libjxl cmake --install build
+
+# libqalculate: the launcher's calculator (arithmetic, units, currencies). Its
+# number types sit on GMP and MPFR. 5.13.1 is the newest release with a
+# generated source tarball.
+FROM toolchain AS gmp
+ARG GMP_VERSION=6.3.0
+WORKDIR /build
+RUN curl -fL --retry 5 https://ftp.gnu.org/gnu/gmp/gmp-${GMP_VERSION}.tar.xz -o g.tar.xz && tar -xf g.tar.xz && mv gmp-* src
+WORKDIR /build/src
+# GMP's configure probes predate C23, where `void g()` means no arguments.
+RUN CFLAGS="-O2 -std=gnu17" ./configure --prefix=/usr --enable-cxx --enable-shared --disable-static && \
+    make -j"$(nproc)" && make DESTDIR=/gmp install
+
+FROM toolchain AS mpfr
+COPY --from=gmp /gmp /
+ARG MPFR_VERSION=4.2.2
+WORKDIR /build
+RUN curl -fL --retry 5 https://ftp.gnu.org/gnu/mpfr/mpfr-${MPFR_VERSION}.tar.xz -o m.tar.xz && tar -xf m.tar.xz && mv mpfr-* src
+WORKDIR /build/src
+# Not COMMON_CONFIGURE_ARGS: MPFR rejects --enable-lto for a shared library.
+RUN ./configure --prefix=/usr --enable-shared --disable-static && make -j"$(nproc)" && make DESTDIR=/mpfr install
+
+FROM toolchain AS libqalculate
+COPY --from=gmp /gmp /
+COPY --from=mpfr /mpfr /
+COPY --from=gettext-tools /gettext-tools /
+ARG LIBQALCULATE_VERSION=5.13.1
+WORKDIR /build
+RUN curl -fL --retry 5 https://github.com/Qalculate/libqalculate/releases/download/v${LIBQALCULATE_VERSION}/libqalculate-${LIBQALCULATE_VERSION}.tar.gz -o q.tar.gz && tar -xzf q.tar.gz && mv libqalculate-* src
+WORKDIR /build/src
+RUN ./configure --prefix=/usr --enable-shared --disable-static --disable-textport --without-icu --without-readline --disable-nls && \
+    make -j"$(nproc)" && make DESTDIR=/libqalculate install
+
+# libsecret: the Secret Service client library (stored credentials).
+FROM toolchain AS libsecret
+COPY --from=glib2 /glib2 /
+COPY --from=pcre2 /pcre2 /
+COPY --from=libgpg-error /libgpg-error /
+COPY --from=libgcrypt /libgcrypt /
+ARG LIBSECRET_VERSION=0.21.8
+WORKDIR /build
+RUN curl -fL --retry 5 https://download.gnome.org/sources/libsecret/${LIBSECRET_VERSION%.*}/libsecret-${LIBSECRET_VERSION}.tar.xz -o s.tar.xz && tar -xf s.tar.xz && mv libsecret-* src
+WORKDIR /build/src
+RUN pip3 install meson ninja
+# secret-file-collection.c calls open() relying on glibc to pull in fcntl.h;
+# fixed on libsecret's main branch, not yet in a release.
+RUN sed -i 's|^#include "config.h"|&\n#include <fcntl.h>|' libsecret/secret-file-collection.c
+RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dmanpage=false -Dvapi=false -Dgtk_doc=false -Dintrospection=false \
+      -Dbash_completion=disabled -Dtpm2=false -Dpam=false -Dcrypto=libgcrypt && \
+    DESTDIR=/libsecret ninja -C buildDir install
+
+# niri's build environment: COSMIC's (Rust, libclang, the Wayland/input/GPU
+# stack, PipeWire) plus cairo and pango, which niri draws its overlays with.
+FROM cosmic-build AS niri-build
+COPY --from=pixman /pixman /
+COPY --from=cairo /cairo /
+COPY --from=pango /pango /
+COPY --from=x11-libs /x11-libs /
+COPY --from=xwayland /xwayland /
+RUN ldconfig
+
+# librsvg (SVG icons and wallpapers) is Rust behind a C API, built with
+# cargo-c. cargo-c itself is compiled here, against Hadron's libraries.
+FROM niri-build AS librsvg
+ARG CARGO_C_VERSION=0.10.26
+ARG LIBRSVG_VERSION=2.63.4
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
+    cargo install cargo-c --version ${CARGO_C_VERSION} --locked --features vendored-openssl --root /usr/local
+RUN curl -fL --retry 5 https://download.gnome.org/sources/librsvg/${LIBRSVG_VERSION%.*}/librsvg-${LIBRSVG_VERSION}.tar.xz -o r.tar.xz && tar -xf r.tar.xz && mv librsvg-* src
+WORKDIR /build/src
+RUN pip3 install meson ninja
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
+    meson setup buildDir ${COMMON_MESON_FLAGS} -Dintrospection=disabled -Dpixbuf=disabled -Dpixbuf-loader=disabled \
+      -Drsvg-convert=disabled -Ddocs=disabled -Dvala=disabled -Dtests=false -Davif=disabled && \
+    DESTDIR=/librsvg ninja -C buildDir install && \
+    rm -rf buildDir && \
+    ! ldd /librsvg/usr/lib/librsvg-2.so.2 | grep 'not found'
+
+# niri's release profile keeps line-table debug info (~130 MB binary); the
+# installed copy is stripped.
+FROM niri-build AS niri
+ARG NIRI_VERSION=26.04
+ENV CARGO_TARGET_DIR=/cargo-target
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=niri-target,target=/cargo-target,sharing=locked \
+    curl -fsSL --retry 5 https://github.com/YaLTeR/niri/archive/refs/tags/v${NIRI_VERSION}.tar.gz | tar -xz && \
+    cd niri-${NIRI_VERSION} && \
+    cargo build --release --locked && \
+    install -s -Dm755 /cargo-target/release/niri /niri/usr/bin/niri && \
+    install -Dm755 resources/niri-session /niri/usr/bin/niri-session && \
+    install -Dm644 resources/niri.desktop /niri/usr/share/wayland-sessions/niri.desktop && \
+    install -Dm644 resources/niri-portals.conf /niri/usr/share/xdg-desktop-portal/niri-portals.conf && \
+    install -Dm644 resources/niri.service /niri/usr/lib/systemd/user/niri.service && \
+    install -Dm644 resources/niri-shutdown.target /niri/usr/lib/systemd/user/niri-shutdown.target && \
+    rm -rf /cargo-target/* && \
+    ! ldd /niri/usr/bin/niri | grep 'not found' && \
+    /niri/usr/bin/niri --version
+
+# xwayland-satellite: runs Xwayland as an ordinary Wayland client, so X11 apps
+# work under niri. niri starts it on demand when it is on PATH.
+FROM niri-build AS xwayland-satellite
+ARG XWAYLAND_SATELLITE_VERSION=0.8.3
+ENV CARGO_TARGET_DIR=/cargo-target
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=niri-target,target=/cargo-target,sharing=locked \
+    curl -fsSL --retry 5 https://github.com/Supreeeme/xwayland-satellite/archive/refs/tags/v${XWAYLAND_SATELLITE_VERSION}.tar.gz | tar -xz && \
+    cd xwayland-satellite-${XWAYLAND_SATELLITE_VERSION} && \
+    cargo build --release --locked -F systemd && \
+    install -s -Dm755 /cargo-target/release/xwayland-satellite /xwayland-satellite/usr/bin/xwayland-satellite && \
+    rm -rf /cargo-target/* && \
+    ! ldd /xwayland-satellite/usr/bin/xwayland-satellite | grep 'not found'
+
+# Noctalia, the desktop shell. Its runtime assets (fonts, translations,
+# templates, sounds) install under /usr/share/noctalia and must ship with it.
+FROM toolchain AS noctalia
+COPY --from=wayland /wayland /
+COPY --from=libdrm /libdrm /
+COPY --from=libucontext /libucontext /
+COPY --from=mesa /mesa /
+COPY --from=libxkb /libxkb /
+COPY --from=xkeyboard-config /xkeyboard-config /
+COPY --from=pcre2 /pcre2 /
+COPY --from=glib2 /glib2 /
+COPY --from=freetype /freetype /
+COPY --from=harfbuzz /harfbuzz /
+COPY --from=fribidi /fribidi /
+COPY --from=fontconfig /fontconfig /
+COPY --from=libpng /libpng /
+COPY --from=pixman /pixman /
+COPY --from=cairo /cairo /
+COPY --from=pango /pango /
+COPY --from=libepoxy /libepoxy /
+COPY --from=duktape /duktape /
+COPY --from=polkit /polkit /
+COPY --from=alsa-lib /alsa-lib /
+COPY --from=pipewire /pipewire /
+COPY --from=wireplumber /wireplumber /
+COPY --from=libsndfile /libsndfile /
+COPY --from=libgpg-error /libgpg-error /
+COPY --from=libgcrypt /libgcrypt /
+COPY --from=libsecret /libsecret /
+COPY --from=libsodium /libsodium /
+COPY --from=sdbus-cpp /sdbus-cpp /
+COPY --from=librsvg /librsvg /
+COPY --from=gmp /gmp /
+COPY --from=mpfr /mpfr /
+COPY --from=libqalculate /libqalculate /
+COPY --from=md4c /md4c /
+COPY --from=nlohmann-json /nlohmann-json /
+COPY --from=tomlplusplus /tomlplusplus /
+COPY --from=libical /libical /
+COPY --from=stb /stb /
+COPY --from=libwebp /libwebp /
+COPY --from=brotli /brotli /
+COPY --from=highway /highway /
+COPY --from=lcms2 /lcms2 /
+COPY --from=libjxl /libjxl /
+ARG NOCTALIA_VERSION=5.4.1
+WORKDIR /build
+RUN curl -fL --retry 5 https://github.com/noctalia-dev/noctalia/archive/refs/tags/v${NOCTALIA_VERSION}.tar.gz -o n.tar.gz && tar -xzf n.tar.gz && mv noctalia-${NOCTALIA_VERSION} src
+WORKDIR /build/src
+RUN pip3 install meson ninja
+RUN meson setup buildDir --prefix=/usr --libdir=lib --buildtype=release -Dstrip=true -Dtests=disabled -Djemalloc=disabled && \
+    ninja -C buildDir && DESTDIR=/noctalia ninja -C buildDir install
+RUN ! ldd /noctalia/usr/bin/noctalia | grep 'not found' && \
+    test -f /noctalia/usr/share/noctalia/assets/emoji.json
+
+# The Adwaita cursor theme, cursors only (not the icon set), registered as the
+# system default. Without a cursor theme niri and GTK apps fall back to a bare
+# built-in arrow and no resize or text cursors.
+FROM toolchain AS adwaita-cursors
+ARG ADWAITA_ICON_THEME_VERSION=51.0
+WORKDIR /build
+RUN curl -fL --retry 5 https://download.gnome.org/sources/adwaita-icon-theme/${ADWAITA_ICON_THEME_VERSION%%.*}/adwaita-icon-theme-${ADWAITA_ICON_THEME_VERSION}.tar.xz -o a.tar.xz && tar -xf a.tar.xz && mv adwaita-icon-theme-* src
+RUN d=/adwaita-cursors/usr/share/icons && mkdir -p $d/Adwaita $d/default && \
+    cp -a src/Adwaita/cursors $d/Adwaita/cursors && \
+    printf '[Icon Theme]\nName=Adwaita\nComment=The Adwaita cursor theme\n' > $d/Adwaita/index.theme && \
+    printf '[Icon Theme]\nInherits=Adwaita\n' > $d/default/index.theme && \
+    test -e $d/Adwaita/cursors/default
+
+# xdg-desktop-portal-gtk: the file chooser (and app chooser, print, settings)
+# Flatpak apps open through the portal. niri's portals.conf prefers gnome, then
+# gtk; the GNOME backend needs GTK4 and mutter interfaces, so gtk it is.
+FROM toolchain AS xdg-desktop-portal-gtk
+COPY --from=glib2 /glib2 /
+COPY --from=pcre2 /pcre2 /
+COPY --from=cairo /cairo /
+COPY --from=pango /pango /
+COPY --from=harfbuzz /harfbuzz /
+COPY --from=fribidi /fribidi /
+COPY --from=freetype /freetype /
+COPY --from=fontconfig /fontconfig /
+COPY --from=libpng /libpng /
+COPY --from=pixman /pixman /
+COPY --from=gdk-pixbuf /gdk-pixbuf /
+COPY --from=atk /atk /
+COPY --from=libepoxy /libepoxy /
+COPY --from=wayland /wayland /
+COPY --from=libxkb /libxkb /
+COPY --from=mesa /mesa /
+COPY --from=libdrm /libdrm /
+COPY --from=gtk3 /gtk3 /
+COPY --from=xdg-desktop-portal /xdg-desktop-portal /
+COPY --from=gettext-tools /gettext-tools /
+ARG XDG_DESKTOP_PORTAL_GTK_VERSION=1.15.3
+WORKDIR /build
+RUN curl -fL --retry 5 https://github.com/flatpak/xdg-desktop-portal-gtk/releases/download/${XDG_DESKTOP_PORTAL_GTK_VERSION}/xdg-desktop-portal-gtk-${XDG_DESKTOP_PORTAL_GTK_VERSION}.tar.xz -o x.tar.xz && tar -xf x.tar.xz && mv xdg-desktop-portal-gtk-* src
+WORKDIR /build/src
+RUN pip3 install meson ninja
+RUN meson setup buildDir ${COMMON_MESON_FLAGS} --libexecdir=lib -Dwallpaper=disabled -Dsettings=disabled -Dlockdown=disabled && \
+    DESTDIR=/xdg-desktop-portal-gtk ninja -C buildDir install
+
+# ===========================================================================
 # M6: real-hardware firmware (optional)
 #
 # Real wifi / bluetooth / GPU hardware needs firmware blobs in /lib/firmware.
@@ -3115,6 +3459,94 @@ COPY --from=musl-locales /musl-locales /
 COPY --from=nerdfont /nerdfont /
 
 
+FROM scratch AS niri-rootfs
+COPY --from=wayland /wayland /
+COPY --from=libdrm /libdrm /
+COPY --from=libucontext /libucontext /
+COPY --from=mesa /mesa /
+COPY --from=xkeyboard-config /xkeyboard-config /
+COPY --from=libxkb /libxkb /
+COPY --from=pixman /pixman /
+COPY --from=libevdev /libevdev /
+COPY --from=libinput /libinput /
+COPY --from=hwdata /hwdata /
+COPY --from=libdisplay-info /libdisplay-info /
+COPY --from=libseat /libseat /
+COPY --from=pcre2 /pcre2 /
+COPY --from=glib2 /glib2 /
+COPY --from=freetype /freetype /
+COPY --from=harfbuzz /harfbuzz /
+COPY --from=fribidi /fribidi /
+COPY --from=fontconfig /fontconfig /
+COPY --from=libpng /libpng /
+COPY --from=cairo /cairo /
+COPY --from=pango /pango /
+COPY --from=gdk-pixbuf /gdk-pixbuf /
+COPY --from=atk /atk /
+COPY --from=libepoxy /libepoxy /
+COPY --from=gtk3 /gtk3 /
+# Xwayland (run by xwayland-satellite) and the X11 libraries it needs.
+COPY --from=xorgproto /xorgproto /
+COPY --from=libxau /libxau /
+COPY --from=libxcb /libxcb /
+COPY --from=x11-libs /x11-libs /
+COPY --from=xwayland /xwayland /
+COPY --from=xwayland-satellite /xwayland-satellite /
+# M2: networking
+COPY --from=libnl /libnl /
+COPY --from=wpa-supplicant /wpa /
+COPY --from=hostapd /hostapd /
+COPY --from=libndp /libndp /
+COPY --from=networkmanager /networkmanager /
+COPY --from=wireless-regdb /wireless-regdb /
+COPY --from=ncurses /ncurses /
+# M3: audio
+COPY --from=alsa-lib /alsa-lib /
+COPY --from=alsa-ucm-conf /alsa-ucm-conf /
+COPY --from=pipewire /pipewire /
+COPY --from=wireplumber /wireplumber /
+COPY --from=libsndfile /libsndfile /
+# M4: bluetooth
+COPY --from=sbc /sbc /
+COPY --from=bluez /bluez /
+# niri, Noctalia and what Noctalia links.
+COPY --from=niri /niri /
+COPY --from=duktape /duktape /
+COPY --from=polkit /polkit /
+COPY --from=libgcrypt /libgcrypt /
+COPY --from=libsecret /libsecret /
+COPY --from=libsodium /libsodium /
+COPY --from=sdbus-cpp /sdbus-cpp /
+COPY --from=librsvg /librsvg /
+COPY --from=gmp /gmp /
+COPY --from=mpfr /mpfr /
+COPY --from=libqalculate /libqalculate /
+COPY --from=md4c /md4c /
+COPY --from=tomlplusplus /tomlplusplus /
+COPY --from=libical /libical /
+COPY --from=libwebp /libwebp /
+COPY --from=brotli /brotli /
+COPY --from=highway /highway /
+COPY --from=lcms2 /lcms2 /
+COPY --from=libjxl /libjxl /
+COPY --from=noctalia /noctalia /
+# Portals, so Flatpak apps get file dialogs.
+COPY --from=json-glib /json-glib /
+COPY --from=gstreamer /gstreamer /
+COPY --from=xdg-desktop-portal /xdg-desktop-portal /
+COPY --from=xdg-desktop-portal-gtk /xdg-desktop-portal-gtk /
+# Terminal, clipboard, fonts, icons, login screen.
+COPY --from=tllist /tllist /
+COPY --from=fcft /fcft /
+COPY --from=foot /foot /
+COPY --from=wl-clipboard /wl-clipboard /
+COPY --from=cosmic-fonts /cosmic-fonts /
+COPY --from=nerdfont /nerdfont /
+COPY --from=hicolor-icon-theme /hicolor-icon-theme /
+COPY --from=adwaita-cursors /adwaita-cursors /
+COPY --from=ly /ly /
+
+
 # Static configuration is also selected as a rootfs stage. rootfs/ is shared;
 # the overlay contains only files for the chosen session, so the i3 image never
 # advertises a broken Sway session (and vice versa).
@@ -3129,6 +3561,9 @@ COPY rootfs-i3/ /
 
 FROM common-config AS cosmic-config
 COPY rootfs-cosmic/ /
+
+FROM common-config AS niri-config
+COPY rootfs-niri/ /
 
 FROM ${DESKTOP}-rootfs AS desktop-rootfs
 FROM ${DESKTOP}-config AS desktop-config
@@ -3285,24 +3720,32 @@ RUN chmod 1777 /tmp; \
     else \
     # COSMIC: greetd runs cosmic-greeter on tty1 instead of ly (rootfs-cosmic/).
     # The greeter runs as its own system user, which needs the seat groups for
-    # its compositor; polkitd runs the polkit daemon. polkit's agent helper is
-    # what checks a password for the prompt, so it must be setuid root, and its
-    # rules directories must be readable by polkitd only.
+    # its compositor.
       useradd -r -M -d /var/lib/cosmic-greeter -s /usr/sbin/nologin -G video,render,input,seat cosmic-greeter; \
-      useradd -r -M -d / -s /usr/sbin/nologin polkitd; \
       mkdir -p /var/lib/cosmic-greeter && chown cosmic-greeter: /var/lib/cosmic-greeter; \
-      chmod 4755 /usr/lib/polkit-1/polkit-agent-helper-1; \
-      # cosmic-osd (the password prompt) execs the helper at Debian's path,
-      # compiled in; exec follows the link to the setuid target.
+      # cosmic-osd (the password prompt) execs the polkit helper at Debian's
+      # path, compiled in; exec follows the link to the setuid target.
       mkdir -p /usr/libexec && ln -sf /usr/lib/polkit-1/polkit-agent-helper-1 /usr/libexec/polkit-agent-helper-1; \
-      for d in /etc/polkit-1/rules.d /usr/share/polkit-1/rules.d; do \
-        mkdir -p "$d" && chown polkitd:root "$d" && chmod 700 "$d"; \
-      done; \
       mkdir -p /etc/systemd/system/multi-user.target.wants; \
       for u in cosmic-greeter cosmic-greeter-daemon accounts-daemon; do \
         ln -sf /usr/lib/systemd/system/$u.service /etc/systemd/system/multi-user.target.wants/$u.service; \
       done; \
     fi; \
+    # polkit (COSMIC and niri): polkitd runs the daemon. The agent helper is
+    # what checks a password for the prompt, so it must be setuid root, and the
+    # rules directories must be readable by polkitd only.
+    if [ -d /usr/lib/polkit-1 ]; then \
+      useradd -r -M -d / -s /usr/sbin/nologin polkitd; \
+      chmod 4755 /usr/lib/polkit-1/polkit-agent-helper-1; \
+      for d in /etc/polkit-1/rules.d /usr/share/polkit-1/rules.d; do \
+        mkdir -p "$d" && chown polkitd:root "$d" && chmod 700 "$d"; \
+      done; \
+    fi; \
+    # pam_unix checks a password through this helper when the caller is not
+    # root, which is how every screen locker unlocks (Noctalia's, COSMIC's).
+    # Without setuid it cannot read /etc/shadow and every unlock fails with
+    # "cannot retrieve authentication info".
+    if [ -e /usr/sbin/unix_chkpwd ]; then chmod 4755 /usr/sbin/unix_chkpwd; fi; \
     systemctl mask getty@tty1.service 2>/dev/null || true; \
     # M2: NetworkManager is the network manager (systemd-networkd disabled at
     # runtime in favour of NM).

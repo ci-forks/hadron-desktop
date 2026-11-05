@@ -46,6 +46,9 @@ check "release file records the Hadron base" "grep -Eq '^HADRON_VERSION=v[0-9]' 
 check "release file points at the published image repo" \
     "grep -qx 'IMAGE_REPO=ghcr.io/kairos-community/hadron-desktop' $R"
 check "hadron-update is installed and runs" "hadron-update help | grep -q upgrade"
+# Screen lockers run as the user; pam_unix needs this setuid helper to check
+# the password, or nobody can unlock.
+check "unix_chkpwd is setuid (screen unlock)" "test -u /usr/sbin/unix_chkpwd"
 if [ "$FLAVOR" = cosmic ]; then
     # The COSMIC password prompt (cosmic-osd) execs polkit's helper at this
     # path; without it every privileged Settings change fails silently.
@@ -54,6 +57,35 @@ if [ "$FLAVOR" = cosmic ]; then
     check "locale -a lists UTF-8 locales (the setup wizard's language list)" \
         "locale -a | grep -qx de_DE.UTF-8"
     check "hicolor icon theme index present" "test -f /usr/share/icons/hicolor/index.theme"
+fi
+if [ "$FLAVOR" = niri ]; then
+    # A config error makes niri fall back to an empty default with no shell.
+    check "the shipped niri config validates" "niri validate -c /etc/niri/config.kdl"
+    check "niri config starts Noctalia" "grep -qx 'spawn-at-startup \"hadron-noctalia\"' /etc/niri/config.kdl"
+    # Noctalia's polkit agent is off unless configured; without it privileged
+    # requests fail instead of asking for the password.
+    check "Hadron's Noctalia defaults turn the polkit agent on" \
+        "grep -qx 'polkit_agent = true' /usr/share/hadron-desktop/noctalia-defaults.toml && test -x /usr/bin/hadron-noctalia"
+    check "ly offers the niri session" "grep -q '^Exec=niri-session' /usr/share/wayland-sessions/niri.desktop"
+    # The build stages check ldd against their own build root; this checks
+    # the image, where a library a stage built but the rootfs never copied
+    # is missing.
+    for b in niri noctalia xwayland-satellite; do
+        check "$b finds all its libraries in the image" "! ldd /usr/bin/$b 2>&1 | grep -q 'not found'"
+    done
+    check "Noctalia runs" "noctalia --version"
+    # Noctalia refuses its asset root without these four files.
+    check "Noctalia's runtime assets are installed" \
+        "cd /usr/share/noctalia/assets && test -f emoji.json -a -f fonts/noctalia-tabler.ttf -a -f templates/builtin.toml -a -f translations/en.json"
+    check "xwayland-satellite is on PATH (niri starts it for X11 apps)" "command -v xwayland-satellite"
+    # foot's default TERM=foot has no terminfo in the image; less (the
+    # Super+F1 cheat sheet), vim and htop then run in dumb-terminal mode.
+    check "foot uses a TERM the image has terminfo for" "grep -qx 'term=xterm-256color' /etc/xdg/foot/foot.ini"
+    check "a default cursor theme is installed" "test -e /usr/share/icons/default/index.theme -a -e /usr/share/icons/Adwaita/cursors/default"
+    # Noctalia's polkit agent checks the password through this helper.
+    check "polkit agent helper is setuid" "test -u /usr/lib/polkit-1/polkit-agent-helper-1"
+    check "the GTK portal backend is installed (Flatpak file dialogs)" \
+        "test -f /usr/share/xdg-desktop-portal/portals/gtk.portal"
 fi
 
 exit "$fail"
