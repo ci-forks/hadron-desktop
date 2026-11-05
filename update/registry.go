@@ -22,16 +22,6 @@ func registryBase(host string) string {
 	return "https://" + host
 }
 
-// splitRef splits "host/name/space:tag" into its three parts.
-func splitRef(ref string) (host, name, tag string, err error) {
-	slash := strings.Index(ref, "/")
-	colon := strings.LastIndex(ref, ":")
-	if slash < 0 || colon < slash {
-		return "", "", "", fmt.Errorf("%q is not a host/name:tag image reference", ref)
-	}
-	return ref[:slash], ref[slash+1 : colon], ref[colon+1:], nil
-}
-
 var bearerParam = regexp.MustCompile(`(\w+)="([^"]*)"`)
 
 // ImagePullable reports whether ref can be pulled anonymously, the way
@@ -44,14 +34,14 @@ var bearerParam = regexp.MustCompile(`(\w+)="([^"]*)"`)
 // public yet, fails here with a sentence, not deep inside kairos-agent with
 // "DENIED: requested access to the resource is denied".
 func ImagePullable(ctx context.Context, ref string) error {
-	host, name, tag, err := splitRef(ref)
+	r, err := ParseRef(ref)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 
-	manifest := fmt.Sprintf("%s/v2/%s/manifests/%s", registryBase(host), name, tag)
+	manifest := fmt.Sprintf("%s/v2/%s/manifests/%s", registryBase(r.Host), r.Name, r.Reference())
 	head := func(token string) (*http.Response, error) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodHead, manifest, nil)
 		if err != nil {
