@@ -4,10 +4,13 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -603,7 +606,7 @@ func TestServeOutlivesALostBusWhileAJobRuns(t *testing.T) {
 
 func TestClosingServiceRefusesCalls(t *testing.T) {
 	daemonEnv(t, "v0.0.5")
-	s := &service{d: NewDaemon(&fakeBackend{}), auth: &fakeAuth{allow: true}}
+	s := newService(NewDaemon(&fakeBackend{}), &fakeAuth{allow: true})
 	done, err := s.enter()
 	if err != nil {
 		t.Fatal(err)
@@ -624,5 +627,158 @@ func TestClosingServiceRefusesCalls(t *testing.T) {
 	api := busAPI{s}
 	if err := api.Apply(":1.1", ghcrRepo+":sway-v0.0.6", "sha256:"+hex64, false); err == nil || s.d.Busy() {
 		t.Fatalf("Apply on a closing service: %v, busy %v", err, s.d.Busy())
+	}
+}
+
+func TestBusAdmitsOneNetworkCallAtATime(t *testing.T) {
+	daemonEnv(t, "v0.0.5")
+	hit := make(chan struct{}, 16)
+	unblock := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit <- struct{}{}
+		<-unblock
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() {
+		select {
+		case <-unblock:
+		default:
+			close(unblock)
+		}
+	})
+	t.Setenv("HADRON_UPDATE_REGISTRY", srv.URL)
+	f := startService(t, NewDaemon(&fakeBackend{}), &fakeAuth{})
+
+	first := make(chan error, 1)
+	go func() { first <- f.call("Inspect", thirdParty, false).Err }()
+	<-hit // the first Inspect is inside the registry fetch
+
+	for _, c := range []struct {
+		method string
+		args   []any
+	}{
+		{"Inspect", []any{thirdParty, false}},
+		{"Releases", nil},
+		{"Check", nil},
+	} {
+		if got := errName(f.call(c.method, c.args...).Err); got != "io.kairos.HadronUpdate1.Error.Busy" {
+			t.Fatalf("concurrent %s: %q, want Busy", c.method, got)
+		}
+	}
+	// Status reads no network and is always answered.
+	f.status(t)
+
+	close(unblock)
+	if err := <-first; err == nil {
+		t.Fatal("the first Inspect succeeded against a registry that 404s")
+	}
+	// The slot is free again.
+	if err := f.call("Releases").Err; err != nil {
+		t.Fatalf("Releases after the first call ended: %v", err)
+	}
+}
+
+func TestBusReleasesHitGitHubOncePerMinute(t *testing.T) {
+	daemonEnv(t, "v0.0.5")
+	hits := countingGitHub(t)
+	f := startService(t, NewDaemon(&fakeBackend{}), &fakeAuth{})
+	for i := 0; i < 2; i++ {
+		var tags []string
+		if err := f.call("Releases").Store(&tags); err != nil || len(tags) != 3 {
+			t.Fatalf("Releases: %q, %v", tags, err)
+		}
+	}
+	if n := hits.Load(); n != 1 {
+		t.Fatalf("%d GitHub requests, want 1", n)
+	}
+}
+
+func TestBusRejectsALongRef(t *testing.T) {
+	dg := daemonEnv(t, "v0.0.5")
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("HADRON_UPDATE_REGISTRY", srv.URL)
+	t.Setenv("HADRON_UPDATE_API", srv.URL)
+	b := &fakeBackend{}
+	f := startService(t, NewDaemon(b), &fakeAuth{allow: true})
+
+	long := "ghcr.io/kairos-community/hadron-desktop:" + strings.Repeat("a", 512)
+	if got := errName(f.call("Inspect", long, false).Err); got != "io.kairos.HadronUpdate1.Error.Failed" {
+		t.Fatalf("Inspect of a long ref: %q", got)
+	}
+	if got := errName(f.call("Apply", long, dg[ghcrRepo+":sway-v0.0.6"], false).Err); got != "io.kairos.HadronUpdate1.Error.Failed" {
+		t.Fatalf("Apply of a long ref: %q", got)
+	}
+	if n := hits.Load(); n != 0 {
+		t.Fatalf("%d network requests for a refused ref", n)
+	}
+	if st := f.status(t); st["state"].Value() != string(StateIdle) || len(b.calls()) != 0 {
+		t.Fatalf("a long ref started something: %v", st)
+	}
+}
+
+func TestExitingErrorName(t *testing.T) {
+	daemonEnv(t, "v0.0.5")
+	s := newService(NewDaemon(&fakeBackend{}), &fakeAuth{})
+	if !s.tryClose(0) {
+		t.Fatal("did not close")
+	}
+	_, err := s.enter()
+	if err == nil || err.Name != "io.kairos.HadronUpdate1.Error.Exiting" {
+		t.Fatalf("enter on a closing service: %v", err)
+	}
+}
+
+// fakeLogind is org.freedesktop.login1.Manager on a private bus.
+type fakeLogind struct {
+	mu   sync.Mutex
+	args []string
+}
+
+func (l *fakeLogind) Inhibit(what, who, why, mode string) (dbus.UnixFD, *dbus.Error) {
+	l.mu.Lock()
+	l.args = []string{what, who, why, mode}
+	l.mu.Unlock()
+	r, w, err := os.Pipe()
+	if err != nil {
+		return 0, dbus.MakeFailedError(err)
+	}
+	w.Close()
+	// godbus sends a duplicate; this end stays open in the test process,
+	// which is fine for a test.
+	return dbus.UnixFD(r.Fd()), nil
+}
+
+func TestLogindInhibitor(t *testing.T) {
+	addr := privateBus(t)
+	lc := busConn(t, addr)
+	fake := &fakeLogind{}
+	if err := lc.Export(fake, "/org/freedesktop/login1", "org.freedesktop.login1.Manager"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lc.RequestName("org.freedesktop.login1", dbus.NameFlagDoNotQueue); err != nil {
+		t.Fatal(err)
+	}
+	inh := logindInhibitor{conn: busConn(t, addr)}
+	release, err := inh.Inhibit()
+	if err != nil {
+		t.Fatalf("Inhibit: %v", err)
+	}
+	fake.mu.Lock()
+	got := strings.Join(fake.args, "|")
+	fake.mu.Unlock()
+	if want := "shutdown:sleep|Hadron Desktop update|An update is being written to disk|block"; got != want {
+		t.Fatalf("Inhibit(%s), want (%s)", got, want)
+	}
+	release()
+
+	lc.ReleaseName("org.freedesktop.login1")
+	if _, err := inh.Inhibit(); err == nil {
+		t.Fatal("Inhibit without logind succeeded")
 	}
 }

@@ -104,6 +104,29 @@ func (p polkitAuthorizer) Allowed(sender dbus.Sender, action string) (bool, erro
 	return res.IsAuthorized && !res.IsChallenge, nil
 }
 
+// logindInhibitor takes a logind "block" inhibitor lock on shutdown and
+// sleep. logind keeps it until the returned fd is closed, so a reboot asked
+// from the session waits for kairos-agent instead of cutting the write.
+type logindInhibitor struct{ conn *dbus.Conn }
+
+func (l logindInhibitor) Inhibit() (func(), error) {
+	ctx, cancel := context.WithTimeout(context.Background(), polkitTimeout)
+	defer cancel()
+	var fd dbus.UnixFD
+	err := l.conn.Object("org.freedesktop.login1", "/org/freedesktop/login1").
+		CallWithContext(ctx, "org.freedesktop.login1.Manager.Inhibit", 0,
+			"shutdown:sleep", "Hadron Desktop update", "An update is being written to disk", "block").
+		Store(&fd)
+	if err != nil {
+		return nil, fmt.Errorf("logind: %w", err)
+	}
+	f := os.NewFile(uintptr(fd), "logind-inhibitor")
+	if f == nil {
+		return nil, fmt.Errorf("logind returned an invalid descriptor %d", fd)
+	}
+	return func() { f.Close() }, nil
+}
+
 // busError maps a daemon error to a D-Bus error whose name a client can
 // switch on; the message is the error's own sentence.
 func busError(err error) *dbus.Error {
@@ -150,14 +173,46 @@ type service struct {
 	d    *Daemon
 	auth Authorizer
 
+	// netSlot admits one network-bound call (Check, Releases, Inspect) at
+	// a time. They are open to every local user, so without it any caller
+	// could make root run fetches without limit and spend the machine's
+	// GitHub quota.
+	netSlot chan struct{}
+
 	mu      sync.Mutex
 	active  int       // method calls in progress
 	last    time.Time // end of the last call or the last daemon event
 	closing bool      // decided to exit; no call may start anything now
 }
 
-var errExiting = dbus.NewError(busInterface+".Error.Failed",
+// errExiting is its own name so a client can retry exactly once on it: the
+// next call activates a new instance.
+var errExiting = dbus.NewError(busInterface+".Error.Exiting",
 	[]any{"the update service is exiting; call again to start a new one"})
+
+var errNetBusy = dbus.NewError(busInterface+".Error.Busy",
+	[]any{"another check or inspection is running; try again when it ends"})
+
+// maxRefLen bounds a reference before any work; real ones are far shorter.
+const maxRefLen = 512
+
+func checkRef(ref string) *dbus.Error {
+	if len(ref) > maxRefLen {
+		return busError(fmt.Errorf("the image reference is longer than %d bytes", maxRefLen))
+	}
+	return nil
+}
+
+// network takes the network slot, or refuses at once: a caller waiting in
+// line would still hold a goroutine and a bus call open.
+func (s *service) network() (func(), *dbus.Error) {
+	select {
+	case s.netSlot <- struct{}{}:
+		return func() { <-s.netSlot }, nil
+	default:
+		return nil, errNetBusy
+	}
+}
 
 func (s *service) touch() {
 	s.mu.Lock()
@@ -196,6 +251,10 @@ func (s *service) tryClose(quiet time.Duration) bool {
 	return true
 }
 
+func newService(d *Daemon, a Authorizer) *service {
+	return &service{d: d, auth: a, last: time.Now(), netSlot: make(chan struct{}, 1)}
+}
+
 // authorize asks before any argument is looked at, so an unauthorized
 // client learns nothing about the system from a mutating call.
 func (s *service) authorize(sender dbus.Sender, action string) *dbus.Error {
@@ -231,6 +290,11 @@ func (a busAPI) Check() *dbus.Error {
 		return derr
 	}
 	defer done()
+	free, derr := a.s.network()
+	if derr != nil {
+		return derr
+	}
+	defer free()
 	return busError(a.s.d.Check(context.Background()))
 }
 
@@ -240,6 +304,11 @@ func (a busAPI) Releases() ([]string, *dbus.Error) {
 		return nil, derr
 	}
 	defer done()
+	free, derr := a.s.network()
+	if derr != nil {
+		return nil, derr
+	}
+	defer free()
 	rels, err := a.s.d.Releases(context.Background())
 	if err != nil {
 		return nil, busError(err)
@@ -262,6 +331,14 @@ func (a busAPI) Inspect(ref string, advanced bool) (map[string]dbus.Variant, *db
 		return nil, derr
 	}
 	defer done()
+	if derr := checkRef(ref); derr != nil {
+		return nil, derr
+	}
+	free, derr := a.s.network()
+	if derr != nil {
+		return nil, derr
+	}
+	defer free()
 	info, v, err := a.s.d.Inspect(context.Background(), ref, advanced)
 	refusal, overridable := "", false
 	switch {
@@ -295,6 +372,9 @@ func (a busAPI) Apply(sender dbus.Sender, ref, digest string, advanced bool) *db
 	if err := a.s.authorize(sender, actionApply); err != nil {
 		return err
 	}
+	if derr := checkRef(ref); derr != nil {
+		return derr
+	}
 	return busError(a.s.d.Apply(context.Background(), ref, digest, advanced))
 }
 
@@ -327,7 +407,7 @@ func (a busAPI) Reboot(sender dbus.Sender) *dbus.Error {
 // service has been idle for idleTimeout, or with an error when the name is
 // taken or the bus goes away. It never returns while a job runs.
 func serve(conn *dbus.Conn, d *Daemon, a Authorizer) error {
-	s := &service{d: d, auth: a, last: time.Now()}
+	s := newService(d, a)
 	d.OnChange(func(st Status) {
 		s.touch()
 		if err := conn.Emit(busPath, busInterface+".StateChanged", statusDict(st)); err != nil {
@@ -404,7 +484,9 @@ func cmdDaemon(args []string, stderr io.Writer) int {
 		return exitError
 	}
 	defer conn.Close()
-	if err := serve(conn, NewDaemon(kairosBackend{}), polkitAuthorizer{conn: conn}); err != nil {
+	d := NewDaemon(kairosBackend{})
+	d.inhibitor = logindInhibitor{conn: conn}
+	if err := serve(conn, d, polkitAuthorizer{conn: conn}); err != nil {
 		fmt.Fprintln(stderr, "hadron-update daemon:", err)
 		return exitError
 	}

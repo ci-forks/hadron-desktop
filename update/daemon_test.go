@@ -462,6 +462,9 @@ func TestCancelOnlyBeforeUpgrade(t *testing.T) {
 		if err := d.Check(context.Background()); err != nil {
 			t.Fatal(err)
 		}
+		// The job must reach GitHub again to block there, not reuse the
+		// list Check fetched.
+		noReleaseCache(t)
 		arrived := blockingGitHub(t)
 		ref := ghcrRepo + ":sway-v0.0.6"
 		if err := d.Apply(context.Background(), ref, dg[ref], false); err != nil {
@@ -767,5 +770,160 @@ func TestKairosBackendReportsAnUnreadableLine(t *testing.T) {
 	err := kairosBackend{}.Upgrade(context.Background(), "oci:x", func(l string) { lines = append(lines, l) })
 	if err != nil || len(lines) != 1 || !strings.Contains(lines[0], "stopped reading") {
 		t.Fatalf("got %q, %v", lines, err)
+	}
+}
+
+// noReleaseCache makes every release listing go to GitHub.
+func noReleaseCache(t *testing.T) {
+	t.Helper()
+	old := releasesTTL
+	releasesTTL = 0
+	t.Cleanup(func() { releasesTTL = old })
+}
+
+// countingGitHub serves daemonReleases and counts the list requests.
+func countingGitHub(t *testing.T) *atomic.Int32 {
+	t.Helper()
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/repos/kairos-community/hadron-desktop/releases" {
+			http.NotFound(w, r)
+			return
+		}
+		hits.Add(1)
+		fmt.Fprint(w, daemonReleases)
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("HADRON_UPDATE_API", srv.URL)
+	return &hits
+}
+
+func TestReleasesAreCachedForAMinute(t *testing.T) {
+	dg := daemonEnv(t, "v0.0.5")
+	hits := countingGitHub(t)
+	d := NewDaemon(&fakeBackend{})
+	ctx := context.Background()
+	for i := 0; i < 2; i++ {
+		if _, err := d.Releases(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := d.Check(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := d.Inspect(ctx, ghcrRepo+":sway-v0.0.6", false); err != nil {
+		t.Fatal(err)
+	}
+	_ = dg
+	if n := hits.Load(); n != 1 {
+		t.Fatalf("%d GitHub requests within the cache time, want 1", n)
+	}
+
+	noReleaseCache(t)
+	if _, err := d.Releases(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := hits.Load(); n != 2 {
+		t.Fatalf("%d GitHub requests after the cache expired, want 2", n)
+	}
+}
+
+func TestReleasesErrorIsNotCached(t *testing.T) {
+	daemonEnv(t, "v0.0.5")
+	var fail atomic.Bool
+	fail.Store(true)
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		if fail.Load() {
+			http.Error(w, "down", http.StatusBadGateway)
+			return
+		}
+		fmt.Fprint(w, daemonReleases)
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("HADRON_UPDATE_API", srv.URL)
+	d := NewDaemon(&fakeBackend{})
+	if _, err := d.Releases(context.Background()); err == nil {
+		t.Fatal("no error from a failing GitHub")
+	}
+	fail.Store(false)
+	if rels, err := d.Releases(context.Background()); err != nil || len(rels) == 0 {
+		t.Fatalf("after recovery: %v, %v", rels, err)
+	}
+}
+
+// fakeInhibitor records whether a shutdown lock is held.
+type fakeInhibitor struct {
+	mu                 sync.Mutex
+	held               bool
+	acquired, released int
+	err                error
+}
+
+func (f *fakeInhibitor) Inhibit() (func(), error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.err != nil {
+		return nil, f.err
+	}
+	f.held = true
+	f.acquired++
+	return func() {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.held = false
+		f.released++
+	}, nil
+}
+
+func (f *fakeInhibitor) state() (held bool, acquired, released int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.held, f.acquired, f.released
+}
+
+func TestApplyHoldsAShutdownInhibitorWhileWriting(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		t.Run(fmt.Sprintf("upgrade fails %v", fail), func(t *testing.T) {
+			dg := daemonEnv(t, "v0.0.5")
+			inh := &fakeInhibitor{}
+			var heldDuring atomic.Bool
+			b := &fakeBackend{during: func() {
+				h, _, _ := inh.state()
+				heldDuring.Store(h)
+			}}
+			if fail {
+				b.err = errors.New("disk full")
+			}
+			d := NewDaemon(b)
+			d.inhibitor = inh
+			ref := ghcrRepo + ":sway-v0.0.6"
+			if err := d.Apply(context.Background(), ref, dg[ref], false); err != nil {
+				t.Fatal(err)
+			}
+			d.wg.Wait()
+			if !heldDuring.Load() {
+				t.Fatal("no inhibitor held while kairos-agent ran")
+			}
+			if held, acq, rel := inh.state(); held || acq != 1 || rel != 1 {
+				t.Fatalf("held %v, acquired %d, released %d", held, acq, rel)
+			}
+		})
+	}
+}
+
+func TestApplyRunsWithoutAnInhibitor(t *testing.T) {
+	dg := daemonEnv(t, "v0.0.5")
+	b := &fakeBackend{}
+	d := NewDaemon(b)
+	d.inhibitor = &fakeInhibitor{err: errors.New("no logind")}
+	ref := ghcrRepo + ":sway-v0.0.6"
+	if err := d.Apply(context.Background(), ref, dg[ref], false); err != nil {
+		t.Fatal(err)
+	}
+	waitState(t, d, StateRebootPending)
+	if len(b.calls()) != 1 {
+		t.Fatal("a missing inhibitor stopped the upgrade")
 	}
 }

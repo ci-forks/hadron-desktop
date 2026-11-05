@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 // State is where the daemon's one job stands. The D-Bus API sends it as a
@@ -78,6 +79,19 @@ func runDir() string {
 // tmpfs, so the reboot itself clears it.
 func rebootMarker() string { return filepath.Join(runDir(), "reboot-pending") }
 
+// Inhibitor blocks shutdown and sleep while kairos-agent writes the passive
+// slot. The real one is logind; tests use a fake.
+type Inhibitor interface {
+	// Inhibit takes the lock; release gives it back.
+	Inhibit() (release func(), err error)
+}
+
+// releasesTTL is how long a fetched release list is reused. Every check,
+// inspection and release listing needs it, and GitHub allows 60 anonymous
+// calls an hour per address, shared by everything on the machine. A variable
+// so tests can expire it.
+var releasesTTL = 60 * time.Second
+
 // job is the running Check or Apply. prev and prevDetail are what a cancel
 // returns to.
 type job struct {
@@ -115,6 +129,15 @@ type Daemon struct {
 	rebooting bool
 
 	wg sync.WaitGroup // running Apply jobs; tests wait on it
+
+	// inhibitor, when set, is held while kairos-agent runs. Set before the
+	// first job; nil means none.
+	inhibitor Inhibitor
+
+	relMu    sync.Mutex
+	relCache []Latest
+	relOK    bool
+	relAt    time.Time
 }
 
 // NewDaemon reads the release file and the reboot marker. Without a release
@@ -235,6 +258,29 @@ func newest(published []Latest) string {
 	return published[0].Tag
 }
 
+// fetchReleases is FetchReleases, cached for releasesTTL. Errors are not
+// cached, so a failed check can be retried at once. Apply may use a cached
+// list: it decides trust from it, but installs only the digest it resolves
+// and compares itself.
+func (d *Daemon) fetchReleases(ctx context.Context) ([]Latest, error) {
+	d.relMu.Lock()
+	if d.relOK && time.Since(d.relAt) < releasesTTL {
+		c := append([]Latest(nil), d.relCache...)
+		d.relMu.Unlock()
+		return c, nil
+	}
+	d.relMu.Unlock()
+
+	published, err := FetchReleases(ctx, d.rel.GitHubRepo)
+	if err != nil {
+		return nil, err
+	}
+	d.relMu.Lock()
+	d.relCache, d.relOK, d.relAt = append([]Latest(nil), published...), true, time.Now()
+	d.relMu.Unlock()
+	return published, nil
+}
+
 // Check asks GitHub for the published releases. On an unmanaged system it
 // does nothing, not even a request. While a reboot is pending it only updates
 // Latest: the pending install matters more than any newer release.
@@ -258,7 +304,7 @@ func (d *Daemon) Check(ctx context.Context) error {
 	}
 	d.mu.Unlock()
 
-	published, err := FetchReleases(ctx, d.rel.GitHubRepo)
+	published, err := d.fetchReleases(ctx)
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -296,7 +342,7 @@ func (d *Daemon) Releases(ctx context.Context) ([]Latest, error) {
 	if !d.managed {
 		return nil, errUnmanaged
 	}
-	return FetchReleases(ctx, d.rel.GitHubRepo)
+	return d.fetchReleases(ctx)
 }
 
 // evaluate resolves r and decides whether it may be installed. Only
@@ -309,7 +355,7 @@ func (d *Daemon) evaluate(ctx context.Context, r ImageRef, advanced bool) (Image
 	if err != nil {
 		return ImageInfo{}, Verdict{}, nil, err
 	}
-	published, err := FetchReleases(ctx, d.rel.GitHubRepo)
+	published, err := d.fetchReleases(ctx)
 	if err != nil {
 		return info, Verdict{}, nil, fmt.Errorf("could not list the published releases: %w", err)
 	}
@@ -414,7 +460,9 @@ func (d *Daemon) run(ctx context.Context, j *job, r ImageRef, ref, digest string
 	d.setLocked(StateApplying, "")
 	d.mu.Unlock()
 
+	release := d.inhibitShutdown()
 	err = d.backend.Upgrade(context.Background(), source, d.progress)
+	release()
 	if err != nil {
 		// Only a removed marker makes the system installable again; if it
 		// stays, so does reboot-pending.
@@ -458,6 +506,21 @@ func (d *Daemon) run(ctx context.Context, j *job, r ImageRef, ref, digest string
 		detail = strings.Join(notes, "; ")
 	}
 	d.setLocked(StateRebootPending, detail)
+}
+
+// inhibitShutdown takes the shutdown lock for the write. Without it the
+// upgrade still runs: refusing an update because logind is missing would
+// leave the system on the old image for no gain.
+func (d *Daemon) inhibitShutdown() (release func()) {
+	if d.inhibitor == nil {
+		return func() {}
+	}
+	release, err := d.inhibitor.Inhibit()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "hadron-update: could not block shutdown during the upgrade:", err)
+		return func() {}
+	}
+	return release
 }
 
 func (d *Daemon) progress(line string) {
