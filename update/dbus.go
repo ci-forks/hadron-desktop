@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -157,6 +159,43 @@ func busError(err error) *dbus.Error {
 var errNotAuthorized = dbus.NewError(busInterface+".Error.NotAuthorized",
 	[]any{"not authorized: only members of the admin group may install updates or reboot"})
 
+var errSandboxed = dbus.NewError(busInterface+".Error.NotAuthorized",
+	[]any{"not authorized: applications in a Flatpak sandbox may not install updates or reboot"})
+
+// procRoot is where the caller's process is looked up. A variable so tests
+// can point it at a fake /proc.
+var procRoot = "/proc"
+
+// busPID asks the bus which process owns sender. The bus vouches for it; the
+// caller cannot claim another.
+func busPID(conn *dbus.Conn) func(dbus.Sender) (uint32, error) {
+	return func(sender dbus.Sender) (uint32, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), polkitTimeout)
+		defer cancel()
+		var pid uint32
+		err := conn.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.GetConnectionUnixProcessID", 0, string(sender)).Store(&pid)
+		return pid, err
+	}
+}
+
+// sandboxed reports whether pid runs in a Flatpak sandbox, the way
+// xdg-desktop-portal tells: flatpak puts .flatpak-info at the root of every
+// sandbox. A process that cannot be looked up counts as sandboxed.
+func sandboxed(pid uint32) (bool, error) {
+	dir := filepath.Join(procRoot, strconv.FormatUint(uint64(pid), 10))
+	if _, err := os.Stat(dir); err != nil {
+		return true, err
+	}
+	_, err := os.Stat(filepath.Join(dir, "root", ".flatpak-info"))
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, os.ErrNotExist):
+		return false, nil
+	}
+	return true, err
+}
+
 func statusDict(s Status) map[string]dbus.Variant {
 	return map[string]dbus.Variant{
 		"state":     dbus.MakeVariant(string(s.State)),
@@ -174,6 +213,9 @@ func statusDict(s Status) map[string]dbus.Variant {
 type service struct {
 	d    *Daemon
 	auth Authorizer
+	// pidOf names the process behind a bus name; nil refuses every
+	// mutating call.
+	pidOf func(dbus.Sender) (uint32, error)
 
 	// netSlot admits one network-bound call (Check, Releases, Inspect) at
 	// a time. They are open to every local user, so without it any caller
@@ -266,8 +308,28 @@ func newService(d *Daemon, a Authorizer) *service {
 }
 
 // authorize asks before any argument is looked at, so an unauthorized
-// client learns nothing about the system from a mutating call.
+// client learns nothing about the system from a mutating call. A caller in
+// a Flatpak sandbox is refused before polkit is asked: the app runs as the
+// user, so the admin-group rule would let any app with system-bus access
+// install an image or reboot.
 func (s *service) authorize(sender dbus.Sender, action string) *dbus.Error {
+	if s.pidOf == nil {
+		fmt.Fprintf(os.Stderr, "hadron-update: refusing %s for %s: no way to look up the caller\n", action, sender)
+		return errNotAuthorized
+	}
+	pid, err := s.pidOf(sender)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "hadron-update: refusing %s for %s: %v\n", action, sender, err)
+		return errNotAuthorized
+	}
+	if sb, err := sandboxed(pid); sb {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "hadron-update: refusing %s for %s (pid %d): %v\n", action, sender, pid, err)
+			return errNotAuthorized
+		}
+		fmt.Fprintf(os.Stderr, "hadron-update: refusing %s for %s: pid %d runs in a Flatpak sandbox\n", action, sender, pid)
+		return errSandboxed
+	}
 	ok, err := s.auth.Allowed(sender, action)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "hadron-update: refusing %s for %s: %v\n", action, sender, err)
@@ -435,6 +497,7 @@ func (a busAPI) RebootPrevious(sender dbus.Sender) *dbus.Error {
 // taken or the bus goes away. It never returns while a job runs.
 func serve(conn *dbus.Conn, d *Daemon, a Authorizer) error {
 	s := newService(d, a)
+	s.pidOf = busPID(conn)
 	d.OnChange(func(st Status) {
 		s.touch()
 		if err := conn.Emit(busPath, busInterface+".StateChanged", statusDict(st)); err != nil {

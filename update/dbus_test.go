@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -875,5 +876,99 @@ func TestCheckKeepsTheServiceUp(t *testing.T) {
 	}
 	if s.tryClose(time.Minute) {
 		t.Fatal("a Check call did not count as activity")
+	}
+}
+
+// fakeProc makes a /proc of its own with one process, pid, and points
+// procRoot at it. flatpak puts .flatpak-info at the root of the sandbox; the
+// returned path is that file, so a test can take the process out of it.
+// Call it before startService: serve reads procRoot from its own goroutines.
+func fakeProc(t *testing.T, pid uint32, flatpak bool) (info string) {
+	t.Helper()
+	dir := t.TempDir()
+	root := filepath.Join(dir, fmt.Sprint(pid), "root")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	info = filepath.Join(root, ".flatpak-info")
+	if flatpak {
+		if err := os.WriteFile(info, []byte("[Application]\nname=org.example.App\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := procRoot
+	procRoot = dir
+	t.Cleanup(func() { procRoot = old })
+	return info
+}
+
+// TestAuthorizeRefusesAFlatpakCaller: a Flatpak app with system-bus access
+// runs as the user, so polkit's admin rule would let it install. It is
+// refused before polkit is asked, as xdg-desktop-portal tells sandboxed
+// callers apart.
+func TestAuthorizeRefusesAFlatpakCaller(t *testing.T) {
+	daemonEnv(t, "v0.0.5")
+	for _, c := range []struct {
+		name    string
+		flatpak bool
+		pidErr  error
+		pid     uint32 // the pid the resolver answers; the fake /proc has 42
+		allowed bool
+		asked   bool
+	}{
+		{"host process", false, nil, 42, true, true},
+		{"flatpak", true, nil, 42, false, false},
+		{"pid lookup fails", false, errors.New("no such name"), 42, false, false},
+		{"process gone", false, nil, 43, false, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			fakeProc(t, 42, c.flatpak)
+			auth := &fakeAuth{allow: true}
+			s := newService(NewDaemon(&fakeBackend{}), auth)
+			s.pidOf = func(dbus.Sender) (uint32, error) { return c.pid, c.pidErr }
+			err := s.authorize(":1.5", actionApply)
+			if (err == nil) != c.allowed {
+				t.Fatalf("authorize: %v, want allowed=%v", err, c.allowed)
+			}
+			if err != nil && err.Name != busInterface+".Error.NotAuthorized" {
+				t.Fatalf("error name %s", err.Name)
+			}
+			if asked := len(auth.questions()) > 0; asked != c.asked {
+				t.Fatalf("polkit asked: %v, want %v", asked, c.asked)
+			}
+		})
+	}
+	// No resolver: refuse, never skip the check.
+	s := newService(NewDaemon(&fakeBackend{}), &fakeAuth{allow: true})
+	s.pidOf = nil
+	if err := s.authorize(":1.5", actionApply); err == nil {
+		t.Fatal("authorized without a way to find the caller's process")
+	}
+}
+
+// TestBusRefusesAFlatpakCaller runs the check through the bus, which names
+// the caller's real pid: this test process, put in a fake sandbox.
+func TestBusRefusesAFlatpakCaller(t *testing.T) {
+	dg := daemonEnv(t, "v0.0.5")
+	info := fakeProc(t, uint32(os.Getpid()), true)
+	auth := &fakeAuth{allow: true}
+	b := &fakeBackend{}
+	f := startService(t, NewDaemon(b), auth)
+	ref := ghcrRepo + ":sway-v0.0.6"
+	if got := errName(f.call("Apply", ref, dg[ref], false).Err); got != busInterface+".Error.NotAuthorized" {
+		t.Fatalf("Apply from a sandbox: %s", got)
+	}
+	if got := errName(f.call("Reboot").Err); got != busInterface+".Error.NotAuthorized" {
+		t.Fatalf("Reboot from a sandbox: %s", got)
+	}
+	if n := len(auth.questions()); n != 0 || b.rebootCount() != 0 {
+		t.Fatalf("polkit asked %d times, %d reboots", n, b.rebootCount())
+	}
+	// The same process outside a sandbox is up to polkit.
+	if err := os.Remove(info); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.call("Reboot").Err; err != nil || b.rebootCount() != 1 {
+		t.Fatalf("Reboot from the host: %v, %d reboots", err, b.rebootCount())
 	}
 }
