@@ -184,11 +184,18 @@ func fakeImage(t *testing.T, name, tag, arch string, labels map[string]string, i
 	return newFakeRegistry(t, false).image(t, name, tag, arch, labels, index)
 }
 
-func setup(t *testing.T, installed, latest string) {
+func setup(t *testing.T, installed, latest string) { setupFlavor(t, "sway", installed, latest) }
+
+// setupAgent is setup for the agent flavor, the only one that still installs
+// directly (sudo + kairos-agent) instead of through the daemon.
+func setupAgent(t *testing.T, installed, latest string) { setupFlavor(t, "agent", installed, latest) }
+
+func setupFlavor(t *testing.T, flavor, installed, latest string) {
 	t.Helper()
-	fakeRegistry(t, false, "sway-v0.1.0", "sway-v0.2.0")
-	t.Setenv("HADRON_UPDATE_RELEASE_FILE",
-		writeRelease(t, strings.Replace(goodRelease, `"v0.1.0"`, installed, 1)))
+	fakeRegistry(t, false, "sway-v0.1.0", "sway-v0.2.0", "agent-v0.1.0", "agent-v0.2.0")
+	rf := strings.Replace(goodRelease, `"v0.1.0"`, installed, 1)
+	rf = strings.Replace(rf, "FLAVOR=sway", "FLAVOR="+flavor, 1)
+	t.Setenv("HADRON_UPDATE_RELEASE_FILE", writeRelease(t, rf))
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	fakeGitHub(t, latest)
 	oldRoot, oldReboot := needRoot, rebootCommand
@@ -222,7 +229,7 @@ func TestCheckExitCodes(t *testing.T) {
 }
 
 func TestUpgradeRunsKairosAgentWithTheFlavorImage(t *testing.T) {
-	setup(t, "v0.1.0", "v0.2.0")
+	setupAgent(t, "v0.1.0", "v0.2.0")
 	agent, argv := fakeTool(t, 0)
 	t.Setenv("HADRON_UPDATE_AGENT", agent)
 
@@ -237,7 +244,7 @@ func TestUpgradeRunsKairosAgentWithTheFlavorImage(t *testing.T) {
 		t.Fatalf("code %d, stderr %q", code, errOut)
 	}
 	got, _ := os.ReadFile(argv)
-	want := "upgrade\n--source\noci:ghcr.io/kairos-community/hadron-desktop:sway-v0.2.0\n"
+	want := "upgrade\n--source\noci:ghcr.io/kairos-community/hadron-desktop:agent-v0.2.0\n"
 	if string(got) != want {
 		t.Fatalf("kairos-agent argv = %q, want %q", got, want)
 	}
@@ -250,7 +257,7 @@ func TestUpgradeRunsKairosAgentWithTheFlavorImage(t *testing.T) {
 }
 
 func TestUpgradeCancelledTouchesNothing(t *testing.T) {
-	setup(t, "v0.1.0", "v0.2.0")
+	setupAgent(t, "v0.1.0", "v0.2.0")
 	agent, argv := fakeTool(t, 0)
 	t.Setenv("HADRON_UPDATE_AGENT", agent)
 
@@ -263,7 +270,7 @@ func TestUpgradeCancelledTouchesNothing(t *testing.T) {
 }
 
 func TestUpgradeUpToDateIsANoop(t *testing.T) {
-	setup(t, "v0.2.0", "v0.2.0")
+	setupAgent(t, "v0.2.0", "v0.2.0")
 	agent, argv := fakeTool(t, 0)
 	t.Setenv("HADRON_UPDATE_AGENT", agent)
 
@@ -276,7 +283,7 @@ func TestUpgradeUpToDateIsANoop(t *testing.T) {
 }
 
 func TestUpgradePinnedVersionAndFailure(t *testing.T) {
-	setup(t, "v0.2.0", "v0.2.0")
+	setupAgent(t, "v0.2.0", "v0.2.0")
 	agent, argv := fakeTool(t, 3)
 	t.Setenv("HADRON_UPDATE_AGENT", agent)
 
@@ -287,7 +294,7 @@ func TestUpgradePinnedVersionAndFailure(t *testing.T) {
 		t.Fatalf("code %d, stderr %q", code, errOut)
 	}
 	got, _ := os.ReadFile(argv)
-	if !strings.Contains(string(got), "hadron-desktop:sway-v0.1.0") {
+	if !strings.Contains(string(got), "hadron-desktop:agent-v0.1.0") {
 		t.Fatalf("kairos-agent argv = %q", got)
 	}
 
@@ -366,12 +373,12 @@ func TestNotifyArgsEndOptionParsing(t *testing.T) {
 }
 
 func TestUpgradeRefusesAnImageThatIsNotThere(t *testing.T) {
-	setup(t, "v0.1.0", "v0.3.0") // v0.3.0 has a release but no image
+	setupAgent(t, "v0.1.0", "v0.3.0") // v0.3.0 has a release but no image
 	agent, argv := fakeTool(t, 0)
 	t.Setenv("HADRON_UPDATE_AGENT", agent)
 
 	code, _, errOut := runCLI("", "upgrade", "--yes")
-	if code != exitError || !strings.Contains(errOut, "sway-v0.3.0 does not exist") {
+	if code != exitError || !strings.Contains(errOut, "agent-v0.3.0 does not exist") {
 		t.Fatalf("code %d, stderr %q", code, errOut)
 	}
 	if _, err := os.Stat(argv); !os.IsNotExist(err) {
@@ -380,8 +387,8 @@ func TestUpgradeRefusesAnImageThatIsNotThere(t *testing.T) {
 }
 
 func TestUpgradeExplainsAPrivatePackage(t *testing.T) {
-	setup(t, "v0.1.0", "v0.2.0")
-	fakeRegistry(t, true, "sway-v0.2.0")
+	setupAgent(t, "v0.1.0", "v0.2.0")
+	fakeRegistry(t, true, "agent-v0.2.0")
 	agent, argv := fakeTool(t, 0)
 	t.Setenv("HADRON_UPDATE_AGENT", agent)
 
@@ -397,7 +404,7 @@ func TestUpgradeExplainsAPrivatePackage(t *testing.T) {
 // The sudo child must not repeat the plan or the question the user already
 // answered, and must not need the registry: the parent checked it.
 func TestRootChildOnlyRunsTheAgent(t *testing.T) {
-	setup(t, "v0.1.0", "v0.2.0")
+	setupAgent(t, "v0.1.0", "v0.2.0")
 	t.Setenv("HADRON_UPDATE_REGISTRY", "http://127.0.0.1:1") // unreachable
 	agent, argv := fakeTool(t, 0)
 	t.Setenv("HADRON_UPDATE_AGENT", agent)

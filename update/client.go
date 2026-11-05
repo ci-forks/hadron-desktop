@@ -1,0 +1,229 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/godbus/dbus/v5"
+)
+
+// InspectInfo is what the daemon's Inspect answers: which image a reference
+// really names, and whether the daemon will install it.
+type InspectInfo struct {
+	Ref, Digest, OS, Arch, Flavor, Version, Hadron string
+	Trusted                                        bool
+	// Refusal is why the daemon will not install the image; Overridable says
+	// an explicit second answer from the user can lift it.
+	Refusal     string
+	Overridable bool
+}
+
+// Event is one StateChanged or Progress signal: Status is set for the first,
+// Line for the second.
+type Event struct {
+	Status *Status
+	Line   string
+}
+
+// daemonClient is the CLI's view of the root service. The real one speaks
+// D-Bus; tests inject a fake through dialDaemon, so no bus is needed.
+type daemonClient interface {
+	Status() (Status, error)
+	Check() error
+	Releases() ([]string, error)
+	Inspect(ref string, advanced bool) (InspectInfo, error)
+	Apply(ref, digest string, advanced bool) error
+	Cancel() error
+	Reboot() error
+	// Watch subscribes to StateChanged and Progress. Subscribe before Apply,
+	// so a fast job cannot finish unseen. stop ends the subscription and
+	// closes the channel.
+	Watch() (events <-chan Event, stop func())
+	Close()
+}
+
+// dialDaemon connects to the root service. A variable so tests can inject a fake.
+var dialDaemon = func() (daemonClient, error) { return dial() }
+
+// daemonError is a D-Bus error from the service, reduced to the short name
+// after "io.kairos.HadronUpdate1.Error." (Busy, Refused, ...).
+type daemonError struct{ Name, Msg string }
+
+func (e *daemonError) Error() string { return e.Msg }
+
+func daemonErrName(err error) string {
+	var de *daemonError
+	if errors.As(err, &de) {
+		return de.Name
+	}
+	return ""
+}
+
+const errPrefix = busInterface + ".Error."
+
+func wrapBusErr(err error) error {
+	var be dbus.Error
+	if errors.As(err, &be) && strings.HasPrefix(be.Name, errPrefix) {
+		msg := be.Name
+		if len(be.Body) > 0 {
+			if s, ok := be.Body[0].(string); ok {
+				msg = s
+			}
+		}
+		return &daemonError{Name: strings.TrimPrefix(be.Name, errPrefix), Msg: msg}
+	}
+	var pbe *dbus.Error
+	if errors.As(err, &pbe) && pbe != nil && strings.HasPrefix(pbe.Name, errPrefix) {
+		return wrapBusErr(*pbe)
+	}
+	return err
+}
+
+// client is the D-Bus implementation of daemonClient.
+type client struct {
+	conn *dbus.Conn
+	obj  dbus.BusObject
+}
+
+// dial opens a private connection to the system bus. The service itself is
+// started by D-Bus activation on the first call.
+func dial() (*client, error) {
+	conn, err := dbus.ConnectSystemBus()
+	if err != nil {
+		return nil, err
+	}
+	return &client{conn: conn, obj: conn.Object(busName, busPath)}, nil
+}
+
+func (c *client) Close() { c.conn.Close() }
+
+// call retries once on Exiting: the service decided to quit, and the next
+// call activates a fresh one.
+func (c *client) call(method string, out []any, args ...any) error {
+	var err error
+	for i := 0; i < 2; i++ {
+		err = wrapBusErr(c.obj.Call(busInterface+"."+method, 0, args...).Store(out...))
+		if daemonErrName(err) != "Exiting" {
+			return err
+		}
+	}
+	return err
+}
+
+func (c *client) Status() (Status, error) {
+	var m map[string]dbus.Variant
+	if err := c.call("Status", []any{&m}); err != nil {
+		return Status{}, err
+	}
+	return statusFromDict(m), nil
+}
+
+func (c *client) Check() error { return c.call("Check", nil) }
+
+func (c *client) Releases() ([]string, error) {
+	var tags []string
+	err := c.call("Releases", []any{&tags})
+	return tags, err
+}
+
+func (c *client) Inspect(ref string, advanced bool) (InspectInfo, error) {
+	var m map[string]dbus.Variant
+	if err := c.call("Inspect", []any{&m}, ref, advanced); err != nil {
+		return InspectInfo{}, err
+	}
+	return InspectInfo{
+		Ref: str(m, "ref"), Digest: str(m, "digest"), OS: str(m, "os"), Arch: str(m, "arch"),
+		Flavor: str(m, "flavor"), Version: str(m, "version"), Hadron: str(m, "hadron"),
+		Trusted: boolean(m, "trusted"), Refusal: str(m, "refusal"), Overridable: boolean(m, "overridable"),
+	}, nil
+}
+
+func (c *client) Apply(ref, digest string, advanced bool) error {
+	return c.call("Apply", nil, ref, digest, advanced)
+}
+func (c *client) Cancel() error { return c.call("Cancel", nil) }
+func (c *client) Reboot() error { return c.call("Reboot", nil) }
+
+func (c *client) Watch() (<-chan Event, func()) {
+	out := make(chan Event, 64)
+	sigs := make(chan *dbus.Signal, 64)
+	opts := []dbus.MatchOption{dbus.WithMatchSender(busName), dbus.WithMatchObjectPath(busPath), dbus.WithMatchInterface(busInterface)}
+	_ = c.conn.AddMatchSignal(opts...)
+	c.conn.Signal(sigs)
+	done := make(chan struct{})
+	go func() {
+		defer close(out)
+		for {
+			select {
+			case <-done:
+				return
+			case s, ok := <-sigs:
+				if !ok {
+					return
+				}
+				var ev Event
+				switch s.Name {
+				case busInterface + ".StateChanged":
+					if len(s.Body) == 1 {
+						if m, ok := s.Body[0].(map[string]dbus.Variant); ok {
+							st := statusFromDict(m)
+							ev.Status = &st
+						}
+					}
+				case busInterface + ".Progress":
+					if len(s.Body) == 1 {
+						ev.Line, _ = s.Body[0].(string)
+					}
+				default:
+					continue
+				}
+				select {
+				case out <- ev:
+				case <-done:
+					return
+				}
+			}
+		}
+	}()
+	var once bool
+	return out, func() {
+		if once {
+			return
+		}
+		once = true
+		close(done)
+		c.conn.RemoveSignal(sigs)
+		_ = c.conn.RemoveMatchSignal(opts...)
+	}
+}
+
+func str(m map[string]dbus.Variant, k string) string {
+	s, _ := m[k].Value().(string)
+	return s
+}
+
+func boolean(m map[string]dbus.Variant, k string) bool {
+	b, _ := m[k].Value().(bool)
+	return b
+}
+
+func statusFromDict(m map[string]dbus.Variant) Status {
+	return Status{
+		State: State(str(m, "state")), Installed: str(m, "installed"), Latest: str(m, "latest"),
+		Pin: str(m, "pin"), Detail: str(m, "detail"), Advanced: boolean(m, "advanced"),
+	}
+}
+
+// describeDaemonError turns a daemon error into the sentence the user reads.
+func describeDaemonError(err error) string {
+	switch daemonErrName(err) {
+	case "NotAuthorized":
+		return "Only members of the admin group can install updates."
+	case "RebootPending":
+		return "An update is already installed; restart first."
+	case "Busy":
+		return "Another update is running."
+	}
+	return fmt.Sprint(err)
+}
