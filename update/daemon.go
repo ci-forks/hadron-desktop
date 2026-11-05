@@ -849,5 +849,10 @@ func (kairosBackend) RebootPrevious() error {
 	if err != nil {
 		return fmt.Errorf("kairos-agent bootentry --select %s: %w: %s", previousEntry, err, strings.TrimSpace(string(out)))
 	}
-	return kairosBackend{}.Reboot()
+	if err := (kairosBackend{}).Reboot(); err != nil {
+		// The one-shot selection stays: the next boot, whenever it comes,
+		// starts the previous system. The user must know that.
+		return fmt.Errorf("The previous system is selected for the next boot; restarting failed: %w", err)
+	}
+	return nil
 }

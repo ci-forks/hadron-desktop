@@ -1213,3 +1213,20 @@ func TestLatestSurvivesARestart(t *testing.T) {
 		t.Fatalf("latest file %q, %v", got, err)
 	}
 }
+
+// TestKairosBackendRebootPreviousSaysTheSelectionStays: once the previous
+// system is selected, a failed restart leaves that selection for the next
+// boot, whenever it comes. The error must say so.
+func TestKairosBackendRebootPreviousSaysTheSelectionStays(t *testing.T) {
+	logFile, _ := fakeRebootTools(t, 0)
+	bin := strings.Split(os.Getenv("PATH"), string(os.PathListSeparator))[0]
+	sc := fmt.Sprintf("#!/bin/sh\necho \"systemctl $*\" >> %s\necho 'Failed to reboot' >&2\nexit 1\n", logFile)
+	if err := os.WriteFile(filepath.Join(bin, "systemctl"), []byte(sc), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	err := (kairosBackend{}).RebootPrevious()
+	if err == nil || !strings.HasPrefix(err.Error(), "The previous system is selected for the next boot; restarting failed: ") ||
+		!strings.Contains(err.Error(), "Failed to reboot") {
+		t.Fatalf("err %v", err)
+	}
+}
