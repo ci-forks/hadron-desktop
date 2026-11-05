@@ -28,9 +28,10 @@ kairos-init from the Kairos monorepo (`ghcr.io/kairos-io/kairos/kairos-init:mast
 ## Variant architecture
 
 - **Sway:** Wayland, wlroots, Wayland Mesa, Sway, foot, fuzzel, waybar, mako,
-  wl-clipboard, slurp and swayidle.
+  wl-clipboard, slurp, swayidle and swaylock.
 - **i3:** XLibre 25.2.0, X11 Mesa/GLX, the XLibre libinput driver, i3 4.25.1,
-  st, dmenu, i3bar, dunst and xsel.
+  st, dmenu, i3bar, dunst, xsel, i3lock and xss-lock, and shotgun, hacksaw and
+  xclip for screenshots.
 - **COSMIC:** COSMIC Epoch 1.11 (the cosmic-comp compositor, panel and dock,
   launcher, Settings, Files, Terminal, Text Editor, Store), built from source
   in Rust against the Hadron musl libraries. polkit (duktape) and
@@ -89,7 +90,9 @@ kept under `build/sway-desktop/` and `build/i3-desktop/`.
 - **Shortcuts:** `Super+F1` opens a cheat sheet. `Super+D` launches apps,
   `Super+Enter` opens a terminal, `Super+Shift+E` opens the power menu (log
   out, suspend, reboot, power off). A one-time notification on the first login
-  points at all three.
+  points at all three. In Sway, i3 and niri, `Super+Alt+L` locks the screen
+  and `Print` takes a screenshot. Sway and i3 also lock the screen when idle
+  and before suspend.
 - **Apps:** `flatpak install flathub <app>`; `distrobox` for a mutable Linux to
   tinker in.
 - **Updates:** a desktop notification appears when a new Hadron Desktop

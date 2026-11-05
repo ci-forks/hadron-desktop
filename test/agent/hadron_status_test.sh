@@ -167,6 +167,30 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 7. no automatic screen lock on the agent: rootfs-agent shadows the i3
+#    drop-in that starts xss-lock, and starts nothing in its place
+# ---------------------------------------------------------------------------
+lock_base="$repo_root/rootfs-i3/etc/i3/config.d/10-screen-lock.conf"
+lock_agent="$repo_root/rootfs-agent/etc/i3/config.d/10-screen-lock.conf"
+if grep -q '^exec .*xss-lock' "$lock_base" 2>/dev/null; then
+  ok "i3 starts xss-lock from ${lock_base#$repo_root/}"
+else
+  err "xss-lock exec not found in $lock_base (the agent override shadows that file by name)"
+fi
+if [ -f "$lock_agent" ]; then
+  if grep -v '^[[:space:]]*#' "$lock_agent" | grep -q '[^[:space:]]'; then
+    err "agent screen-lock override must be comments only: $lock_agent"
+  else
+    ok "agent shadows 10-screen-lock.conf with a comments-only file"
+  fi
+else
+  err "missing agent screen-lock override: $lock_agent"
+fi
+if grep -q '^exec .*xss-lock' "$i3conf" 2>/dev/null; then
+  err "90-hadron-agent.conf starts xss-lock"
+fi
+
+# ---------------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   echo "PASS: hadron-status tests"
 else

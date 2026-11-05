@@ -57,7 +57,10 @@ input type:keyboard {
 exec /usr/bin/pipewire
 exec /usr/bin/wireplumber
 exec mako
-exec swayidle -w timeout 600 'swaymsg "output * dpms off"' resume 'swaymsg "output * dpms on"'
+# Idle: lock after 5 minutes, turn the outputs off after 10. Also lock before
+# suspend (-w makes logind wait until swaylock is up) and on
+# `loginctl lock-session`. swaylock's colours are in /etc/swaylock/config.
+exec swayidle -w timeout 300 'swaylock -f' timeout 600 'swaymsg "output * dpms off"' resume 'swaymsg "output * dpms on"' before-sleep 'swaylock -f' lock 'swaylock -f'
 exec $term
 # First-login welcome (once per user) and the release checker, which shows a
 # notification when a new Hadron Desktop is out. Both talk to mako over the
@@ -73,6 +76,7 @@ bindsym $mod+d             exec $menu
 bindsym $mod+Shift+q       kill
 bindsym $mod+Shift+c       reload
 bindsym $mod+Shift+e       exec hadron-power-menu
+bindsym $mod+Mod1+l        exec swaylock -f
 bindsym $mod+F1            exec foot --app-id=floatterm -T "Keyboard shortcuts" hadron-help
 
 # Focus

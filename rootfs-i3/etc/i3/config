@@ -57,6 +57,17 @@ bindsym $mod+Shift+c       reload
 bindsym $mod+Shift+e       exec --no-startup-id hadron-power-menu
 bindsym $mod+F1            exec --no-startup-id st -c HadronFloat -t "Keyboard shortcuts" -e hadron-help
 
+# Screen lock. i3lock checks the password through /etc/pam.d/i3lock. xss-lock
+# runs the same command on idle and before suspend, from
+# config.d/10-screen-lock.conf (variables set here reach included files).
+set $lock i3lock --nofork --ignore-empty-password --show-failed-attempts --color=1a1b26
+bindsym $mod+Mod1+l        exec --no-startup-id $lock
+
+# Screenshots (shotgun + hacksaw + xclip): to the clipboard, like Sway, and to
+# ~/Pictures/Screenshots, like niri.
+bindsym Print              exec --no-startup-id hadron-screenshot
+bindsym $mod+Print         exec --no-startup-id hadron-screenshot area
+
 bindsym $mod+$left  focus left
 bindsym $mod+$down  focus down
 bindsym $mod+$up    focus up

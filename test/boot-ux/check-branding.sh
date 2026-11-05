@@ -49,6 +49,18 @@ check "hadron-update is installed and runs" "hadron-update help | grep -q upgrad
 # Screen lockers run as the user; pam_unix needs this setuid helper to check
 # the password, or nobody can unlock.
 check "unix_chkpwd is setuid (screen unlock)" "test -u /usr/sbin/unix_chkpwd"
+# Sway and i3 ship their own locker and screenshot tools. Without its PAM
+# service a locker falls back to `other`, which denies every password.
+if [ "$FLAVOR" = sway ]; then
+    check "swaylock finds all its libraries in the image" "test -x /usr/bin/swaylock && ! ldd /usr/bin/swaylock 2>&1 | grep -q 'not found'"
+    check "swaylock has its PAM service" "grep -Eq '^auth[[:space:]]+include[[:space:]]+login' /etc/pam.d/swaylock"
+fi
+if [ "$FLAVOR" = i3 ]; then
+    for b in i3lock xss-lock shotgun hacksaw xclip; do
+        check "$b finds all its libraries in the image" "test -x /usr/bin/$b && ! ldd /usr/bin/$b 2>&1 | grep -q 'not found'"
+    done
+    check "i3lock has its PAM service" "grep -Eq '^auth[[:space:]]+include[[:space:]]+login' /etc/pam.d/i3lock"
+fi
 if [ "$FLAVOR" = cosmic ]; then
     # The COSMIC password prompt (cosmic-osd) execs polkit's helper at this
     # path; without it every privileged Settings change fails silently.
