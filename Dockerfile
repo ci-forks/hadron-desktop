@@ -3303,6 +3303,11 @@ RUN chmod 1777 /tmp; \
         ln -sf /usr/lib/systemd/system/$u.service /etc/systemd/system/multi-user.target.wants/$u.service; \
       done; \
     fi; \
+    # pam_unix checks a password through this helper when the caller is not
+    # root, which is how every screen locker unlocks (Noctalia's, COSMIC's).
+    # Without setuid it cannot read /etc/shadow and every unlock fails with
+    # "cannot retrieve authentication info".
+    if [ -e /usr/sbin/unix_chkpwd ]; then chmod 4755 /usr/sbin/unix_chkpwd; fi; \
     systemctl mask getty@tty1.service 2>/dev/null || true; \
     # M2: NetworkManager is the network manager (systemd-networkd disabled at
     # runtime in favour of NM).

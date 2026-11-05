@@ -46,6 +46,9 @@ check "release file records the Hadron base" "grep -Eq '^HADRON_VERSION=v[0-9]' 
 check "release file points at the published image repo" \
     "grep -qx 'IMAGE_REPO=ghcr.io/kairos-community/hadron-desktop' $R"
 check "hadron-update is installed and runs" "hadron-update help | grep -q upgrade"
+# Screen lockers run as the user; pam_unix needs this setuid helper to check
+# the password, or nobody can unlock.
+check "unix_chkpwd is setuid (screen unlock)" "test -u /usr/sbin/unix_chkpwd"
 if [ "$FLAVOR" = cosmic ]; then
     # The COSMIC password prompt (cosmic-osd) execs polkit's helper at this
     # path; without it every privileged Settings change fails silently.

@@ -1,13 +1,18 @@
 #!/bin/sh
 # One-time welcome notification on a user's first desktop login, pointing at
-# the shortcut cheat sheet. Started from the sway/i3 config; the notification
-# daemon is started in the same batch, so give it a moment to own the bus name.
+# the shortcut cheat sheet. Started with the session, in the same batch as the
+# notification daemon (mako, dunst or the Noctalia shell), so it retries until
+# the daemon owns the bus name; a shell can take several seconds to come up.
 state="${XDG_STATE_HOME:-$HOME/.local/state}/hadron-desktop"
 [ -e "$state/welcomed" ] && exit 0
-sleep 3
-busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications \
+tries=0
+until busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications \
     org.freedesktop.Notifications Notify susssasa{sv}i \
     "Hadron Desktop" 0 "" "Welcome to Hadron Desktop" \
     "Press Super+F1 for keyboard shortcuts, Super+D to launch apps and Super+Shift+E for the power menu." \
-    0 0 15000 >/dev/null || exit 0
+    0 0 15000 >/dev/null 2>&1; do
+    tries=$((tries + 1))
+    [ "$tries" -ge 15 ] && exit 0
+    sleep 2
+done
 mkdir -p "$state" && : > "$state/welcomed"
