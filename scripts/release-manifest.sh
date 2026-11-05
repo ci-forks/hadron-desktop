@@ -3,7 +3,7 @@
 #
 # Usage: release-manifest.sh <flavor> <release-tag> <image> <iso-asset-path> <out.json>
 #
-#   flavor          sway | i3 | agent
+#   flavor          sway | i3 | cosmic | niri | agent
 #   release-tag     the release tag being published, e.g. v0.4.0
 #   image           the final OCI image, e.g. i3-desktop:dev
 #   iso-asset-path  path to the ISO; its sibling .sha256 must already exist
@@ -16,7 +16,9 @@
 # a flavor: those are emitted as JSON null rather than as an empty string, so a
 # consumer can tell "not applicable" from "we failed to look".
 #
-# Sway is Wayland-only and links no X server, so it carries no XLibre version.
+# Only i3 and agent run the XLibre X server. Sway, COSMIC and niri are Wayland
+# compositors (COSMIC and niri run X apps through Xwayland), so they carry no
+# XLibre version.
 # Only the agent image carries Cua and AT-SPI.
 set -euo pipefail
 
@@ -26,8 +28,8 @@ die() { echo "release-manifest: $*" >&2; exit 1; }
 flavor="$1" release_tag="$2" image="$3" iso_path="$4" out="$5"
 
 case "$flavor" in
-  sway|i3|agent) ;;
-  *) die "unknown flavor: $flavor (want sway, i3, or agent)" ;;
+  sway|i3|cosmic|niri|agent) ;;
+  *) die "unknown flavor: $flavor (want sway, i3, cosmic, niri, or agent)" ;;
 esac
 [ -f "$iso_path" ]           || die "no ISO at $iso_path"
 [ -f "$iso_path.sha256" ]    || die "no checksum at $iso_path.sha256"
@@ -64,7 +66,7 @@ iso_name="$(basename "$iso_path")"
 
 git_commit="$(cd "$repo_root" && git rev-parse HEAD)"
 
-# Dockerfile: `ARG XLIBRE_VERSION=...`. Absent from the Sway variant by design.
+# Dockerfile: `ARG XLIBRE_VERSION=...`. Only the i3 and agent images have it.
 xlibre_version=null
 if [ "$flavor" = "i3" ] || [ "$flavor" = "agent" ]; then
   raw="$(grep -oP '^ARG XLIBRE_VERSION=\K\S+' "$repo_root/Dockerfile" | head -n1 || true)"

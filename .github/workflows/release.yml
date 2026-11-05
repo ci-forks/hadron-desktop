@@ -27,7 +27,7 @@ env:
   # tag GitHub reports as the latest *published* release, so an image pushed
   # here is invisible to users until the release job below has verified and
   # published every asset.
-  IMAGE_REPO: ghcr.io/kairos-community/hadron-desktop
+  IMAGE_REPO: ghcr.io/${{ github.repository }}
   # Every agent VM gate resolves its appliance image through this variable
   # (`test/agent/run.sh` takes `${1:-${AGENT_IMAGE:-agent-desktop:dev}}`, and the
   # Makefile declares `AGENT_IMAGE ?= agent-desktop:dev`), so one value keeps the
@@ -48,6 +48,8 @@ jobs:
         desktop:
           - sway
           - i3
+          - cosmic
+          - niri
     env:
       DESKTOP: ${{ matrix.desktop }}
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
@@ -416,11 +418,11 @@ jobs:
           sboms=(release/*.spdx.json)
           manifests=(release/*.build.json)
 
-          if (( ${#isos[@]} != 3 \
-             || ${#checksums[@]} != 3 \
-             || ${#sboms[@]} != 3 \
-             || ${#manifests[@]} != 3 )); then
-            echo "Expected three ISOs, three checksums, three SBOMs, and three build manifests" >&2
+          if (( ${#isos[@]} != 5 \
+             || ${#checksums[@]} != 5 \
+             || ${#sboms[@]} != 5 \
+             || ${#manifests[@]} != 5 )); then
+            echo "Expected five ISOs, five checksums, five SBOMs, and five build manifests" >&2
             echo "Found ${#isos[@]} ISOs, ${#checksums[@]} checksums, ${#sboms[@]} SBOMs, ${#manifests[@]} manifests" >&2
             find release -maxdepth 1 -type f -print >&2
             exit 1
@@ -454,10 +456,10 @@ jobs:
               and (.hadron_base_digest | test("^sha256:[0-9a-f]{64}$"))
               and (.image_id | test("^sha256:[0-9a-f]{64}$"))
               and (.iso_sha256 | test("^[0-9a-f]{64}$"))
-              and (.desktop_flavor as $flavor | ["sway","i3","agent"] | index($flavor) != null)
-              and (if .desktop_flavor == "sway"
-                   then .xlibre_version == null
-                   else (.xlibre_version | type == "string" and length > 0) end)
+              and (.desktop_flavor as $flavor | ["sway","i3","cosmic","niri","agent"] | index($flavor) != null)
+              and (if .desktop_flavor == "i3" or .desktop_flavor == "agent"
+                   then (.xlibre_version | type == "string" and length > 0)
+                   else .xlibre_version == null end)
               and (if .desktop_flavor == "agent"
                    then (.cua_revision | test("^[0-9a-f]{40}$"))
                         and (.atspi_version | type == "string" and length > 0)
@@ -478,10 +480,35 @@ jobs:
           # Exactly one manifest per flavor, so a duplicated build cannot pass
           # the count check while a flavor is missing.
           flavors="$(jq -r '.desktop_flavor' ./*.build.json | sort | tr '\n' ' ')"
-          if [[ "$flavors" != "agent i3 sway " ]]; then
-            echo "Expected one manifest each for sway, i3, and agent; got: $flavors" >&2
+          if [[ "$flavors" != "agent cosmic i3 niri sway " ]]; then
+            echo "Expected one manifest each for sway, i3, cosmic, niri, and agent; got: $flavors" >&2
             exit 1
           fi
+
+      # hadron-update on an installed system pulls without credentials. GHCR
+      # creates a new package as private, and only the package settings can
+      # make it public, so a release whose images need a login would publish
+      # an upgrade nobody can install.
+      - name: Upgrade images are public
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="${IMAGE_REPO#ghcr.io/}"
+          token="$(curl -fsS "https://ghcr.io/token?scope=repository:${name}:pull" | jq -r '.token // empty')" || true
+          if [[ -z "$token" ]]; then
+            echo "${IMAGE_REPO} needs a login to pull. Make the package public:" >&2
+            echo "https://github.com/orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/${name#*/}/settings" >&2
+            exit 1
+          fi
+          for flavor in sway i3 cosmic niri agent; do
+            ref="${IMAGE_REPO}:${flavor}-${RELEASE_TAG}"
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --head \
+              -H "Authorization: Bearer $token" \
+              -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json' \
+              "https://ghcr.io/v2/${name}/manifests/${flavor}-${RELEASE_TAG}")"
+            [[ "$code" == 200 ]] || { echo "$ref is not pullable without a login (HTTP $code)" >&2; exit 1; }
+            echo "$ref: public"
+          done
 
       - name: Create or update GitHub Release
         shell: bash

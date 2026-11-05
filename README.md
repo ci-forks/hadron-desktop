@@ -139,8 +139,8 @@ reason it is updated by hand. CI runs that script.
 ## Releases
 
 Pushing a `v`-prefixed tag runs `.github/workflows/release.yml`. The workflow
-builds the Sway and i3/XLibre installer ISOs in parallel and builds the agent
-ISO in a job that first runs all five agent gates. It then verifies every
+builds the Sway, i3/XLibre, COSMIC and niri installer ISOs in parallel and
+builds the agent ISO in a job that first runs all five agent gates. It then verifies every
 asset and creates a GitHub Release:
 
 ```sh
@@ -153,7 +153,7 @@ Every release also pushes one upgrade image per flavor,
 after all five gates pass). `hadron-update` installs those; it only considers
 tags GitHub reports as the latest *published* release.
 
-Each release carries twelve files — three ISOs, and for every ISO a checksum,
+Each release carries twenty files — five ISOs, and for every ISO a checksum,
 an SPDX SBOM, and a build manifest:
 
 | Asset | Contents |
@@ -163,7 +163,7 @@ an SPDX SBOM, and a build manifest:
 | `….iso.spdx.json` | SPDX JSON SBOM of the OCI image the ISO wraps, produced by `anchore/syft:v1.29.0` |
 | `….iso.build.json` | the build manifest described below |
 
-`<flavor>` is `sway`, `i3`, or `agent`. The build manifest records exactly what
+`<flavor>` is `sway`, `i3`, `cosmic`, `niri`, or `agent`. The build manifest records exactly what
 went into the image, so a downloaded ISO can be traced back to its sources:
 
 ```json
@@ -182,12 +182,12 @@ went into the image, so a downloaded ISO can be traced back to its sources:
 }
 ```
 
-All eleven keys are present in every manifest. `xlibre_version` is `null` for
-the Wayland-only Sway flavor, and `cua_revision`/`atspi_version` are `null` for
-both non-agent flavors.
+All eleven keys are present in every manifest. `xlibre_version` is set only for i3
+and agent, the two flavors that run the XLibre X server, and
+`cua_revision`/`atspi_version` are `null` for every flavor except agent.
 
-The publishing job refuses to upload unless it finds exactly three ISOs, three
-checksums, three SBOMs, and three manifests, every checksum verifies, every SBOM
+The publishing job refuses to upload unless it finds exactly five ISOs, five
+checksums, five SBOMs, and five manifests, every checksum verifies, every SBOM
 parses as SPDX with a non-empty package list, and every manifest carries valid
 values that match the ISO shipped beside it. The agent job uploads nothing at
 all — not even its ISO — until the compatibility, contract, install, recovery,
