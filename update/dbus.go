@@ -183,8 +183,10 @@ type callerCreds struct {
 
 // busCreds asks the bus for sender's credentials. The bus vouches for them;
 // the caller cannot claim another process. ProcessFD, a pidfd, pins the
-// process itself, so a reused pid cannot stand in for it; without it the
-// pid is checked against the process start time instead.
+// process itself, so a reused pid cannot stand in for it. Without a pidfd
+// the check is weaker: the start time catches a pid reused during the
+// check, but a pid reused before the first start-time read cannot be
+// detected.
 func busCreds(conn *dbus.Conn) func(dbus.Sender) (callerCreds, error) {
 	return func(sender dbus.Sender) (callerCreds, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), polkitTimeout)
@@ -207,10 +209,12 @@ func busCreds(conn *dbus.Conn) func(dbus.Sender) (callerCreds, error) {
 }
 
 // readPidfdPid and readStartTime are the two reads that tie a check to one
-// process. Variables so tests can make the process change between them.
+// process, and statFlatpakInfo is the check. Variables so tests can make the
+// process change between them.
 var (
-	readPidfdPid  = pidfdPid
-	readStartTime = procStartTime
+	readPidfdPid    = pidfdPid
+	readStartTime   = procStartTime
+	statFlatpakInfo = os.Stat
 )
 
 // pidfdPid is the pid a pidfd refers to, from the Pid: line of its fdinfo:
@@ -249,15 +253,24 @@ func procStartTime(pid uint32) (string, error) {
 }
 
 // flatpakInfo reports whether pid's root holds .flatpak-info, the way
-// xdg-desktop-portal tells a sandbox. The root must resolve first: for a
-// zombie it does not, and every path under it would read as missing, which
-// would make any sandboxed zombie look like a host process.
+// xdg-desktop-portal tells a sandbox. For a zombie the root does not
+// resolve, and every path under it reads as missing, which would make a
+// sandboxed zombie look like a host process. So the root must resolve before
+// the Stat and again after it. Exit clears the root (exit_fs) and is
+// irreversible, so a root that still resolves after the Stat proves the Stat
+// saw the live root, even if the process entered exit just before. The start
+// time and the pidfd's Pid do not show that: both stay until it is reaped.
+// (os.OpenRoot would pin the root as well; the second Readlink needs no
+// directory fd and checks the same thing.)
 func flatpakInfo(pid uint32) (bool, error) {
 	root := filepath.Join(procRoot, strconv.FormatUint(uint64(pid), 10), "root")
 	if _, err := os.Readlink(root); err != nil {
 		return true, fmt.Errorf("the root of pid %d does not resolve: %w", pid, err)
 	}
-	_, err := os.Stat(filepath.Join(root, ".flatpak-info"))
+	_, err := statFlatpakInfo(filepath.Join(root, ".flatpak-info"))
+	if _, lerr := os.Readlink(root); lerr != nil {
+		return true, fmt.Errorf("pid %d exited during the check: %w", pid, lerr)
+	}
 	switch {
 	case err == nil:
 		return true, nil

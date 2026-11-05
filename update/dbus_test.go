@@ -930,7 +930,8 @@ func fakeFdinfo(t *testing.T, fd int, pid int) {
 	t.Cleanup(func() { selfFdinfo = old })
 }
 
-// sequence returns f's results in order, then repeats the last one.
+// startTimes is a readStartTime that returns values in order, then repeats
+// the last one.
 func startTimes(values ...string) func(uint32) (string, error) {
 	var mu sync.Mutex
 	return func(uint32) (string, error) {
@@ -1057,6 +1058,33 @@ func TestAuthorizeRefusesAFlatpakCaller(t *testing.T) {
 			}
 		})
 	}
+	// The caller enters exit between the first Readlink and the Stat:
+	// exit_fs clears its root, the Stat answers ENOENT, and neither the
+	// start time nor the pidfd's Pid changes until it is reaped.
+	for _, viaPidfd := range []bool{false, true} {
+		fakeProc(t, 42, true)
+		creds := callerCreds{pid: 42, pidfd: -1}
+		if viaPidfd {
+			fakeFdinfo(t, pidfd, 42)
+			creds.pidfd = pidfd
+		}
+		old := statFlatpakInfo
+		statFlatpakInfo = func(path string) (os.FileInfo, error) {
+			if err := os.Remove(filepath.Join(procRoot, "42", "root")); err != nil {
+				t.Fatal(err)
+			}
+			return old(path)
+		}
+		auth := &fakeAuth{allow: true}
+		s := newService(NewDaemon(&fakeBackend{}), auth)
+		s.credsOf = func(dbus.Sender) (callerCreds, error) { return creds, nil }
+		err := s.authorize(":1.5", actionApply)
+		statFlatpakInfo = old
+		if err == nil || len(auth.questions()) != 0 {
+			t.Fatalf("pidfd %v: root gone during the check: %v, polkit asked %d", viaPidfd, err, len(auth.questions()))
+		}
+	}
+
 	// No resolver: refuse, never skip the check.
 	s := newService(NewDaemon(&fakeBackend{}), &fakeAuth{allow: true})
 	s.credsOf = nil

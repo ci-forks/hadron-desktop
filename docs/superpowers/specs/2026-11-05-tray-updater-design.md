@@ -188,8 +188,10 @@ and get the `polkitd` system user.
   app runs as the user, so the `admin` rule would let it install. The process
   comes from the bus (`GetConnectionCredentials`: the pidfd when the bus sends
   one, else the pid). The check fails closed: the root must resolve (not a
-  zombie), and the pidfd's pid, or the pid's start time, must be the same
-  before and after. The polkit rule itself is unchanged.
+  zombie) before and after the `.flatpak-info` check, and the pidfd's pid,
+  or the pid's start time, must be the same before and after. Without a
+  pidfd, a pid reused before the first start-time read cannot be detected.
+  The polkit rule itself is unchanged.
 - **Registry token service:** only an https token realm is fetched; the daemon
   runs as root and the realm comes from a registry any user can name.
 
