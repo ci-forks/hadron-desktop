@@ -58,8 +58,8 @@ ARG WAYLAND_VERSION=1.24.0
 ARG WAYLAND_PROTOCOLS_VERSION=1.46
 RUN mkdir -p /wayland
 WORKDIR /build
-RUN curl -L https://gitlab.freedesktop.org/wayland/wayland/-/archive/${WAYLAND_VERSION}/wayland-${WAYLAND_VERSION}.tar -o wayland.tar && tar -xf wayland.tar && rm wayland.tar && mv wayland-* wayland-src
-RUN curl -L https://gitlab.freedesktop.org/wayland/wayland-protocols/-/archive/${WAYLAND_PROTOCOLS_VERSION}/wayland-protocols-${WAYLAND_PROTOCOLS_VERSION}.tar -o wayland-protocols.tar && tar -xf wayland-protocols.tar && rm wayland-protocols.tar && mv wayland-protocols-* wayland-protocols-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://gitlab.freedesktop.org/wayland/wayland/-/archive/${WAYLAND_VERSION}/wayland-${WAYLAND_VERSION}.tar -o wayland.tar && tar -xf wayland.tar && rm wayland.tar && mv wayland-* wayland-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://gitlab.freedesktop.org/wayland/wayland-protocols/-/archive/${WAYLAND_PROTOCOLS_VERSION}/wayland-protocols-${WAYLAND_PROTOCOLS_VERSION}.tar -o wayland-protocols.tar && tar -xf wayland-protocols.tar && rm wayland-protocols.tar && mv wayland-protocols-* wayland-protocols-src
 RUN pip3 install meson ninja
 WORKDIR /build/wayland-src
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dtests=false -Ddocumentation=false -Dscanner=true -Dlibraries=true
@@ -75,7 +75,7 @@ FROM toolchain AS libdrm
 ARG LIBDRM_VERSION=2.4.129
 RUN mkdir -p /libdrm
 WORKDIR /build
-RUN curl -L https://dri.freedesktop.org/libdrm/libdrm-${LIBDRM_VERSION}.tar.xz -o libdrm.tar.xz && tar -xf libdrm.tar.xz && rm libdrm.tar.xz && mv libdrm-* libdrm-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://dri.freedesktop.org/libdrm/libdrm-${LIBDRM_VERSION}.tar.xz -o libdrm.tar.xz && tar -xf libdrm.tar.xz && rm libdrm.tar.xz && mv libdrm-* libdrm-src
 WORKDIR /build/libdrm-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dtests=false
@@ -90,7 +90,7 @@ FROM toolchain AS libucontext
 ARG LIBUCONTEXT_VERSION=1.5.1
 RUN mkdir -p /libucontext
 WORKDIR /build
-RUN curl -fL --retry 5 https://github.com/kaniini/libucontext/archive/refs/tags/libucontext-${LIBUCONTEXT_VERSION}.tar.gz -o libucontext.tar.gz && \
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/kaniini/libucontext/archive/refs/tags/libucontext-${LIBUCONTEXT_VERSION}.tar.gz -o libucontext.tar.gz && \
     tar -xf libucontext.tar.gz && mv libucontext-* src
 WORKDIR /build/src
 RUN make -j"$(nproc)" ARCH=x86_64
@@ -119,8 +119,8 @@ ARG SPIRV_HEADERS_VERSION=vulkan-sdk-1.4.309.0
 ARG SPIRV_TOOLS_VERSION=vulkan-sdk-1.4.309.0
 RUN pip3 install ninja
 WORKDIR /b
-RUN curl -fL https://github.com/KhronosGroup/SPIRV-Headers/archive/refs/tags/${SPIRV_HEADERS_VERSION}.tar.gz -o sh.tgz && \
-    curl -fL https://github.com/KhronosGroup/SPIRV-Tools/archive/refs/tags/${SPIRV_TOOLS_VERSION}.tar.gz -o st.tgz && \
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://github.com/KhronosGroup/SPIRV-Headers/archive/refs/tags/${SPIRV_HEADERS_VERSION}.tar.gz -o sh.tgz && \
+    curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://github.com/KhronosGroup/SPIRV-Tools/archive/refs/tags/${SPIRV_TOOLS_VERSION}.tar.gz -o st.tgz && \
     tar -xf sh.tgz && mv SPIRV-Headers-* spirv-headers && \
     tar -xf st.tgz && mv SPIRV-Tools-* spirv-tools && \
     cp -a spirv-headers spirv-tools/external/spirv-headers
@@ -140,7 +140,7 @@ FROM toolchain AS llvm
 ARG LLVM_VERSION=20.1.8
 RUN pip3 install ninja
 WORKDIR /build
-RUN curl -fL https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/llvm-project-${LLVM_VERSION}.src.tar.xz -o llvm.tar.xz && \
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/llvm-project-${LLVM_VERSION}.src.tar.xz -o llvm.tar.xz && \
     tar -xf llvm.tar.xz && rm llvm.tar.xz && mv llvm-project-* llvm-project
 WORKDIR /build/llvm-project
 RUN cmake -G Ninja -S llvm -B build \
@@ -167,9 +167,9 @@ RUN pip3 install ninja
 COPY --from=llvm /llvm /llvm
 RUN rsync -aHAX --keep-dirlinks /llvm/. /
 WORKDIR /b
-RUN curl -fL https://github.com/KhronosGroup/SPIRV-Headers/archive/${SPIRV_HEADERS_TRANSLATOR_COMMIT}.tar.gz -o sh.tgz && \
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://github.com/KhronosGroup/SPIRV-Headers/archive/${SPIRV_HEADERS_TRANSLATOR_COMMIT}.tar.gz -o sh.tgz && \
     tar -xf sh.tgz && mv SPIRV-Headers-* spirv-headers && \
-    curl -fL https://github.com/KhronosGroup/SPIRV-LLVM-Translator/archive/refs/tags/v${SPIRV_LLVM_TRANSLATOR_VERSION}.tar.gz -o tr.tgz && \
+    curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://github.com/KhronosGroup/SPIRV-LLVM-Translator/archive/refs/tags/v${SPIRV_LLVM_TRANSLATOR_VERSION}.tar.gz -o tr.tgz && \
     tar -xf tr.tgz && mv SPIRV-LLVM-Translator-* tr
 RUN cd tr && cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
       -DLLVM_DIR=/usr/lib/cmake/llvm -DBUILD_SHARED_LIBS=OFF \
@@ -205,7 +205,7 @@ COPY --from=wayland /wayland /
 ARG MESA_VERSION=25.3.0
 RUN mkdir -p /mesa
 WORKDIR /build
-RUN curl -L https://archive.mesa3d.org/mesa-${MESA_VERSION}.tar.xz -o mesa.tar.xz && tar -xf mesa.tar.xz && rm mesa.tar.xz && mv mesa-* mesa-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://archive.mesa3d.org/mesa-${MESA_VERSION}.tar.xz -o mesa.tar.xz && tar -xf mesa.tar.xz && rm mesa.tar.xz && mv mesa-* mesa-src
 WORKDIR /build/mesa-src
 RUN pip3 install meson ninja setuptools mako pyyaml
 # GPU=vm (default): software/virtual GL only (virgl/softpipe/svga), no LLVM.
@@ -261,7 +261,7 @@ COPY --from=xkeyboard-config /xkeyboard-config /
 ARG LIBXKBCOMMON_VERSION=1.13.0
 RUN mkdir -p /libxkb
 WORKDIR /build
-RUN curl -L https://github.com/xkbcommon/libxkbcommon/archive/refs/tags/xkbcommon-${LIBXKBCOMMON_VERSION}.tar.gz -o libxkbcommon.tar.gz && tar -xzf libxkbcommon.tar.gz && rm libxkbcommon.tar.gz && mv libxkbcommon-* libxkbcommon-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://github.com/xkbcommon/libxkbcommon/archive/refs/tags/xkbcommon-${LIBXKBCOMMON_VERSION}.tar.gz -o libxkbcommon.tar.gz && tar -xzf libxkbcommon.tar.gz && rm libxkbcommon.tar.gz && mv libxkbcommon-* libxkbcommon-src
 WORKDIR /build/libxkbcommon-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Denable-x11=false -Denable-xkbregistry=true -Denable-bash-completion=false
@@ -273,7 +273,7 @@ FROM toolchain AS pixman
 ARG PIXMAN_VERSION=0.46.0
 RUN mkdir -p /pixman
 WORKDIR /build
-RUN curl -L https://www.cairographics.org/releases/pixman-${PIXMAN_VERSION}.tar.gz -o pixman.tar.gz && tar -xzf pixman.tar.gz && rm pixman.tar.gz && mv pixman-* pixman-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://www.cairographics.org/releases/pixman-${PIXMAN_VERSION}.tar.gz -o pixman.tar.gz && tar -xzf pixman.tar.gz && rm pixman.tar.gz && mv pixman-* pixman-src
 WORKDIR /build/pixman-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS}
@@ -285,7 +285,7 @@ FROM toolchain AS libevdev
 ARG LIBEVDEV_VERSION=1.13.5
 RUN mkdir -p /libevdev
 WORKDIR /build
-RUN curl -L https://gitlab.freedesktop.org/libevdev/libevdev/-/archive/libevdev-${LIBEVDEV_VERSION}/libevdev-libevdev-${LIBEVDEV_VERSION}.tar.gz -o libevdev.tar.gz && tar -xzf libevdev.tar.gz && rm libevdev.tar.gz && mv libevdev-* libevdev-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://gitlab.freedesktop.org/libevdev/libevdev/-/archive/libevdev-${LIBEVDEV_VERSION}/libevdev-libevdev-${LIBEVDEV_VERSION}.tar.gz -o libevdev.tar.gz && tar -xzf libevdev.tar.gz && rm libevdev.tar.gz && mv libevdev-* libevdev-src
 WORKDIR /build/libevdev-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dtests=disabled -Ddocumentation=disabled -Dtools=disabled
@@ -299,7 +299,7 @@ COPY --from=libevdev /libevdev /
 ARG LIBINPUT_VERSION=1.30.0
 RUN mkdir -p /libinput
 WORKDIR /build
-RUN curl -L https://gitlab.freedesktop.org/libinput/libinput/-/archive/${LIBINPUT_VERSION}/libinput-${LIBINPUT_VERSION}.tar.gz -o libinput.tar.gz && tar -xf libinput.tar.gz && rm libinput.tar.gz && mv libinput-* libinput-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://gitlab.freedesktop.org/libinput/libinput/-/archive/${LIBINPUT_VERSION}/libinput-${LIBINPUT_VERSION}.tar.gz -o libinput.tar.gz && tar -xf libinput.tar.gz && rm libinput.tar.gz && mv libinput-* libinput-src
 WORKDIR /build/libinput-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dmtdev=false -Dlibwacom=false -Dtests=false -Ddebug-gui=false
@@ -311,7 +311,7 @@ FROM toolchain AS hwdata
 ARG HWDATA_VERSION=0.401
 RUN mkdir -p /hwdata
 WORKDIR /build
-RUN curl -L https://github.com/vcrhonek/hwdata/archive/v${HWDATA_VERSION}/hwdata-${HWDATA_VERSION}.tar.gz -o hwdata.tar.xz && tar -xf hwdata.tar.xz && rm hwdata.tar.xz && mv hwdata-* hwdata-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://github.com/vcrhonek/hwdata/archive/v${HWDATA_VERSION}/hwdata-${HWDATA_VERSION}.tar.gz -o hwdata.tar.xz && tar -xf hwdata.tar.xz && rm hwdata.tar.xz && mv hwdata-* hwdata-src
 WORKDIR /build/hwdata-src
 RUN ./configure ${COMMON_CONFIGURE_ARGS} --disable-dependency-tracking
 RUN make -j$(nproc) && make install DESTDIR=/hwdata
@@ -323,7 +323,7 @@ COPY --from=hwdata /hwdata /
 ARG LIBDISPLAY_INFO_VERSION=0.3.0
 RUN mkdir -p /libdisplay-info
 WORKDIR /build
-RUN curl -L https://gitlab.freedesktop.org/emersion/libdisplay-info/-/releases/${LIBDISPLAY_INFO_VERSION}/downloads/libdisplay-info-${LIBDISPLAY_INFO_VERSION}.tar.xz -o libdisplay-info.tar.xz && tar -xf libdisplay-info.tar.xz && rm libdisplay-info.tar.xz && mv libdisplay-info-* libdisplay-info-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://gitlab.freedesktop.org/emersion/libdisplay-info/-/releases/${LIBDISPLAY_INFO_VERSION}/downloads/libdisplay-info-${LIBDISPLAY_INFO_VERSION}.tar.xz -o libdisplay-info.tar.xz && tar -xf libdisplay-info.tar.xz && rm libdisplay-info.tar.xz && mv libdisplay-info-* libdisplay-info-src
 WORKDIR /build/libdisplay-info-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS}
@@ -340,7 +340,7 @@ FROM toolchain AS pcre2
 ARG PCRE2_VERSION=10.44
 RUN mkdir -p /pcre2
 WORKDIR /build
-RUN curl -L https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${PCRE2_VERSION}/pcre2-${PCRE2_VERSION}.tar.gz -o pcre2.tar.gz && tar -xzf pcre2.tar.gz && rm pcre2.tar.gz && mv pcre2-* pcre2-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${PCRE2_VERSION}/pcre2-${PCRE2_VERSION}.tar.gz -o pcre2.tar.gz && tar -xzf pcre2.tar.gz && rm pcre2.tar.gz && mv pcre2-* pcre2-src
 WORKDIR /build/pcre2-src
 RUN ./configure ${COMMON_CONFIGURE_ARGS} --disable-dependency-tracking --enable-pcre2-16 --enable-pcre2-32
 RUN make -j$(nproc) && make install DESTDIR=/pcre2
@@ -352,7 +352,7 @@ FROM toolchain AS libpng
 ARG LIBPNG_VERSION=1.6.44
 RUN mkdir -p /libpng
 WORKDIR /build
-RUN curl -L https://download.sourceforge.net/libpng/libpng-${LIBPNG_VERSION}.tar.xz -o libpng.tar.xz && tar -xf libpng.tar.xz && rm libpng.tar.xz && mv libpng-* libpng-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://download.sourceforge.net/libpng/libpng-${LIBPNG_VERSION}.tar.xz -o libpng.tar.xz && tar -xf libpng.tar.xz && rm libpng.tar.xz && mv libpng-* libpng-src
 WORKDIR /build/libpng-src
 RUN ./configure ${COMMON_CONFIGURE_ARGS} --disable-dependency-tracking
 # The Hadron cross-style target tuple causes libpng's generated DFA feature
@@ -370,7 +370,7 @@ COPY --from=pcre2 /pcre2 /
 ARG GLIB_VERSION=2.82.5
 RUN mkdir -p /glib2
 WORKDIR /build
-RUN GLIB_MAJOR="${GLIB_VERSION%.*}" && curl -L https://download.gnome.org/sources/glib/${GLIB_MAJOR}/glib-${GLIB_VERSION}.tar.xz -o glib.tar.xz && tar -xf glib.tar.xz && rm glib.tar.xz && mv glib-* glib-src
+RUN GLIB_MAJOR="${GLIB_VERSION%.*}" && curl --retry 5 --retry-delay 3 --retry-all-errors -L https://download.gnome.org/sources/glib/${GLIB_MAJOR}/glib-${GLIB_VERSION}.tar.xz -o glib.tar.xz && tar -xf glib.tar.xz && rm glib.tar.xz && mv glib-* glib-src
 WORKDIR /build/glib-src
 RUN pip3 install meson ninja packaging
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} \
@@ -415,7 +415,7 @@ COPY --from=pcre2 /pcre2 /
 ARG HARFBUZZ_VERSION=10.1.0
 RUN mkdir -p /harfbuzz
 WORKDIR /build
-RUN curl -L https://github.com/harfbuzz/harfbuzz/releases/download/${HARFBUZZ_VERSION}/harfbuzz-${HARFBUZZ_VERSION}.tar.xz -o harfbuzz.tar.xz && tar -xf harfbuzz.tar.xz && rm harfbuzz.tar.xz && mv harfbuzz-* harfbuzz-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://github.com/harfbuzz/harfbuzz/releases/download/${HARFBUZZ_VERSION}/harfbuzz-${HARFBUZZ_VERSION}.tar.xz -o harfbuzz.tar.xz && tar -xf harfbuzz.tar.xz && rm harfbuzz.tar.xz && mv harfbuzz-* harfbuzz-src
 WORKDIR /build/harfbuzz-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dtests=disabled -Ddocs=disabled -Dintrospection=disabled -Dglib=enabled -Dfreetype=enabled -Dcairo=disabled -Dchafa=disabled
@@ -428,7 +428,7 @@ FROM toolchain AS fribidi
 ARG FRIBIDI_VERSION=1.0.16
 RUN mkdir -p /fribidi
 WORKDIR /build
-RUN curl -L https://github.com/fribidi/fribidi/releases/download/v${FRIBIDI_VERSION}/fribidi-${FRIBIDI_VERSION}.tar.xz -o fribidi.tar.xz && tar -xf fribidi.tar.xz && rm fribidi.tar.xz && mv fribidi-* fribidi-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://github.com/fribidi/fribidi/releases/download/v${FRIBIDI_VERSION}/fribidi-${FRIBIDI_VERSION}.tar.xz -o fribidi.tar.xz && tar -xf fribidi.tar.xz && rm fribidi.tar.xz && mv fribidi-* fribidi-src
 WORKDIR /build/fribidi-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dtests=false -Ddocs=false -Dbin=false
@@ -440,7 +440,7 @@ FROM toolchain AS gperf
 ARG GPERF_VERSION=3.1
 RUN mkdir -p /gperf
 WORKDIR /build
-RUN curl -L https://ftp.gnu.org/pub/gnu/gperf/gperf-${GPERF_VERSION}.tar.gz -o gperf.tar.gz && tar -xzf gperf.tar.gz && rm gperf.tar.gz && mv gperf-* gperf-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://ftp.gnu.org/pub/gnu/gperf/gperf-${GPERF_VERSION}.tar.gz -o gperf.tar.gz && tar -xzf gperf.tar.gz && rm gperf.tar.gz && mv gperf-* gperf-src
 WORKDIR /build/gperf-src
 # gperf 3.1 ships an ancient K&R getopt.c; the toolchain GCC defaults to C23
 # where `()` means `(void)`, so force the older language semantics.
@@ -456,7 +456,7 @@ COPY --from=gperf /gperf /
 ARG FONTCONFIG_VERSION=2.15.0
 RUN mkdir -p /fontconfig
 WORKDIR /build
-RUN curl -L https://www.freedesktop.org/software/fontconfig/release/fontconfig-${FONTCONFIG_VERSION}.tar.xz -o fontconfig.tar.xz && tar -xf fontconfig.tar.xz && rm fontconfig.tar.xz && mv fontconfig-* fontconfig-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://www.freedesktop.org/software/fontconfig/release/fontconfig-${FONTCONFIG_VERSION}.tar.xz -o fontconfig.tar.xz && tar -xf fontconfig.tar.xz && rm fontconfig.tar.xz && mv fontconfig-* fontconfig-src
 WORKDIR /build/fontconfig-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dtests=disabled -Dtools=disabled -Ddoc=disabled -Dnls=disabled -Dcache-build=disabled
@@ -464,7 +464,7 @@ RUN DESTDIR=/fontconfig ninja -C buildDir install
 # Bundle DejaVu fonts
 ARG DEJAVU_VERSION=2.37
 RUN mkdir -p /fontconfig/usr/share/fonts/dejavu
-RUN curl -L https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-${DEJAVU_VERSION}.tar.bz2 -o dejavu.tar.bz2 && \
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-${DEJAVU_VERSION}.tar.bz2 -o dejavu.tar.bz2 && \
     tar -xjf dejavu.tar.bz2 && \
     cp dejavu-fonts-ttf-*/ttf/*.ttf /fontconfig/usr/share/fonts/dejavu/ && \
     rm -rf dejavu.tar.bz2 dejavu-fonts-ttf-*
@@ -484,7 +484,7 @@ COPY --from=glib2 /glib2 /
 ARG CAIRO_VERSION=1.18.4
 RUN mkdir -p /cairo
 WORKDIR /build
-RUN curl -L https://cairographics.org/releases/cairo-${CAIRO_VERSION}.tar.xz -o cairo.tar.xz && tar -xf cairo.tar.xz && rm cairo.tar.xz && mv cairo-* cairo-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://cairographics.org/releases/cairo-${CAIRO_VERSION}.tar.xz -o cairo.tar.xz && tar -xf cairo.tar.xz && rm cairo.tar.xz && mv cairo-* cairo-src
 WORKDIR /build/cairo-src
 RUN pip3 install meson ninja
 # PNG enabled so cairo_image_surface_create_from_png is available (swaybar/swaybg).
@@ -509,7 +509,7 @@ COPY --from=libpng /libpng /
 ARG PANGO_VERSION=1.54.0
 RUN mkdir -p /pango
 WORKDIR /build
-RUN PANGO_MAJOR="${PANGO_VERSION%.*}" && curl -L https://download.gnome.org/sources/pango/${PANGO_MAJOR}/pango-${PANGO_VERSION}.tar.xz -o pango.tar.xz && tar -xf pango.tar.xz && rm pango.tar.xz && mv pango-* pango-src
+RUN PANGO_MAJOR="${PANGO_VERSION%.*}" && curl --retry 5 --retry-delay 3 --retry-all-errors -L https://download.gnome.org/sources/pango/${PANGO_MAJOR}/pango-${PANGO_VERSION}.tar.xz -o pango.tar.xz && tar -xf pango.tar.xz && rm pango.tar.xz && mv pango-* pango-src
 WORKDIR /build/pango-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dintrospection=disabled -Dgtk_doc=false -Dfontconfig=enabled -Dfreetype=enabled -Dcairo=enabled
@@ -529,7 +529,7 @@ COPY --from=mesa /mesa /
 ARG LIBEPOXY_VERSION=1.5.10
 RUN mkdir -p /libepoxy
 WORKDIR /build
-RUN curl -fL https://github.com/anholt/libepoxy/archive/refs/tags/${LIBEPOXY_VERSION}.tar.gz -o epoxy.tar.gz && tar -xf epoxy.tar.gz && rm epoxy.tar.gz && mv libepoxy-* epoxy-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://github.com/anholt/libepoxy/archive/refs/tags/${LIBEPOXY_VERSION}.tar.gz -o epoxy.tar.gz && tar -xf epoxy.tar.gz && rm epoxy.tar.gz && mv libepoxy-* epoxy-src
 WORKDIR /build/epoxy-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dglx=no -Dx11=false -Degl=yes -Dtests=false
@@ -544,7 +544,7 @@ COPY --from=libpng /libpng /
 ARG GDKPIXBUF_VERSION=2.42.12
 RUN mkdir -p /gdk-pixbuf
 WORKDIR /build
-RUN GP_MAJOR="${GDKPIXBUF_VERSION%.*}" && curl -fL https://download.gnome.org/sources/gdk-pixbuf/${GP_MAJOR}/gdk-pixbuf-${GDKPIXBUF_VERSION}.tar.xz -o gp.tar.xz && tar -xf gp.tar.xz && rm gp.tar.xz && mv gdk-pixbuf-* gp-src
+RUN GP_MAJOR="${GDKPIXBUF_VERSION%.*}" && curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://download.gnome.org/sources/gdk-pixbuf/${GP_MAJOR}/gdk-pixbuf-${GDKPIXBUF_VERSION}.tar.xz -o gp.tar.xz && tar -xf gp.tar.xz && rm gp.tar.xz && mv gdk-pixbuf-* gp-src
 WORKDIR /build/gp-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dtiff=disabled -Djpeg=disabled -Dothers=disabled \
@@ -558,7 +558,7 @@ COPY --from=pcre2 /pcre2 /
 ARG ATK_VERSION=2.38.0
 RUN mkdir -p /atk
 WORKDIR /build
-RUN ATK_MAJOR="${ATK_VERSION%.*}" && curl -fL https://download.gnome.org/sources/atk/${ATK_MAJOR}/atk-${ATK_VERSION}.tar.xz -o atk.tar.xz && tar -xf atk.tar.xz && rm atk.tar.xz && mv atk-* atk-src
+RUN ATK_MAJOR="${ATK_VERSION%.*}" && curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://download.gnome.org/sources/atk/${ATK_MAJOR}/atk-${ATK_VERSION}.tar.xz -o atk.tar.xz && tar -xf atk.tar.xz && rm atk.tar.xz && mv atk-* atk-src
 WORKDIR /build/atk-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dintrospection=false
@@ -586,7 +586,7 @@ COPY --from=mesa /mesa /
 ARG GTK3_VERSION=3.24.43
 RUN mkdir -p /gtk3
 WORKDIR /build
-RUN GTK_MAJOR="${GTK3_VERSION%.*}" && curl -fL https://download.gnome.org/sources/gtk+/${GTK_MAJOR}/gtk+-${GTK3_VERSION}.tar.xz -o gtk.tar.xz && tar -xf gtk.tar.xz && rm gtk.tar.xz && mv gtk+-* gtk-src
+RUN GTK_MAJOR="${GTK3_VERSION%.*}" && curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://download.gnome.org/sources/gtk+/${GTK_MAJOR}/gtk+-${GTK3_VERSION}.tar.xz -o gtk.tar.xz && tar -xf gtk.tar.xz && rm gtk.tar.xz && mv gtk+-* gtk-src
 WORKDIR /build/gtk-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} \
@@ -601,7 +601,7 @@ FROM toolchain AS libsigcpp
 ARG LIBSIGCPP_VERSION=2.12.1
 RUN mkdir -p /libsigcpp
 WORKDIR /build
-RUN curl -fL https://download.gnome.org/sources/libsigc++/${LIBSIGCPP_VERSION%.*}/libsigc++-${LIBSIGCPP_VERSION}.tar.xz -o s.tar.xz && tar -xf s.tar.xz && rm s.tar.xz && mv libsigc++-* src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://download.gnome.org/sources/libsigc++/${LIBSIGCPP_VERSION%.*}/libsigc++-${LIBSIGCPP_VERSION}.tar.xz -o s.tar.xz && tar -xf s.tar.xz && rm s.tar.xz && mv libsigc++-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dbuild-documentation=false -Dbuild-examples=false
@@ -615,7 +615,7 @@ COPY --from=libsigcpp /libsigcpp /
 ARG GLIBMM_VERSION=2.66.7
 RUN mkdir -p /glibmm
 WORKDIR /build
-RUN curl -fL https://download.gnome.org/sources/glibmm/${GLIBMM_VERSION%.*}/glibmm-${GLIBMM_VERSION}.tar.xz -o g.tar.xz && tar -xf g.tar.xz && rm g.tar.xz && mv glibmm-* src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://download.gnome.org/sources/glibmm/${GLIBMM_VERSION%.*}/glibmm-${GLIBMM_VERSION}.tar.xz -o g.tar.xz && tar -xf g.tar.xz && rm g.tar.xz && mv glibmm-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dbuild-documentation=false
@@ -658,7 +658,7 @@ COPY --from=cairomm /cairomm /
 ARG PANGOMM_VERSION=2.46.4
 RUN mkdir -p /pangomm
 WORKDIR /build
-RUN curl -fL https://download.gnome.org/sources/pangomm/${PANGOMM_VERSION%.*}/pangomm-${PANGOMM_VERSION}.tar.xz -o p.tar.xz && tar -xf p.tar.xz && rm p.tar.xz && mv pangomm-* src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://download.gnome.org/sources/pangomm/${PANGOMM_VERSION%.*}/pangomm-${PANGOMM_VERSION}.tar.xz -o p.tar.xz && tar -xf p.tar.xz && rm p.tar.xz && mv pangomm-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dbuild-documentation=false
@@ -674,7 +674,7 @@ COPY --from=glibmm /glibmm /
 ARG ATKMM_VERSION=2.28.4
 RUN mkdir -p /atkmm
 WORKDIR /build
-RUN curl -fL https://download.gnome.org/sources/atkmm/${ATKMM_VERSION%.*}/atkmm-${ATKMM_VERSION}.tar.xz -o a.tar.xz && tar -xf a.tar.xz && rm a.tar.xz && mv atkmm-* src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://download.gnome.org/sources/atkmm/${ATKMM_VERSION%.*}/atkmm-${ATKMM_VERSION}.tar.xz -o a.tar.xz && tar -xf a.tar.xz && rm a.tar.xz && mv atkmm-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dbuild-documentation=false
@@ -707,7 +707,7 @@ COPY --from=atkmm /atkmm /
 ARG GTKMM_VERSION=3.24.9
 RUN mkdir -p /gtkmm3
 WORKDIR /build
-RUN curl -fL https://download.gnome.org/sources/gtkmm/${GTKMM_VERSION%.*}/gtkmm-${GTKMM_VERSION}.tar.xz -o gm.tar.xz && tar -xf gm.tar.xz && rm gm.tar.xz && mv gtkmm-* src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://download.gnome.org/sources/gtkmm/${GTKMM_VERSION%.*}/gtkmm-${GTKMM_VERSION}.tar.xz -o gm.tar.xz && tar -xf gm.tar.xz && rm gm.tar.xz && mv gtkmm-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dbuild-documentation=false -Dbuild-demos=false -Dbuild-tests=false
@@ -853,11 +853,11 @@ RUN make -C libdbusmenu-glib -j"$(nproc)" && make -C libdbusmenu-gtk -j"$(nproc)
 # DRM and gets bounced straight back to the login manager.
 FROM toolchain AS libseat
 COPY --from=libucontext /libucontext /
-# renovate: datasource=git-tags depName=https://git.sr.ht/~kennylevinsen/seatd extractVersion=^(?<version>\d+(\.\d+)*)$
+# renovate: datasource=github-tags depName=kennylevinsen/seatd
 ARG SEATD_VERSION=0.9.1
 RUN mkdir -p /libseat
 WORKDIR /build
-RUN curl -L https://git.sr.ht/~kennylevinsen/seatd/archive/${SEATD_VERSION}.tar.gz -o seatd.tar.gz && tar -xf seatd.tar.gz && rm seatd.tar.gz && mv seatd-* seatd-src
+RUN curl -f --retry 5 --retry-delay 3 --retry-all-errors -L https://github.com/kennylevinsen/seatd/archive/refs/tags/${SEATD_VERSION}.tar.gz -o seatd.tar.gz && tar -xf seatd.tar.gz && rm seatd.tar.gz && mv seatd-* seatd-src
 WORKDIR /build/seatd-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} \
@@ -881,7 +881,7 @@ COPY --from=libdisplay-info /libdisplay-info /
 # renovate: datasource=gitlab-tags depName=wlroots/wlroots registryUrl=https://gitlab.freedesktop.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG WLROOTS_VERSION=0.18.2
 WORKDIR /build
-RUN curl -L https://gitlab.freedesktop.org/wlroots/wlroots/-/archive/${WLROOTS_VERSION}/wlroots-${WLROOTS_VERSION}.tar -o wlroots.tar && tar -xf wlroots.tar && rm wlroots.tar && mv wlroots-* wlroots-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://gitlab.freedesktop.org/wlroots/wlroots/-/archive/${WLROOTS_VERSION}/wlroots-${WLROOTS_VERSION}.tar -o wlroots.tar && tar -xf wlroots.tar && rm wlroots.tar && mv wlroots-* wlroots-src
 WORKDIR /build/wlroots-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dexamples=false -Dwerror=false
@@ -915,7 +915,7 @@ COPY --from=libpng /libpng /
 ARG SWAY_VERSION=1.10.1
 RUN mkdir -p /sway
 WORKDIR /build
-RUN curl -L https://github.com/swaywm/sway/releases/download/${SWAY_VERSION}/sway-${SWAY_VERSION}.tar.gz -o sway.tar.gz && tar -xzf sway.tar.gz && rm sway.tar.gz && mv sway-* sway-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://github.com/swaywm/sway/releases/download/${SWAY_VERSION}/sway-${SWAY_VERSION}.tar.gz -o sway.tar.gz && tar -xzf sway.tar.gz && rm sway.tar.gz && mv sway-* sway-src
 WORKDIR /build/sway-src
 RUN pip3 install meson ninja
 # swaybar/swaynag image loading uses cairo PNG (libpng now available).
@@ -929,7 +929,7 @@ FROM toolchain AS tllist
 ARG TLLIST_VERSION=1.1.0
 RUN mkdir -p /tllist
 WORKDIR /build
-RUN curl -L https://codeberg.org/dnkl/tllist/archive/${TLLIST_VERSION}.tar.gz -o tllist.tar.gz && tar -xzf tllist.tar.gz && rm tllist.tar.gz && mv tllist* tllist-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://codeberg.org/dnkl/tllist/archive/${TLLIST_VERSION}.tar.gz -o tllist.tar.gz && tar -xzf tllist.tar.gz && rm tllist.tar.gz && mv tllist* tllist-src
 WORKDIR /build/tllist-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS}
@@ -949,7 +949,7 @@ COPY --from=tllist /tllist /
 ARG FCFT_VERSION=3.3.1
 RUN mkdir -p /fcft
 WORKDIR /build
-RUN curl -L https://codeberg.org/dnkl/fcft/archive/${FCFT_VERSION}.tar.gz -o fcft.tar.gz && tar -xzf fcft.tar.gz && rm fcft.tar.gz && mv fcft* fcft-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://codeberg.org/dnkl/fcft/archive/${FCFT_VERSION}.tar.gz -o fcft.tar.gz && tar -xzf fcft.tar.gz && rm fcft.tar.gz && mv fcft* fcft-src
 WORKDIR /build/fcft-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dtest-text-shaping=false -Dgrapheme-shaping=disabled -Drun-shaping=disabled -Ddocs=disabled
@@ -972,7 +972,7 @@ COPY --from=pcre2 /pcre2 /
 ARG FOOT_VERSION=1.20.2
 RUN mkdir -p /foot
 WORKDIR /build
-RUN curl -L https://codeberg.org/dnkl/foot/archive/${FOOT_VERSION}.tar.gz -o foot.tar.gz && tar -xzf foot.tar.gz && rm foot.tar.gz && mv foot* foot-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://codeberg.org/dnkl/foot/archive/${FOOT_VERSION}.tar.gz -o foot.tar.gz && tar -xzf foot.tar.gz && rm foot.tar.gz && mv foot* foot-src
 WORKDIR /build/foot-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Ddocs=disabled -Dgrapheme-clustering=disabled -Dthemes=false -Dterminfo=disabled -Dwerror=false
@@ -988,7 +988,7 @@ COPY --from=libpng /libpng /
 ARG GRIM_VERSION=1.4.1
 RUN mkdir -p /grim
 WORKDIR /build
-RUN curl -L https://gitlab.freedesktop.org/emersion/grim/-/archive/v${GRIM_VERSION}/grim-v${GRIM_VERSION}.tar.gz -o grim.tar.gz && tar -xzf grim.tar.gz && rm grim.tar.gz && mv grim-* grim-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://gitlab.freedesktop.org/emersion/grim/-/archive/v${GRIM_VERSION}/grim-v${GRIM_VERSION}.tar.gz -o grim.tar.gz && tar -xzf grim.tar.gz && rm grim.tar.gz && mv grim-* grim-src
 WORKDIR /build/grim-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Djpeg=disabled -Dman-pages=disabled
@@ -1004,7 +1004,7 @@ FROM toolchain AS libnl
 ARG LIBNL_VERSION=3.11.0
 RUN mkdir -p /libnl
 WORKDIR /build
-RUN curl -L https://github.com/thom311/libnl/releases/download/libnl3_11_0/libnl-${LIBNL_VERSION}.tar.gz -o libnl.tar.gz && tar -xzf libnl.tar.gz && rm libnl.tar.gz && mv libnl-* libnl-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://github.com/thom311/libnl/releases/download/libnl3_11_0/libnl-${LIBNL_VERSION}.tar.gz -o libnl.tar.gz && tar -xzf libnl.tar.gz && rm libnl.tar.gz && mv libnl-* libnl-src
 WORKDIR /build/libnl-src
 RUN ./configure ${COMMON_CONFIGURE_ARGS} --disable-dependency-tracking
 RUN make -j$(nproc) && make install DESTDIR=/libnl
@@ -1016,7 +1016,7 @@ COPY --from=libnl /libnl /
 ARG WPA_VERSION=2.11
 RUN mkdir -p /wpa
 WORKDIR /build
-RUN curl -L https://w1.fi/releases/wpa_supplicant-${WPA_VERSION}.tar.gz -o wpa.tar.gz && tar -xzf wpa.tar.gz && rm wpa.tar.gz && mv wpa_supplicant-* wpa-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://w1.fi/releases/wpa_supplicant-${WPA_VERSION}.tar.gz -o wpa.tar.gz && tar -xzf wpa.tar.gz && rm wpa.tar.gz && mv wpa_supplicant-* wpa-src
 WORKDIR /build/wpa-src/wpa_supplicant
 RUN printf '%s\n' \
     'CONFIG_DRIVER_NL80211=y' \
@@ -1074,7 +1074,7 @@ COPY --from=libnl /libnl /
 ARG HOSTAPD_VERSION=2.11
 RUN mkdir -p /hostapd
 WORKDIR /build
-RUN curl -L https://w1.fi/releases/hostapd-${HOSTAPD_VERSION}.tar.gz -o hostapd.tar.gz && tar -xzf hostapd.tar.gz && rm hostapd.tar.gz && mv hostapd-* hostapd-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://w1.fi/releases/hostapd-${HOSTAPD_VERSION}.tar.gz -o hostapd.tar.gz && tar -xzf hostapd.tar.gz && rm hostapd.tar.gz && mv hostapd-* hostapd-src
 WORKDIR /build/hostapd-src/hostapd
 RUN printf '%s\n' \
     'CONFIG_DRIVER_NL80211=y' \
@@ -1093,7 +1093,7 @@ FROM toolchain AS libndp
 ARG LIBNDP_VERSION=1.9
 RUN mkdir -p /libndp
 WORKDIR /build
-RUN curl -L https://github.com/jpirko/libndp/archive/refs/tags/v${LIBNDP_VERSION}.tar.gz -o libndp.tar.gz && tar -xzf libndp.tar.gz && rm libndp.tar.gz && mv libndp-* libndp-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://github.com/jpirko/libndp/archive/refs/tags/v${LIBNDP_VERSION}.tar.gz -o libndp.tar.gz && tar -xzf libndp.tar.gz && rm libndp.tar.gz && mv libndp-* libndp-src
 WORKDIR /build/libndp-src
 RUN ./autogen.sh 2>/dev/null || true
 # libndp 1.9 has musl pointer-type mismatches that GCC 14+ treats as errors.
@@ -1110,7 +1110,7 @@ ARG WIRELESS_REGDB_VERSION=2024.10.07
 # symlink when the scratch rootfs is overlaid onto the base image.
 RUN mkdir -p /wireless-regdb/usr/local/lib/firmware
 WORKDIR /build
-RUN curl -L https://www.kernel.org/pub/software/network/wireless-regdb/wireless-regdb-${WIRELESS_REGDB_VERSION}.tar.xz -o regdb.tar.xz && tar -xf regdb.tar.xz && rm regdb.tar.xz && mv wireless-regdb-* regdb-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://www.kernel.org/pub/software/network/wireless-regdb/wireless-regdb-${WIRELESS_REGDB_VERSION}.tar.xz -o regdb.tar.xz && tar -xf regdb.tar.xz && rm regdb.tar.xz && mv wireless-regdb-* regdb-src
 RUN cp regdb-src/regulatory.db regdb-src/regulatory.db.p7s /wireless-regdb/usr/local/lib/firmware/
 
 
@@ -1120,7 +1120,7 @@ FROM toolchain AS ncurses
 ARG NCURSES_VERSION=6.5
 RUN mkdir -p /ncurses
 WORKDIR /build
-RUN curl -L https://ftp.gnu.org/gnu/ncurses/ncurses-${NCURSES_VERSION}.tar.gz -o ncurses.tar.gz && tar -xzf ncurses.tar.gz && rm ncurses.tar.gz && mv ncurses-* ncurses-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://ftp.gnu.org/gnu/ncurses/ncurses-${NCURSES_VERSION}.tar.gz -o ncurses.tar.gz && tar -xzf ncurses.tar.gz && rm ncurses.tar.gz && mv ncurses-* ncurses-src
 WORKDIR /build/ncurses-src
 RUN ./configure ${COMMON_CONFIGURE_ARGS} --with-shared --enable-termcap --disable-widec \
     --without-debug --without-ada --without-cxx --without-cxx-binding \
@@ -1137,7 +1137,7 @@ FROM toolchain AS libxslt
 ARG LIBXSLT_VERSION=1.1.42
 RUN mkdir -p /libxslt
 WORKDIR /build
-RUN curl -L https://download.gnome.org/sources/libxslt/${LIBXSLT_VERSION%.*}/libxslt-${LIBXSLT_VERSION}.tar.xz -o libxslt.tar.xz && tar -xf libxslt.tar.xz && rm libxslt.tar.xz && mv libxslt-* libxslt-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://download.gnome.org/sources/libxslt/${LIBXSLT_VERSION%.*}/libxslt-${LIBXSLT_VERSION}.tar.xz -o libxslt.tar.xz && tar -xf libxslt.tar.xz && rm libxslt.tar.xz && mv libxslt-* libxslt-src
 WORKDIR /build/libxslt-src
 RUN ./configure ${COMMON_CONFIGURE_ARGS} --disable-dependency-tracking --without-python
 RUN make -j$(nproc) && make install DESTDIR=/libxslt
@@ -1159,7 +1159,7 @@ RUN sed -i 's/-lreadline/-lreadline -lncurses/' /usr/lib/pkgconfig/readline.pc /
 ARG NM_VERSION=1.50.0
 RUN mkdir -p /networkmanager
 WORKDIR /build
-RUN curl -L https://download.gnome.org/sources/NetworkManager/${NM_VERSION%.*}/NetworkManager-${NM_VERSION}.tar.xz -o nm.tar.xz && tar -xf nm.tar.xz && rm nm.tar.xz && mv NetworkManager-* nm-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://download.gnome.org/sources/NetworkManager/${NM_VERSION%.*}/NetworkManager-${NM_VERSION}.tar.xz -o nm.tar.xz && tar -xf nm.tar.xz && rm nm.tar.xz && mv NetworkManager-* nm-src
 WORKDIR /build/nm-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} --sbindir=bin \
@@ -1183,7 +1183,7 @@ FROM toolchain AS alsa-lib
 ARG ALSA_VERSION=1.2.12
 RUN mkdir -p /alsa-lib
 WORKDIR /build
-RUN curl -L https://www.alsa-project.org/files/pub/lib/alsa-lib-${ALSA_VERSION}.tar.bz2 -o alsa-lib.tar.bz2 && tar -xjf alsa-lib.tar.bz2 && rm alsa-lib.tar.bz2 && mv alsa-lib-* alsa-lib-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://www.alsa-project.org/files/pub/lib/alsa-lib-${ALSA_VERSION}.tar.bz2 -o alsa-lib.tar.bz2 && tar -xjf alsa-lib.tar.bz2 && rm alsa-lib.tar.bz2 && mv alsa-lib-* alsa-lib-src
 WORKDIR /build/alsa-lib-src
 RUN ./configure ${COMMON_CONFIGURE_ARGS} --disable-dependency-tracking --disable-python
 RUN make -j$(nproc) && make install DESTDIR=/alsa-lib
@@ -1195,7 +1195,7 @@ FROM toolchain AS alsa-ucm-conf
 ARG ALSA_UCM_VERSION=1.2.12
 RUN mkdir -p /alsa-ucm-conf
 WORKDIR /build
-RUN curl -L https://www.alsa-project.org/files/pub/lib/alsa-ucm-conf-${ALSA_UCM_VERSION}.tar.bz2 -o ucm.tar.bz2 && tar -xjf ucm.tar.bz2 && rm ucm.tar.bz2 && mv alsa-ucm-conf-* ucm-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://www.alsa-project.org/files/pub/lib/alsa-ucm-conf-${ALSA_UCM_VERSION}.tar.bz2 -o ucm.tar.bz2 && tar -xjf ucm.tar.bz2 && rm ucm.tar.bz2 && mv alsa-ucm-conf-* ucm-src
 RUN mkdir -p /alsa-ucm-conf/usr/share/alsa && cp -a ucm-src/ucm2 /alsa-ucm-conf/usr/share/alsa/
 
 
@@ -1204,7 +1204,7 @@ FROM toolchain AS sbc
 ARG SBC_VERSION=2.0
 RUN mkdir -p /sbc
 WORKDIR /build
-RUN curl -L https://www.kernel.org/pub/linux/bluetooth/sbc-${SBC_VERSION}.tar.xz -o sbc.tar.xz && tar -xf sbc.tar.xz && rm sbc.tar.xz && mv sbc-* sbc-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://www.kernel.org/pub/linux/bluetooth/sbc-${SBC_VERSION}.tar.xz -o sbc.tar.xz && tar -xf sbc.tar.xz && rm sbc.tar.xz && mv sbc-* sbc-src
 WORKDIR /build/sbc-src
 RUN ./configure ${COMMON_CONFIGURE_ARGS} --disable-dependency-tracking --disable-tester
 RUN make -j$(nproc) && make install DESTDIR=/sbc
@@ -1221,7 +1221,7 @@ RUN sed -i 's/-lreadline/-lreadline -lncurses/' /usr/lib/pkgconfig/readline.pc /
 ARG BLUEZ_VERSION=5.79
 RUN mkdir -p /bluez
 WORKDIR /build
-RUN curl -L https://www.kernel.org/pub/linux/bluetooth/bluez-${BLUEZ_VERSION}.tar.xz -o bluez.tar.xz && tar -xf bluez.tar.xz && rm bluez.tar.xz && mv bluez-* bluez-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://www.kernel.org/pub/linux/bluetooth/bluez-${BLUEZ_VERSION}.tar.xz -o bluez.tar.xz && tar -xf bluez.tar.xz && rm bluez.tar.xz && mv bluez-* bluez-src
 WORKDIR /build/bluez-src
 # MAX_INPUT is gated behind _GNU_SOURCE in musl's <limits.h>; define it directly.
 RUN ./configure ${COMMON_CONFIGURE_ARGS} --disable-dependency-tracking \
@@ -1248,7 +1248,7 @@ COPY --from=bluez /bluez /
 ARG PIPEWIRE_VERSION=1.2.7
 RUN mkdir -p /pipewire
 WORKDIR /build
-RUN curl -L https://gitlab.freedesktop.org/pipewire/pipewire/-/archive/${PIPEWIRE_VERSION}/pipewire-${PIPEWIRE_VERSION}.tar.gz -o pipewire.tar.gz && tar -xzf pipewire.tar.gz && rm pipewire.tar.gz && mv pipewire-* pipewire-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://gitlab.freedesktop.org/pipewire/pipewire/-/archive/${PIPEWIRE_VERSION}/pipewire-${PIPEWIRE_VERSION}.tar.gz -o pipewire.tar.gz && tar -xzf pipewire.tar.gz && rm pipewire.tar.gz && mv pipewire-* pipewire-src
 WORKDIR /build/pipewire-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} \
@@ -1273,14 +1273,14 @@ COPY --from=alsa-lib /alsa-lib /
 ARG WIREPLUMBER_VERSION=0.5.7
 RUN mkdir -p /wireplumber
 WORKDIR /build
-RUN curl -L https://gitlab.freedesktop.org/pipewire/wireplumber/-/archive/${WIREPLUMBER_VERSION}/wireplumber-${WIREPLUMBER_VERSION}.tar.gz -o wireplumber.tar.gz && tar -xzf wireplumber.tar.gz && rm wireplumber.tar.gz && mv wireplumber-* wireplumber-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://gitlab.freedesktop.org/pipewire/wireplumber/-/archive/${WIREPLUMBER_VERSION}/wireplumber-${WIREPLUMBER_VERSION}.tar.gz -o wireplumber.tar.gz && tar -xzf wireplumber.tar.gz && rm wireplumber.tar.gz && mv wireplumber-* wireplumber-src
 WORKDIR /build/wireplumber-src
 RUN pip3 install meson ninja
 # Pre-seed meson's wrap cache with lua (the wrap fetches it from www.lua.org,
 # which is frequently unreachable). MacPorts mirrors the identical tarball
 # (sha 164c7849…), and meson verifies the hash so the patch still applies.
 RUN mkdir -p subprojects/packagecache && \
-    curl -fL https://distfiles.macports.org/lua/lua-5.4.4.tar.gz -o subprojects/packagecache/lua-5.4.4.tar.gz
+    curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://distfiles.macports.org/lua/lua-5.4.4.tar.gz -o subprojects/packagecache/lua-5.4.4.tar.gz
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} \
     -Dsystem-lua=false -Dintrospection=disabled -Ddoc=disabled -Dtests=false \
     -Delogind=disabled -Dsystemd=enabled -Dsystemd-user-service=true -Dsystemd-system-service=false
@@ -1843,7 +1843,7 @@ COPY --from=libpng /libpng /
 ARG SWAYBG_VERSION=1.2.1
 RUN mkdir -p /swaybg
 WORKDIR /build
-RUN curl -L https://github.com/swaywm/swaybg/releases/download/v${SWAYBG_VERSION}/swaybg-${SWAYBG_VERSION}.tar.gz -o swaybg.tar.gz && tar -xzf swaybg.tar.gz && rm swaybg.tar.gz && mv swaybg-* swaybg-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://github.com/swaywm/swaybg/releases/download/v${SWAYBG_VERSION}/swaybg-${SWAYBG_VERSION}.tar.gz -o swaybg.tar.gz && tar -xzf swaybg.tar.gz && rm swaybg.tar.gz && mv swaybg-* swaybg-src
 WORKDIR /build/swaybg-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dman-pages=disabled -Dgdk-pixbuf=disabled -Dwerror=false
@@ -1868,7 +1868,7 @@ COPY --from=libpng /libpng /
 ARG MAKO_VERSION=1.9.0
 RUN mkdir -p /mako
 WORKDIR /build
-RUN curl -L https://github.com/emersion/mako/releases/download/v${MAKO_VERSION}/mako-${MAKO_VERSION}.tar.gz -o mako.tar.gz && tar -xzf mako.tar.gz && rm mako.tar.gz && mv mako-* mako-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://github.com/emersion/mako/releases/download/v${MAKO_VERSION}/mako-${MAKO_VERSION}.tar.gz -o mako.tar.gz && tar -xzf mako.tar.gz && rm mako.tar.gz && mv mako-* mako-src
 WORKDIR /build/mako-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dman-pages=disabled -Dsd-bus-provider=libsystemd
@@ -1892,7 +1892,7 @@ COPY --from=libpng /libpng /
 ARG FUZZEL_VERSION=1.11.0
 RUN mkdir -p /fuzzel
 WORKDIR /build
-RUN curl -L https://codeberg.org/dnkl/fuzzel/archive/${FUZZEL_VERSION}.tar.gz -o fuzzel.tar.gz && tar -xzf fuzzel.tar.gz && rm fuzzel.tar.gz && mv fuzzel* fuzzel-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://codeberg.org/dnkl/fuzzel/archive/${FUZZEL_VERSION}.tar.gz -o fuzzel.tar.gz && tar -xzf fuzzel.tar.gz && rm fuzzel.tar.gz && mv fuzzel* fuzzel-src
 WORKDIR /build/fuzzel-src
 RUN pip3 install meson ninja
 # Drop the man-page subdir (needs scdoc, which we don't build).
@@ -1908,7 +1908,7 @@ COPY --from=wayland /wayland /
 ARG WLCLIP_VERSION=2.2.1
 RUN mkdir -p /wl-clipboard
 WORKDIR /build
-RUN curl -L https://github.com/bugaevc/wl-clipboard/archive/refs/tags/v${WLCLIP_VERSION}.tar.gz -o wlclip.tar.gz && tar -xzf wlclip.tar.gz && rm wlclip.tar.gz && mv wl-clipboard-* wlclip-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://github.com/bugaevc/wl-clipboard/archive/refs/tags/v${WLCLIP_VERSION}.tar.gz -o wlclip.tar.gz && tar -xzf wlclip.tar.gz && rm wlclip.tar.gz && mv wl-clipboard-* wlclip-src
 WORKDIR /build/wlclip-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS}
@@ -1930,7 +1930,7 @@ COPY --from=libxkb /libxkb /
 ARG SLURP_VERSION=1.5.0
 RUN mkdir -p /slurp
 WORKDIR /build
-RUN curl -L https://github.com/emersion/slurp/releases/download/v${SLURP_VERSION}/slurp-${SLURP_VERSION}.tar.gz -o slurp.tar.gz && tar -xzf slurp.tar.gz && rm slurp.tar.gz && mv slurp-* slurp-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://github.com/emersion/slurp/releases/download/v${SLURP_VERSION}/slurp-${SLURP_VERSION}.tar.gz -o slurp.tar.gz && tar -xzf slurp.tar.gz && rm slurp.tar.gz && mv slurp-* slurp-src
 WORKDIR /build/slurp-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dman-pages=disabled
@@ -1945,7 +1945,7 @@ COPY --from=wayland /wayland /
 ARG SWAYIDLE_VERSION=1.8.0
 RUN mkdir -p /swayidle
 WORKDIR /build
-RUN curl -L https://github.com/swaywm/swayidle/releases/download/${SWAYIDLE_VERSION}/swayidle-${SWAYIDLE_VERSION}.tar.gz -o swayidle.tar.gz && tar -xzf swayidle.tar.gz && rm swayidle.tar.gz && mv swayidle-* swayidle-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://github.com/swaywm/swayidle/releases/download/${SWAYIDLE_VERSION}/swayidle-${SWAYIDLE_VERSION}.tar.gz -o swayidle.tar.gz && tar -xzf swayidle.tar.gz && rm swayidle.tar.gz && mv swayidle-* swayidle-src
 WORKDIR /build/swayidle-src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dman-pages=disabled -Dlogind=enabled
@@ -1981,7 +1981,7 @@ FROM toolchain AS xcbproto
 ARG XCB_VERSION=1.17.0
 RUN mkdir -p /xcbproto
 WORKDIR /build
-RUN curl -L https://xcb.freedesktop.org/dist/xcb-proto-${XCB_VERSION}.tar.gz -o xcb-proto.tar.gz && tar -xzf xcb-proto.tar.gz && rm xcb-proto.tar.gz && mv xcb-proto-* xcb-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://xcb.freedesktop.org/dist/xcb-proto-${XCB_VERSION}.tar.gz -o xcb-proto.tar.gz && tar -xzf xcb-proto.tar.gz && rm xcb-proto.tar.gz && mv xcb-proto-* xcb-src
 WORKDIR /build/xcb-src
 RUN ./configure ${COMMON_CONFIGURE_ARGS} --build=${BUILD} --disable-dependency-tracking
 RUN make -j$(nproc) && make install DESTDIR=/xcbproto
@@ -1994,7 +1994,7 @@ COPY --from=libxau /libxau /
 ARG LIBXCB_VERSION=1.17.0
 RUN mkdir -p /libxcb
 WORKDIR /build
-RUN curl -L https://xcb.freedesktop.org/dist/libxcb-${LIBXCB_VERSION}.tar.gz -o libxcb.tar.gz && tar -xzf libxcb.tar.gz && rm libxcb.tar.gz && mv libxcb-* libxcb-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://xcb.freedesktop.org/dist/libxcb-${LIBXCB_VERSION}.tar.gz -o libxcb.tar.gz && tar -xzf libxcb.tar.gz && rm libxcb.tar.gz && mv libxcb-* libxcb-src
 WORKDIR /build/libxcb-src
 RUN ./configure ${COMMON_CONFIGURE_ARGS} --build=${BUILD} --disable-dependency-tracking
 RUN make -j$(nproc) && make install DESTDIR=/libxcb
@@ -2024,91 +2024,91 @@ WORKDIR /build
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxtrans registryUrl=https://gitlab.freedesktop.org extractVersion=^xtrans-(?<version>\d+(\.\d+)*)$
 ARG XTRANS_VERSION=1.6.0
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/xtrans-${XTRANS_VERSION}.tar.xz -o xtrans.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/lib/xtrans-${XTRANS_VERSION}.tar.xz -o xtrans.tar.xz && \
     tar -xf xtrans.tar.xz && cd xtrans-${XTRANS_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-docs && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libx11 registryUrl=https://gitlab.freedesktop.org extractVersion=^libX11-(?<version>\d+(\.\d+)*)$
 ARG LIBX11_VERSION=1.8.12
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libX11-${LIBX11_VERSION}.tar.xz -o libX11.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/lib/libX11-${LIBX11_VERSION}.tar.xz -o libX11.tar.xz && \
     tar -xf libX11.tar.xz && cd libX11-${LIBX11_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-specs --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxext registryUrl=https://gitlab.freedesktop.org extractVersion=^libXext-(?<version>\d+(\.\d+)*)$
 ARG LIBXEXT_VERSION=1.3.6
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXext-${LIBXEXT_VERSION}.tar.xz -o libXext.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/lib/libXext-${LIBXEXT_VERSION}.tar.xz -o libXext.tar.xz && \
     tar -xf libXext.tar.xz && cd libXext-${LIBXEXT_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-specs --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxrender registryUrl=https://gitlab.freedesktop.org extractVersion=^libXrender-(?<version>\d+(\.\d+)*)$
 ARG LIBXRENDER_VERSION=0.9.12
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXrender-${LIBXRENDER_VERSION}.tar.xz -o libXrender.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/lib/libXrender-${LIBXRENDER_VERSION}.tar.xz -o libXrender.tar.xz && \
     tar -xf libXrender.tar.xz && cd libXrender-${LIBXRENDER_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxfixes registryUrl=https://gitlab.freedesktop.org extractVersion=^libXfixes-(?<version>\d+(\.\d+)*)$
 ARG LIBXFIXES_VERSION=6.0.1
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXfixes-${LIBXFIXES_VERSION}.tar.xz -o libXfixes.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/lib/libXfixes-${LIBXFIXES_VERSION}.tar.xz -o libXfixes.tar.xz && \
     tar -xf libXfixes.tar.xz && cd libXfixes-${LIBXFIXES_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxdamage registryUrl=https://gitlab.freedesktop.org extractVersion=^libXdamage-(?<version>\d+(\.\d+)*)$
 ARG LIBXDAMAGE_VERSION=1.1.6
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXdamage-${LIBXDAMAGE_VERSION}.tar.xz -o libXdamage.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/lib/libXdamage-${LIBXDAMAGE_VERSION}.tar.xz -o libXdamage.tar.xz && \
     tar -xf libXdamage.tar.xz && cd libXdamage-${LIBXDAMAGE_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxcomposite registryUrl=https://gitlab.freedesktop.org extractVersion=^libXcomposite-(?<version>\d+(\.\d+)*)$
 ARG LIBXCOMPOSITE_VERSION=0.4.6
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXcomposite-${LIBXCOMPOSITE_VERSION}.tar.xz -o libXcomposite.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/lib/libXcomposite-${LIBXCOMPOSITE_VERSION}.tar.xz -o libXcomposite.tar.xz && \
     tar -xf libXcomposite.tar.xz && cd libXcomposite-${LIBXCOMPOSITE_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxrandr registryUrl=https://gitlab.freedesktop.org extractVersion=^libXrandr-(?<version>\d+(\.\d+)*)$
 ARG LIBXRANDR_VERSION=1.5.4
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXrandr-${LIBXRANDR_VERSION}.tar.xz -o libXrandr.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/lib/libXrandr-${LIBXRANDR_VERSION}.tar.xz -o libXrandr.tar.xz && \
     tar -xf libXrandr.tar.xz && cd libXrandr-${LIBXRANDR_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxi registryUrl=https://gitlab.freedesktop.org extractVersion=^libXi-(?<version>\d+(\.\d+)*)$
 ARG LIBXI_VERSION=1.8.2
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXi-${LIBXI_VERSION}.tar.xz -o libXi.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/lib/libXi-${LIBXI_VERSION}.tar.xz -o libXi.tar.xz && \
     tar -xf libXi.tar.xz && cd libXi-${LIBXI_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxinerama registryUrl=https://gitlab.freedesktop.org extractVersion=^libXinerama-(?<version>\d+(\.\d+)*)$
 ARG LIBXINERAMA_VERSION=1.1.5
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXinerama-${LIBXINERAMA_VERSION}.tar.xz -o libXinerama.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/lib/libXinerama-${LIBXINERAMA_VERSION}.tar.xz -o libXinerama.tar.xz && \
     tar -xf libXinerama.tar.xz && cd libXinerama-${LIBXINERAMA_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxcursor registryUrl=https://gitlab.freedesktop.org extractVersion=^libXcursor-(?<version>\d+(\.\d+)*)$
 ARG LIBXCURSOR_VERSION=1.2.3
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXcursor-${LIBXCURSOR_VERSION}.tar.xz -o libXcursor.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/lib/libXcursor-${LIBXCURSOR_VERSION}.tar.xz -o libXcursor.tar.xz && \
     tar -xf libXcursor.tar.xz && cd libXcursor-${LIBXCURSOR_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxft registryUrl=https://gitlab.freedesktop.org extractVersion=^libXft-(?<version>\d+(\.\d+)*)$
 ARG LIBXFT_VERSION=2.3.9
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXft-${LIBXFT_VERSION}.tar.xz -o libXft.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/lib/libXft-${LIBXFT_VERSION}.tar.xz -o libXft.tar.xz && \
     tar -xf libXft.tar.xz && cd libXft-${LIBXFT_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxscrnsaver registryUrl=https://gitlab.freedesktop.org extractVersion=^libXScrnSaver-(?<version>\d+(\.\d+)*)$
 ARG LIBXSS_VERSION=1.2.4
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXScrnSaver-${LIBXSS_VERSION}.tar.xz -o libXScrnSaver.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/lib/libXScrnSaver-${LIBXSS_VERSION}.tar.xz -o libXScrnSaver.tar.xz && \
     tar -xf libXScrnSaver.tar.xz && cd libXScrnSaver-${LIBXSS_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
@@ -2116,28 +2116,28 @@ RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXScrnSaver-$
 # XLibre's mandatory font/XKB support libraries and the runtime xkb compiler.
 # renovate: datasource=gitlab-tags depName=xorg/lib/libfontenc registryUrl=https://gitlab.freedesktop.org extractVersion=^libfontenc-(?<version>\d+(\.\d+)*)$
 ARG LIBFONTENC_VERSION=1.1.8
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libfontenc-${LIBFONTENC_VERSION}.tar.xz -o libfontenc.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/lib/libfontenc-${LIBFONTENC_VERSION}.tar.xz -o libfontenc.tar.xz && \
     tar -xf libfontenc.tar.xz && cd libfontenc-${LIBFONTENC_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxfont registryUrl=https://gitlab.freedesktop.org extractVersion=^libXfont2-(?<version>\d+(\.\d+)*)$
 ARG LIBXFONT2_VERSION=2.0.7
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXfont2-${LIBXFONT2_VERSION}.tar.xz -o libXfont2.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/lib/libXfont2-${LIBXFONT2_VERSION}.tar.xz -o libXfont2.tar.xz && \
     tar -xf libXfont2.tar.xz && cd libXfont2-${LIBXFONT2_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-devel-docs --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxkbfile registryUrl=https://gitlab.freedesktop.org extractVersion=^libxkbfile-(?<version>\d+(\.\d+)*)$
 ARG LIBXKBFILE_VERSION=1.1.3
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libxkbfile-${LIBXKBFILE_VERSION}.tar.xz -o libxkbfile.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/lib/libxkbfile-${LIBXKBFILE_VERSION}.tar.xz -o libxkbfile.tar.xz && \
     tar -xf libxkbfile.tar.xz && cd libxkbfile-${LIBXKBFILE_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # renovate: datasource=gitlab-tags depName=xorg/app/xkbcomp registryUrl=https://gitlab.freedesktop.org extractVersion=^xkbcomp-(?<version>\d+(\.\d+)*)$
 ARG XKBCOMP_VERSION=1.4.7
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/app/xkbcomp-${XKBCOMP_VERSION}.tar.xz -o xkbcomp.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/app/xkbcomp-${XKBCOMP_VERSION}.tar.xz -o xkbcomp.tar.xz && \
     tar -xf xkbcomp.tar.xz && cd xkbcomp-${XKBCOMP_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
@@ -2146,21 +2146,21 @@ RUN curl -fL --retry 5 https://www.x.org/releases/individual/app/xkbcomp-${XKBCO
 RUN pip3 install meson ninja
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxcvt registryUrl=https://gitlab.freedesktop.org extractVersion=^libxcvt-(?<version>\d+(\.\d+)*)$
 ARG LIBXCVT_VERSION=0.1.3
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libxcvt-${LIBXCVT_VERSION}.tar.xz -o libxcvt.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/lib/libxcvt-${LIBXCVT_VERSION}.tar.xz -o libxcvt.tar.xz && \
     tar -xf libxcvt.tar.xz && cd libxcvt-${LIBXCVT_VERSION} && \
     meson setup buildDir ${COMMON_MESON_FLAGS} && \
     ninja -C buildDir install && DESTDIR=/x11-libs ninja -C buildDir install
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libpciaccess registryUrl=https://gitlab.freedesktop.org extractVersion=^libpciaccess-(?<version>\d+(\.\d+)*)$
 ARG LIBPCIACCESS_VERSION=0.18.1
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libpciaccess-${LIBPCIACCESS_VERSION}.tar.xz -o libpciaccess.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/lib/libpciaccess-${LIBPCIACCESS_VERSION}.tar.xz -o libpciaccess.tar.xz && \
     tar -xf libpciaccess.tar.xz && cd libpciaccess-${LIBPCIACCESS_VERSION} && \
     meson setup buildDir ${COMMON_MESON_FLAGS} -Dzlib=disabled && \
     ninja -C buildDir install && DESTDIR=/x11-libs ninja -C buildDir install
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxshmfence registryUrl=https://gitlab.freedesktop.org extractVersion=^libxshmfence-(?<version>\d+(\.\d+)*)$
 ARG LIBXSHMFENCE_VERSION=1.3.3
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libxshmfence-${LIBXSHMFENCE_VERSION}.tar.xz -o libxshmfence.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/lib/libxshmfence-${LIBXSHMFENCE_VERSION}.tar.xz -o libxshmfence.tar.xz && \
     tar -xf libxshmfence.tar.xz && cd libxshmfence-${LIBXSHMFENCE_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
@@ -2168,42 +2168,42 @@ RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libxshmfence-${
 # i3's XCB utility dependencies.
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxcb-util registryUrl=https://gitlab.freedesktop.org extractVersion=^xcb-util-(?<version>\d+(\.\d+)*)$
 ARG XCB_UTIL_VERSION=0.4.1
-RUN curl -fL --retry 5 https://xcb.freedesktop.org/dist/xcb-util-${XCB_UTIL_VERSION}.tar.xz -o xcb-util.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xcb.freedesktop.org/dist/xcb-util-${XCB_UTIL_VERSION}.tar.xz -o xcb-util.tar.xz && \
     tar -xf xcb-util.tar.xz && cd xcb-util-${XCB_UTIL_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxcb-image registryUrl=https://gitlab.freedesktop.org extractVersion=^xcb-util-image-(?<version>\d+(\.\d+)*)$
 ARG XCB_UTIL_IMAGE_VERSION=0.4.1
-RUN curl -fL --retry 5 https://xcb.freedesktop.org/dist/xcb-util-image-${XCB_UTIL_IMAGE_VERSION}.tar.xz -o xcb-image.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xcb.freedesktop.org/dist/xcb-util-image-${XCB_UTIL_IMAGE_VERSION}.tar.xz -o xcb-image.tar.xz && \
     tar -xf xcb-image.tar.xz && cd xcb-util-image-${XCB_UTIL_IMAGE_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxcb-render-util registryUrl=https://gitlab.freedesktop.org extractVersion=^xcb-util-renderutil-(?<version>\d+(\.\d+)*)$
 ARG XCB_UTIL_RENDERUTIL_VERSION=0.3.10
-RUN curl -fL --retry 5 https://xcb.freedesktop.org/dist/xcb-util-renderutil-${XCB_UTIL_RENDERUTIL_VERSION}.tar.xz -o xcb-renderutil.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xcb.freedesktop.org/dist/xcb-util-renderutil-${XCB_UTIL_RENDERUTIL_VERSION}.tar.xz -o xcb-renderutil.tar.xz && \
     tar -xf xcb-renderutil.tar.xz && cd xcb-util-renderutil-${XCB_UTIL_RENDERUTIL_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxcb-cursor registryUrl=https://gitlab.freedesktop.org extractVersion=^xcb-util-cursor-(?<version>\d+(\.\d+)*)$
 ARG XCB_UTIL_CURSOR_VERSION=0.1.5
-RUN curl -fL --retry 5 https://xcb.freedesktop.org/dist/xcb-util-cursor-${XCB_UTIL_CURSOR_VERSION}.tar.xz -o xcb-cursor.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xcb.freedesktop.org/dist/xcb-util-cursor-${XCB_UTIL_CURSOR_VERSION}.tar.xz -o xcb-cursor.tar.xz && \
     tar -xf xcb-cursor.tar.xz && cd xcb-util-cursor-${XCB_UTIL_CURSOR_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxcb-keysyms registryUrl=https://gitlab.freedesktop.org extractVersion=^xcb-util-keysyms-(?<version>\d+(\.\d+)*)$
 ARG XCB_UTIL_KEYSYMS_VERSION=0.4.1
-RUN curl -fL --retry 5 https://xcb.freedesktop.org/dist/xcb-util-keysyms-${XCB_UTIL_KEYSYMS_VERSION}.tar.xz -o xcb-keysyms.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xcb.freedesktop.org/dist/xcb-util-keysyms-${XCB_UTIL_KEYSYMS_VERSION}.tar.xz -o xcb-keysyms.tar.xz && \
     tar -xf xcb-keysyms.tar.xz && cd xcb-util-keysyms-${XCB_UTIL_KEYSYMS_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxcb-wm registryUrl=https://gitlab.freedesktop.org extractVersion=^xcb-util-wm-(?<version>\d+(\.\d+)*)$
 ARG XCB_UTIL_WM_VERSION=0.4.2
-RUN curl -fL --retry 5 https://xcb.freedesktop.org/dist/xcb-util-wm-${XCB_UTIL_WM_VERSION}.tar.xz -o xcb-wm.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xcb.freedesktop.org/dist/xcb-util-wm-${XCB_UTIL_WM_VERSION}.tar.xz -o xcb-wm.tar.xz && \
     tar -xf xcb-wm.tar.xz && cd xcb-util-wm-${XCB_UTIL_WM_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
@@ -2212,7 +2212,7 @@ RUN curl -fL --retry 5 https://xcb.freedesktop.org/dist/xcb-util-wm-${XCB_UTIL_W
 # install the header-only compatibility pair from libbsd for this build graph.
 # renovate: datasource=gitlab-tags depName=libbsd/libbsd registryUrl=https://gitlab.freedesktop.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG LIBBSD_HEADERS_VERSION=0.12.2
-RUN curl -fL --retry 5 https://libbsd.freedesktop.org/releases/libbsd-${LIBBSD_HEADERS_VERSION}.tar.xz -o libbsd.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://libbsd.freedesktop.org/releases/libbsd-${LIBBSD_HEADERS_VERSION}.tar.xz -o libbsd.tar.xz && \
     tar -xf libbsd.tar.xz && \
     mkdir -p /usr/include/sys /usr/include/bsd/sys /x11-libs/usr/include/sys /x11-libs/usr/include/bsd/sys && \
     cp libbsd-${LIBBSD_HEADERS_VERSION}/include/bsd/sys/queue.h /usr/include/sys/queue.h && \
@@ -2222,26 +2222,26 @@ RUN curl -fL --retry 5 https://libbsd.freedesktop.org/releases/libbsd-${LIBBSD_H
 
 # renovate: datasource=github-tags depName=Airblader/xcb-util-xrm extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG XCB_UTIL_XRM_VERSION=1.3
-RUN curl -fL --retry 5 https://github.com/Airblader/xcb-util-xrm/releases/download/v${XCB_UTIL_XRM_VERSION}/xcb-util-xrm-${XCB_UTIL_XRM_VERSION}.tar.gz -o xcb-xrm.tar.gz && \
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/Airblader/xcb-util-xrm/releases/download/v${XCB_UTIL_XRM_VERSION}/xcb-util-xrm-${XCB_UTIL_XRM_VERSION}.tar.gz -o xcb-xrm.tar.gz && \
     tar -xf xcb-xrm.tar.gz && cd xcb-util-xrm-${XCB_UTIL_XRM_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 ARG STARTUP_NOTIFICATION_VERSION=0.12
-RUN curl -fL --retry 5 https://www.freedesktop.org/software/startup-notification/releases/startup-notification-${STARTUP_NOTIFICATION_VERSION}.tar.gz -o startup-notification.tar.gz && \
+RUN curl --retry-all-errors -fL --retry 5 https://www.freedesktop.org/software/startup-notification/releases/startup-notification-${STARTUP_NOTIFICATION_VERSION}.tar.gz -o startup-notification.tar.gz && \
     tar -xf startup-notification.tar.gz && cd startup-notification-${STARTUP_NOTIFICATION_VERSION} && \
     ./configure --quiet --prefix=/usr --enable-shared --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 ARG LIBEV_VERSION=4.33
-RUN curl -fL --retry 5 https://dist.schmorp.de/libev/libev-${LIBEV_VERSION}.tar.gz -o libev.tar.gz && \
+RUN curl --retry-all-errors -fL --retry 5 https://dist.schmorp.de/libev/libev-${LIBEV_VERSION}.tar.gz -o libev.tar.gz && \
     tar -xf libev.tar.gz && cd libev-${LIBEV_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
 
 # renovate: datasource=github-tags depName=lloyd/yajl extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG YAJL_VERSION=2.1.0
-RUN curl -fL --retry 5 https://github.com/lloyd/yajl/archive/refs/tags/${YAJL_VERSION}.tar.gz -o yajl.tar.gz && \
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/lloyd/yajl/archive/refs/tags/${YAJL_VERSION}.tar.gz -o yajl.tar.gz && \
     tar -xf yajl.tar.gz && cd yajl-${YAJL_VERSION} && \
     sed -i '/ADD_SUBDIRECTORY(test)/,$d' CMakeLists.txt && \
     cmake -G Ninja -B buildDir -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DBUILD_SHARED_LIBS=ON && \
@@ -2249,7 +2249,7 @@ RUN curl -fL --retry 5 https://github.com/lloyd/yajl/archive/refs/tags/${YAJL_VE
 
 # renovate: datasource=gitlab-tags depName=xorg/lib/libxxf86vm registryUrl=https://gitlab.freedesktop.org extractVersion=^libXxf86vm-(?<version>\d+(\.\d+)*)$
 ARG LIBXXF86VM_VERSION=1.1.7
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/lib/libXxf86vm-${LIBXXF86VM_VERSION}.tar.xz -o libXxf86vm.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/lib/libXxf86vm-${LIBXXF86VM_VERSION}.tar.xz -o libXxf86vm.tar.xz && \
     tar -xf libXxf86vm.tar.xz && cd libXxf86vm-${LIBXXF86VM_VERSION} && \
     ./configure ${COMMON_CONFIGURE_ARGS} --disable-static && \
     make -j"$(nproc)" && make install && make install DESTDIR=/x11-libs
@@ -2267,7 +2267,7 @@ COPY --from=libxcb /libxcb /
 ARG LIBXKBCOMMON_VERSION=1.13.0
 RUN mkdir -p /libxkb-x11
 WORKDIR /build
-RUN curl -fL https://github.com/xkbcommon/libxkbcommon/archive/refs/tags/xkbcommon-${LIBXKBCOMMON_VERSION}.tar.gz -o libxkbcommon.tar.gz && \
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://github.com/xkbcommon/libxkbcommon/archive/refs/tags/xkbcommon-${LIBXKBCOMMON_VERSION}.tar.gz -o libxkbcommon.tar.gz && \
     tar -xf libxkbcommon.tar.gz && mv libxkbcommon-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
@@ -2291,7 +2291,7 @@ ARG MESA_VERSION=25.3.0
 ARG GPU=vm
 RUN mkdir -p /mesa-x11
 WORKDIR /build
-RUN curl -fL https://archive.mesa3d.org/mesa-${MESA_VERSION}.tar.xz -o mesa.tar.xz && \
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://archive.mesa3d.org/mesa-${MESA_VERSION}.tar.xz -o mesa.tar.xz && \
     tar -xf mesa.tar.xz && mv mesa-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja setuptools mako pyyaml
@@ -2320,7 +2320,7 @@ COPY --from=mesa-x11 /mesa-x11 /
 ARG LIBEPOXY_VERSION=1.5.10
 RUN mkdir -p /libepoxy-x11
 WORKDIR /build
-RUN curl -fL https://github.com/anholt/libepoxy/archive/refs/tags/${LIBEPOXY_VERSION}.tar.gz -o epoxy.tar.gz && \
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://github.com/anholt/libepoxy/archive/refs/tags/${LIBEPOXY_VERSION}.tar.gz -o epoxy.tar.gz && \
     tar -xf epoxy.tar.gz && mv libepoxy-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
@@ -2346,7 +2346,7 @@ COPY --from=glib2 /glib2 /
 ARG CAIRO_VERSION=1.18.4
 RUN mkdir -p /cairo-x11
 WORKDIR /build
-RUN curl -fL https://cairographics.org/releases/cairo-${CAIRO_VERSION}.tar.xz -o cairo.tar.xz && \
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://cairographics.org/releases/cairo-${CAIRO_VERSION}.tar.xz -o cairo.tar.xz && \
     tar -xf cairo.tar.xz && mv cairo-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
@@ -2373,7 +2373,7 @@ COPY --from=libpng /libpng /
 ARG PANGO_VERSION=1.54.0
 RUN mkdir -p /pango-x11
 WORKDIR /build
-RUN PANGO_MAJOR="${PANGO_VERSION%.*}" && curl -fL https://download.gnome.org/sources/pango/${PANGO_MAJOR}/pango-${PANGO_VERSION}.tar.xz -o pango.tar.xz && \
+RUN PANGO_MAJOR="${PANGO_VERSION%.*}" && curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://download.gnome.org/sources/pango/${PANGO_MAJOR}/pango-${PANGO_VERSION}.tar.xz -o pango.tar.xz && \
     tar -xf pango.tar.xz && mv pango-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
@@ -2401,7 +2401,7 @@ COPY --from=libseat /libseat /
 ARG XLIBRE_VERSION=25.2.0
 RUN mkdir -p /xlibre
 WORKDIR /build
-RUN curl -fL --retry 5 https://github.com/X11Libre/xserver/archive/refs/tags/xlibre-xserver-${XLIBRE_VERSION}.tar.gz -o xlibre.tar.gz && \
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/X11Libre/xserver/archive/refs/tags/xlibre-xserver-${XLIBRE_VERSION}.tar.gz -o xlibre.tar.gz && \
     tar -xf xlibre.tar.gz && mv xserver-* src && \
     sed -i '/#include <stddef.h>/a #include <sys/random.h>' src/os/osdep.h && \
     sed -i 's/while (pos < len)/while (pos < nbytes)/; s/getrandom(buf + pos/getrandom((unsigned char *)buf + pos/' src/os/osdep.h
@@ -2432,7 +2432,7 @@ COPY --from=xlibre /xlibre /
 ARG XLIBRE_INPUT_LIBINPUT_VERSION=25.0.1
 RUN mkdir -p /xlibre-input-libinput
 WORKDIR /build
-RUN curl -fL --retry 5 https://github.com/X11Libre/xf86-input-libinput/archive/refs/tags/xlibre-xf86-input-libinput-${XLIBRE_INPUT_LIBINPUT_VERSION}.tar.gz -o driver.tar.gz && \
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/X11Libre/xf86-input-libinput/archive/refs/tags/xlibre-xf86-input-libinput-${XLIBRE_INPUT_LIBINPUT_VERSION}.tar.gz -o driver.tar.gz && \
     tar -xf driver.tar.gz && mv xf86-input-libinput-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
@@ -2461,7 +2461,7 @@ COPY --from=libpng /libpng /
 ARG I3_VERSION=4.25.1
 RUN mkdir -p /i3
 WORKDIR /build
-RUN curl -fL --retry 5 https://i3wm.org/downloads/i3-${I3_VERSION}.tar.xz -o i3.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://i3wm.org/downloads/i3-${I3_VERSION}.tar.xz -o i3.tar.xz && \
     tar -xf i3.tar.xz && mv i3-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
@@ -2488,7 +2488,7 @@ ARG XAUTH_VERSION=1.1.5
 # xauth only uses XmuGetHostname from libXmuu; that function is a thin
 # gethostname(2) wrapper. Use libc directly instead of pulling libXt and the
 # rest of libXmu's legacy widget dependency chain into this small image.
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/app/xauth-${XAUTH_VERSION}.tar.xz -o xauth.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/app/xauth-${XAUTH_VERSION}.tar.xz -o xauth.tar.xz && \
     tar -xf xauth.tar.xz && cd xauth-${XAUTH_VERSION} && \
     sed -i -e 's|#include <X11/Xmu/SysUtil.h>|#include <unistd.h>|' \
            -e 's/XmuGetHostname/gethostname/' \
@@ -2500,7 +2500,7 @@ RUN curl -fL --retry 5 https://www.x.org/releases/individual/app/xauth-${XAUTH_V
 
 # renovate: datasource=git-tags depName=https://git.suckless.org/st extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG ST_VERSION=0.9.3
-RUN curl -fL --retry 5 https://dl.suckless.org/st/st-${ST_VERSION}.tar.gz -o st.tar.gz && \
+RUN curl --retry-all-errors -fL --retry 5 https://dl.suckless.org/st/st-${ST_VERSION}.tar.gz -o st.tar.gz && \
     tar -xf st.tar.gz && cd st-${ST_VERSION} && \
     sed -i -e 's|^PREFIX = .*|PREFIX = /usr|' -e 's|^X11INC = .*|X11INC = /usr/include|' -e 's|^X11LIB = .*|X11LIB = /usr/lib|' config.mk && \
     sed -i -e 's|Liberation Mono:pixelsize=12|DejaVu Sans Mono:pixelsize=15|' \
@@ -2512,14 +2512,14 @@ RUN curl -fL --retry 5 https://dl.suckless.org/st/st-${ST_VERSION}.tar.gz -o st.
 
 # renovate: datasource=git-tags depName=https://git.suckless.org/dmenu extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG DMENU_VERSION=5.3
-RUN curl -fL --retry 5 https://dl.suckless.org/tools/dmenu-${DMENU_VERSION}.tar.gz -o dmenu.tar.gz && \
+RUN curl --retry-all-errors -fL --retry 5 https://dl.suckless.org/tools/dmenu-${DMENU_VERSION}.tar.gz -o dmenu.tar.gz && \
     tar -xf dmenu.tar.gz && cd dmenu-${DMENU_VERSION} && \
     sed -i -e 's|^PREFIX = .*|PREFIX = /usr|' -e 's|^X11INC = .*|X11INC = /usr/include|' -e 's|^X11LIB = .*|X11LIB = /usr/lib|' config.mk && \
     make -j"$(nproc)" CC=cc && make install CC=cc DESTDIR=/x11-desktop-tools
 
 # renovate: datasource=github-tags depName=kfish/xsel extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG XSEL_VERSION=1.2.1
-RUN curl -fL --retry 5 https://github.com/kfish/xsel/archive/refs/tags/${XSEL_VERSION}.tar.gz -o xsel.tar.gz && \
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/kfish/xsel/archive/refs/tags/${XSEL_VERSION}.tar.gz -o xsel.tar.gz && \
     tar -xf xsel.tar.gz && cd xsel-${XSEL_VERSION} && \
     autoreconf -fi && ./configure ${COMMON_CONFIGURE_ARGS} && \
     make -j"$(nproc)" && make install DESTDIR=/x11-desktop-tools
@@ -2550,7 +2550,7 @@ COPY --from=gdk-pixbuf /gdk-pixbuf /
 ARG DUNST_VERSION=1.13.0
 RUN mkdir -p /dunst
 WORKDIR /build
-RUN curl -fL --retry 5 https://github.com/dunst-project/dunst/archive/refs/tags/v${DUNST_VERSION}.tar.gz -o dunst.tar.gz && \
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/dunst-project/dunst/archive/refs/tags/v${DUNST_VERSION}.tar.gz -o dunst.tar.gz && \
     tar -xf dunst.tar.gz && mv dunst-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
@@ -2577,9 +2577,9 @@ ARG ZIG_VERSION=0.16.0
 ARG LY_VERSION=1.4.1
 RUN mkdir -p /ly
 WORKDIR /build
-RUN curl -L https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz -o zig.tar.xz && tar -xf zig.tar.xz && rm zig.tar.xz && mv zig-x86_64-linux-* /opt/zig
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz -o zig.tar.xz && tar -xf zig.tar.xz && rm zig.tar.xz && mv zig-x86_64-linux-* /opt/zig
 ENV PATH=/opt/zig:$PATH
-RUN curl -L https://github.com/fairyglade/ly/archive/refs/tags/v${LY_VERSION}.tar.gz -o ly.tar.gz && tar -xzf ly.tar.gz && rm ly.tar.gz && mv ly-* ly-src
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://github.com/fairyglade/ly/archive/refs/tags/v${LY_VERSION}.tar.gz -o ly.tar.gz && tar -xzf ly.tar.gz && rm ly.tar.gz && mv ly-* ly-src
 WORKDIR /build/ly-src
 RUN zig build
 RUN zig build installexe -Dinit_system=systemd -Ddest_directory=/ly
@@ -2608,7 +2608,7 @@ FROM toolchain AS duktape
 ARG DUKTAPE_VERSION=2.7.0
 RUN mkdir -p /duktape
 WORKDIR /build
-RUN curl -fL --retry 5 https://duktape.org/duktape-${DUKTAPE_VERSION}.tar.xz -o d.tar.xz && tar -xf d.tar.xz && mv duktape-* src
+RUN curl --retry-all-errors -fL --retry 5 https://duktape.org/duktape-${DUKTAPE_VERSION}.tar.xz -o d.tar.xz && tar -xf d.tar.xz && mv duktape-* src
 WORKDIR /build/src
 RUN make -f Makefile.sharedlibrary INSTALL_PREFIX=/usr CC=cc && \
     make -f Makefile.sharedlibrary INSTALL_PREFIX=/duktape/usr install && \
@@ -2622,7 +2622,7 @@ RUN make -f Makefile.sharedlibrary INSTALL_PREFIX=/usr CC=cc && \
 FROM toolchain AS gettext-tools
 ARG GETTEXT_VERSION=0.22.5
 WORKDIR /build
-RUN curl -fL --retry 5 https://ftp.gnu.org/pub/gnu/gettext/gettext-${GETTEXT_VERSION}.tar.xz -o g.tar.xz && tar -xf g.tar.xz && \
+RUN curl --retry-all-errors -fL --retry 5 https://ftp.gnu.org/pub/gnu/gettext/gettext-${GETTEXT_VERSION}.tar.xz -o g.tar.xz && tar -xf g.tar.xz && \
     cd gettext-${GETTEXT_VERSION} && \
     ./configure --prefix=/usr --disable-java --disable-csharp --disable-libasprintf \
       --disable-openmp --disable-acl --disable-curses --without-emacs --without-git \
@@ -2644,7 +2644,7 @@ COPY --from=libucontext /libucontext /
 ARG POLKIT_VERSION=126
 RUN mkdir -p /polkit
 WORKDIR /build
-RUN curl -fL --retry 5 https://github.com/polkit-org/polkit/archive/refs/tags/${POLKIT_VERSION}.tar.gz -o p.tar.gz && tar -xzf p.tar.gz && mv polkit-* src
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/polkit-org/polkit/archive/refs/tags/${POLKIT_VERSION}.tar.gz -o p.tar.gz && tar -xzf p.tar.gz && mv polkit-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} --libexecdir=lib \
@@ -2670,7 +2670,7 @@ COPY --from=libucontext /libucontext /
 ARG ACCOUNTSSERVICE_VERSION=26.27.3
 RUN mkdir -p /accountsservice
 WORKDIR /build
-RUN curl -fL --retry 5 https://gitlab.freedesktop.org/accountsservice/accountsservice/-/archive/${ACCOUNTSSERVICE_VERSION}/accountsservice-${ACCOUNTSSERVICE_VERSION}.tar.gz -o a.tar.gz && tar -xzf a.tar.gz
+RUN curl --retry-all-errors -fL --retry 5 https://gitlab.freedesktop.org/accountsservice/accountsservice/-/archive/${ACCOUNTSSERVICE_VERSION}/accountsservice-${ACCOUNTSSERVICE_VERSION}.tar.gz -o a.tar.gz && tar -xzf a.tar.gz
 WORKDIR /build/accountsservice-${ACCOUNTSSERVICE_VERSION}
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} --libexecdir=lib \
@@ -2687,7 +2687,7 @@ FROM toolchain AS libsndfile
 ARG LIBSNDFILE_VERSION=1.2.2
 RUN mkdir -p /libsndfile
 WORKDIR /build
-RUN curl -fL --retry 5 https://github.com/libsndfile/libsndfile/releases/download/${LIBSNDFILE_VERSION}/libsndfile-${LIBSNDFILE_VERSION}.tar.xz -o s.tar.xz && tar -xf s.tar.xz && mv libsndfile-* src
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/libsndfile/libsndfile/releases/download/${LIBSNDFILE_VERSION}/libsndfile-${LIBSNDFILE_VERSION}.tar.xz -o s.tar.xz && tar -xf s.tar.xz && mv libsndfile-* src
 WORKDIR /build/src
 RUN pip3 install ninja
 RUN cmake -B build -G Ninja -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
@@ -2703,7 +2703,7 @@ COPY --from=libsndfile /libsndfile /
 ARG PULSEAUDIO_VERSION=17.0
 RUN mkdir -p /libpulse
 WORKDIR /build
-RUN curl -fL --retry 5 https://www.freedesktop.org/software/pulseaudio/releases/pulseaudio-${PULSEAUDIO_VERSION}.tar.xz -o p.tar.xz && tar -xf p.tar.xz && mv pulseaudio-* src
+RUN curl --retry-all-errors -fL --retry 5 https://www.freedesktop.org/software/pulseaudio/releases/pulseaudio-${PULSEAUDIO_VERSION}.tar.xz -o p.tar.xz && tar -xf p.tar.xz && mv pulseaudio-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} \
@@ -2723,7 +2723,7 @@ FROM toolchain AS dav1d
 ARG DAV1D_VERSION=1.5.1
 RUN mkdir -p /dav1d
 WORKDIR /build
-RUN curl -fL --retry 5 https://downloads.videolan.org/pub/videolan/dav1d/${DAV1D_VERSION}/dav1d-${DAV1D_VERSION}.tar.xz -o d.tar.xz && tar -xf d.tar.xz && mv dav1d-* src
+RUN curl --retry-all-errors -fL --retry 5 https://downloads.videolan.org/pub/videolan/dav1d/${DAV1D_VERSION}/dav1d-${DAV1D_VERSION}.tar.xz -o d.tar.xz && tar -xf d.tar.xz && mv dav1d-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Denable_asm=false -Denable_tools=false -Denable_tests=false -Denable_examples=false
@@ -2737,7 +2737,7 @@ FROM toolchain AS iso-codes
 ARG ISO_CODES_VERSION=4.18.0
 RUN mkdir -p /iso-codes/usr/share/iso-codes/json /iso-codes/usr/share/pkgconfig
 WORKDIR /build
-RUN curl -fL --retry 5 https://salsa.debian.org/iso-codes-team/iso-codes/-/archive/v${ISO_CODES_VERSION}/iso-codes-v${ISO_CODES_VERSION}.tar.gz -o i.tar.gz && tar -xzf i.tar.gz && \
+RUN curl --retry-all-errors -fL --retry 5 https://salsa.debian.org/iso-codes-team/iso-codes/-/archive/v${ISO_CODES_VERSION}/iso-codes-v${ISO_CODES_VERSION}.tar.gz -o i.tar.gz && tar -xzf i.tar.gz && \
     cp iso-codes-*/data/*.json /iso-codes/usr/share/iso-codes/json/ && \
     printf 'prefix=/usr\ndatarootdir=${prefix}/share\ndatadir=${datarootdir}\ndomains=iso_639-2 iso_639-3 iso_639-5 iso_3166-1 iso_3166-2 iso_3166-3 iso_4217 iso_15924\n\nName: iso-codes\nDescription: ISO country, subdivision, language, currency and script codes and their translations\nVersion: %s\n' "${ISO_CODES_VERSION}" \
       > /iso-codes/usr/share/pkgconfig/iso-codes.pc
@@ -2751,8 +2751,8 @@ COPY --from=pcre2 /pcre2 /
 ARG GSTREAMER_VERSION=1.26.7
 RUN mkdir -p /gstreamer
 WORKDIR /build
-RUN curl -fL --retry 5 https://gstreamer.freedesktop.org/src/gstreamer/gstreamer-${GSTREAMER_VERSION}.tar.xz -o g.tar.xz && tar -xf g.tar.xz && \
-    curl -fL --retry 5 https://gstreamer.freedesktop.org/src/gst-plugins-base/gst-plugins-base-${GSTREAMER_VERSION}.tar.xz -o b.tar.xz && tar -xf b.tar.xz
+RUN curl --retry-all-errors -fL --retry 5 https://gstreamer.freedesktop.org/src/gstreamer/gstreamer-${GSTREAMER_VERSION}.tar.xz -o g.tar.xz && tar -xf g.tar.xz && \
+    curl --retry-all-errors -fL --retry 5 https://gstreamer.freedesktop.org/src/gst-plugins-base/gst-plugins-base-${GSTREAMER_VERSION}.tar.xz -o b.tar.xz && tar -xf b.tar.xz
 RUN pip3 install meson ninja
 WORKDIR /build/gstreamer-${GSTREAMER_VERSION}
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} --libexecdir=lib \
@@ -2794,7 +2794,7 @@ COPY --from=libucontext /libucontext /
 ARG XDG_DESKTOP_PORTAL_VERSION=1.20.3
 RUN mkdir -p /xdg-desktop-portal
 WORKDIR /build
-RUN curl -fL --retry 5 https://github.com/flatpak/xdg-desktop-portal/releases/download/${XDG_DESKTOP_PORTAL_VERSION}/xdg-desktop-portal-${XDG_DESKTOP_PORTAL_VERSION}.tar.xz -o x.tar.xz && tar -xf x.tar.xz && mv xdg-desktop-portal-* src
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/flatpak/xdg-desktop-portal/releases/download/${XDG_DESKTOP_PORTAL_VERSION}/xdg-desktop-portal-${XDG_DESKTOP_PORTAL_VERSION}.tar.xz -o x.tar.xz && tar -xf x.tar.xz && mv xdg-desktop-portal-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} --libexecdir=lib \
@@ -2824,7 +2824,7 @@ COPY --from=libucontext /libucontext /
 ARG XWAYLAND_VERSION=24.1.8
 RUN mkdir -p /xwayland
 WORKDIR /build
-RUN curl -fL --retry 5 https://www.x.org/releases/individual/xserver/xwayland-${XWAYLAND_VERSION}.tar.xz -o x.tar.xz && tar -xf x.tar.xz && mv xwayland-* src
+RUN curl --retry-all-errors -fL --retry 5 https://xorg.freedesktop.org/archive/individual/xserver/xwayland-${XWAYLAND_VERSION}.tar.xz -o x.tar.xz && tar -xf x.tar.xz && mv xwayland-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} \
@@ -2904,10 +2904,10 @@ WORKDIR /build
 # greetd, the login daemon cosmic-greeter runs under, and pop-launcher, the
 # search backend behind the COSMIC launcher.
 FROM cosmic-build AS greetd
-# renovate: datasource=git-tags depName=https://git.sr.ht/~kennylevinsen/greetd extractVersion=^(?<version>\d+(\.\d+)*)$
+# renovate: datasource=github-tags depName=kennylevinsen/greetd
 ARG GREETD_VERSION=0.10.3
 RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
-    curl -fsSL --retry 5 https://git.sr.ht/~kennylevinsen/greetd/archive/${GREETD_VERSION}.tar.gz | tar -xz && \
+    curl --retry-all-errors -fsSL --retry 5 https://github.com/kennylevinsen/greetd/archive/refs/tags/${GREETD_VERSION}.tar.gz | tar -xz && \
     cd greetd-${GREETD_VERSION} && cargo build --release --locked && \
     install -Dm755 target/release/greetd /greetd/usr/bin/greetd && \
     install -Dm755 target/release/agreety /greetd/usr/bin/agreety && \
@@ -2917,7 +2917,7 @@ FROM cosmic-build AS pop-launcher
 # renovate: datasource=github-tags depName=pop-os/cosmic-session extractVersion=^epoch-(?<version>\d+(\.\d+)*)$
 ARG COSMIC_VERSION=1.11.0
 RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
-    curl -fsSL --retry 5 https://github.com/pop-os/launcher/archive/refs/tags/epoch-${COSMIC_VERSION}.tar.gz | tar -xz && \
+    curl --retry-all-errors -fsSL --retry 5 https://github.com/pop-os/launcher/archive/refs/tags/epoch-${COSMIC_VERSION}.tar.gz | tar -xz && \
     cd launcher-epoch-${COSMIC_VERSION} && just build-release --locked && \
     just rootdir=/pop-launcher install && \
     ! ldd /pop-launcher/usr/bin/pop-launcher | grep 'not found'
@@ -2944,7 +2944,7 @@ RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry
 RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-app-library && rm -rf /cargo-target/*
 # cosmic-workspaces installs with make, not just.
 RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked \
-    mkdir -p /build/ws && curl -fsSL --retry 5 https://github.com/pop-os/cosmic-workspaces-epoch/archive/refs/tags/epoch-${COSMIC_VERSION}.tar.gz | tar -xz --strip-components=1 -C /build/ws && \
+    mkdir -p /build/ws && curl --retry-all-errors -fsSL --retry 5 https://github.com/pop-os/cosmic-workspaces-epoch/archive/refs/tags/epoch-${COSMIC_VERSION}.tar.gz | tar -xz --strip-components=1 -C /build/ws && \
     cd /build/ws && cargo build --release --locked --bin cosmic-workspaces && \
     make install DESTDIR=/cosmic CARGO_TARGET_DIR=/cargo-target && \
     ! ldd /cosmic/usr/bin/cosmic-workspaces | grep 'not found' && \
@@ -2966,7 +2966,7 @@ RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry
 # lists the languages `locale -a` reports. Its crabtime macros also insist the
 # target dir is named `target`, hence the nested CARGO_TARGET_DIR.
 RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked \
-    mkdir -p /build/is && curl -fsSL --retry 5 https://github.com/pop-os/cosmic-initial-setup/archive/refs/tags/epoch-${COSMIC_VERSION}.tar.gz | tar -xz --strip-components=1 -C /build/is && \
+    mkdir -p /build/is && curl --retry-all-errors -fsSL --retry 5 https://github.com/pop-os/cosmic-initial-setup/archive/refs/tags/epoch-${COSMIC_VERSION}.tar.gz | tar -xz --strip-components=1 -C /build/is && \
     cd /build/is && \
     sed -i 's/\.wrap_err("could not get locale from locale1")?/.unwrap_or_default()/' src/page/language.rs && \
     grep -q 'unwrap_or_default()' src/page/language.rs && ! grep -q 'could not get locale from locale1' src/page/language.rs && \
@@ -2976,8 +2976,8 @@ RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry
     cd /build && rm -rf /build/is /cargo-target/*
 # Data-only components: the icon theme (just) and the wallpapers (make).
 RUN mkdir -p /build/icons /build/wallpapers && \
-    curl -fsSL --retry 5 https://github.com/pop-os/cosmic-icons/archive/refs/tags/epoch-${COSMIC_VERSION}.tar.gz | tar -xz --strip-components=1 -C /build/icons && \
-    curl -fsSL --retry 5 https://github.com/pop-os/cosmic-wallpapers/archive/refs/tags/epoch-${COSMIC_VERSION}.tar.gz | tar -xz --strip-components=1 -C /build/wallpapers && \
+    curl --retry-all-errors -fsSL --retry 5 https://github.com/pop-os/cosmic-icons/archive/refs/tags/epoch-${COSMIC_VERSION}.tar.gz | tar -xz --strip-components=1 -C /build/icons && \
+    curl --retry-all-errors -fsSL --retry 5 https://github.com/pop-os/cosmic-wallpapers/archive/refs/tags/epoch-${COSMIC_VERSION}.tar.gz | tar -xz --strip-components=1 -C /build/wallpapers && \
     (cd /build/icons && just rootdir=/cosmic install) && \
     (cd /build/wallpapers && make install DESTDIR=/cosmic prefix=/usr) && \
     rm -rf /build/icons /build/wallpapers
@@ -2995,9 +2995,9 @@ COPY --from=gettext-tools /gettext-tools /
 ARG MUSL_LOCALES_VERSION=0.1.0
 ARG APORTS_COMMIT=65780305dd2517157357121ccddbe95c84e6d5a4
 WORKDIR /build
-RUN curl -fsSL --retry 5 https://git.adelielinux.org/adelie/musl-locales/-/archive/${MUSL_LOCALES_VERSION}/musl-locales-${MUSL_LOCALES_VERSION}.tar.bz2 | tar -xj && \
+RUN curl --retry-all-errors -fsSL --retry 5 https://git.adelielinux.org/adelie/musl-locales/-/archive/${MUSL_LOCALES_VERSION}/musl-locales-${MUSL_LOCALES_VERSION}.tar.bz2 | tar -xj && \
     cd musl-locales-${MUSL_LOCALES_VERSION} && \
-    curl -fsSL --retry 5 https://raw.githubusercontent.com/alpinelinux/aports/${APORTS_COMMIT}/main/musl-locales/add-all-available-locales.patch | patch -p1 && \
+    curl --retry-all-errors -fsSL --retry 5 https://raw.githubusercontent.com/alpinelinux/aports/${APORTS_COMMIT}/main/musl-locales/add-all-available-locales.patch | patch -p1 && \
     sed -i '/printf("a_DJ\\n/s/\\n/.UTF-8\\n/g' locale.c && grep -q 'de_DE.UTF-8' locale.c && \
     pip3 install ninja && \
     cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_POLICY_VERSION_MINIMUM=3.5 && \
@@ -3011,7 +3011,7 @@ FROM toolchain AS hicolor-icon-theme
 # renovate: datasource=gitlab-tags depName=xdg/default-icon-theme registryUrl=https://gitlab.freedesktop.org extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG HICOLOR_VERSION=0.18
 WORKDIR /build
-RUN curl -fsSL --retry 5 https://icon-theme.freedesktop.org/releases/hicolor-icon-theme-${HICOLOR_VERSION}.tar.xz | tar -xJ && \
+RUN curl --retry-all-errors -fsSL --retry 5 https://icon-theme.freedesktop.org/releases/hicolor-icon-theme-${HICOLOR_VERSION}.tar.xz | tar -xJ && \
     cd hicolor-icon-theme-${HICOLOR_VERSION} && pip3 install meson ninja && \
     meson setup build --prefix=/usr && DESTDIR=/hicolor-icon-theme ninja -C build install && \
     test -f /hicolor-icon-theme/usr/share/icons/hicolor/index.theme
@@ -3023,10 +3023,10 @@ ARG GOOGLE_FONTS_COMMIT=8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5
 ARG NOTO_FONTS_COMMIT=8b36ddb234b06c091320e28985a3c96b48ce2596
 RUN d=/cosmic-fonts/usr/share/fonts/cosmic && mkdir -p $d && \
     for f in "OpenSans%5Bwdth,wght%5D.ttf" "OpenSans-Italic%5Bwdth,wght%5D.ttf"; do \
-      curl -fsSL --retry 5 "https://raw.githubusercontent.com/google/fonts/${GOOGLE_FONTS_COMMIT}/ofl/opensans/$f" -o "$d/$(printf %s "$f" | sed 's/%5B/[/;s/%5D/]/')" || exit 1; \
+      curl --retry-all-errors -fsSL --retry 5 "https://raw.githubusercontent.com/google/fonts/${GOOGLE_FONTS_COMMIT}/ofl/opensans/$f" -o "$d/$(printf %s "$f" | sed 's/%5B/[/;s/%5D/]/')" || exit 1; \
     done && \
     for f in NotoSansMono-Regular.ttf NotoSansMono-Bold.ttf; do \
-      curl -fsSL --retry 5 "https://raw.githubusercontent.com/notofonts/notofonts.github.io/${NOTO_FONTS_COMMIT}/fonts/NotoSansMono/hinted/ttf/$f" -o "$d/$f" || exit 1; \
+      curl --retry-all-errors -fsSL --retry 5 "https://raw.githubusercontent.com/notofonts/notofonts.github.io/${NOTO_FONTS_COMMIT}/fonts/NotoSansMono/hinted/ttf/$f" -o "$d/$f" || exit 1; \
     done
 
 # ===========================================================================
@@ -3047,14 +3047,14 @@ FROM toolchain AS stb
 ARG STB_COMMIT=d14d46f6b44456eb88beac58cba833a4135d4c89
 RUN mkdir -p /stb/usr/include/stb && \
     for h in deprecated/stb_image_resize2.h stb_image_write.h; do \
-      curl -fsSL --retry 5 "https://raw.githubusercontent.com/nothings/stb/${STB_COMMIT}/$h" -o "/stb/usr/include/stb/${h##*/}" || exit 1; \
+      curl --retry-all-errors -fsSL --retry 5 "https://raw.githubusercontent.com/nothings/stb/${STB_COMMIT}/$h" -o "/stb/usr/include/stb/${h##*/}" || exit 1; \
     done
 
 FROM toolchain AS nlohmann-json
 # renovate: datasource=github-tags depName=nlohmann/json extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG NLOHMANN_JSON_VERSION=3.12.0
 WORKDIR /build
-RUN curl -fL --retry 5 https://github.com/nlohmann/json/releases/download/v${NLOHMANN_JSON_VERSION}/json.tar.xz -o j.tar.xz && tar -xf j.tar.xz && mv json src
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/nlohmann/json/releases/download/v${NLOHMANN_JSON_VERSION}/json.tar.xz -o j.tar.xz && tar -xf j.tar.xz && mv json src
 WORKDIR /build/src
 RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DJSON_BuildTests=OFF -DJSON_Install=ON && \
     DESTDIR=/nlohmann-json cmake --install build
@@ -3063,7 +3063,7 @@ FROM toolchain AS tomlplusplus
 # renovate: datasource=github-tags depName=marzer/tomlplusplus extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG TOMLPLUSPLUS_VERSION=3.4.0
 WORKDIR /build
-RUN curl -fL --retry 5 https://github.com/marzer/tomlplusplus/archive/refs/tags/v${TOMLPLUSPLUS_VERSION}.tar.gz -o t.tar.gz && tar -xzf t.tar.gz && mv tomlplusplus-* src
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/marzer/tomlplusplus/archive/refs/tags/v${TOMLPLUSPLUS_VERSION}.tar.gz -o t.tar.gz && tar -xzf t.tar.gz && mv tomlplusplus-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dbuild_tests=false -Dbuild_examples=false && \
@@ -3073,7 +3073,7 @@ FROM toolchain AS md4c
 # renovate: datasource=github-tags depName=mity/md4c extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG MD4C_VERSION=0.6.0
 WORKDIR /build
-RUN curl -fL --retry 5 https://github.com/mity/md4c/archive/refs/tags/v${MD4C_VERSION}.tar.gz -o m.tar.gz && tar -xzf m.tar.gz && mv md4c-* src
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/mity/md4c/archive/refs/tags/v${MD4C_VERSION}.tar.gz -o m.tar.gz && tar -xzf m.tar.gz && mv md4c-* src
 WORKDIR /build/src
 RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=MinSizeRel -DBUILD_SHARED_LIBS=ON && \
     cmake --build build && DESTDIR=/md4c cmake --install build
@@ -3083,7 +3083,7 @@ FROM toolchain AS libsodium
 ARG LIBSODIUM_VERSION=1.0.22
 RUN mkdir -p /libsodium
 WORKDIR /build
-RUN curl -fL --retry 5 https://github.com/jedisct1/libsodium/releases/download/${LIBSODIUM_VERSION}-RELEASE/libsodium-${LIBSODIUM_VERSION}.tar.gz -o s.tar.gz && tar -xzf s.tar.gz && mv libsodium-* src
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/jedisct1/libsodium/releases/download/${LIBSODIUM_VERSION}-RELEASE/libsodium-${LIBSODIUM_VERSION}.tar.gz -o s.tar.gz && tar -xzf s.tar.gz && mv libsodium-* src
 WORKDIR /build/src
 RUN ./configure ${COMMON_CONFIGURE_ARGS} && make -j"$(nproc)" && make DESTDIR=/libsodium install
 
@@ -3094,7 +3094,7 @@ COPY --from=libucontext /libucontext /
 # renovate: datasource=github-tags depName=Kistler-Group/sdbus-cpp extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG SDBUS_CPP_VERSION=2.3.1
 WORKDIR /build
-RUN curl -fL --retry 5 https://github.com/Kistler-Group/sdbus-cpp/archive/refs/tags/v${SDBUS_CPP_VERSION}.tar.gz -o s.tar.gz && tar -xzf s.tar.gz && mv sdbus-cpp-* src
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/Kistler-Group/sdbus-cpp/archive/refs/tags/v${SDBUS_CPP_VERSION}.tar.gz -o s.tar.gz && tar -xzf s.tar.gz && mv sdbus-cpp-* src
 WORKDIR /build/src
 RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=MinSizeRel \
       -DSDBUSCPP_BUILD_DOCS=OFF -DSDBUSCPP_BUILD_TESTS=OFF -DSDBUSCPP_BUILD_CODEGEN=OFF -DSDBUSCPP_BUILD_EXAMPLES=OFF && \
@@ -3106,7 +3106,7 @@ FROM toolchain AS libical
 # renovate: datasource=github-tags depName=libical/libical extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG LIBICAL_VERSION=4.0.7
 WORKDIR /build
-RUN curl -fL --retry 5 https://github.com/libical/libical/archive/refs/tags/v${LIBICAL_VERSION}.tar.gz -o i.tar.gz && tar -xzf i.tar.gz && mv libical-* src
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/libical/libical/archive/refs/tags/v${LIBICAL_VERSION}.tar.gz -o i.tar.gz && tar -xzf i.tar.gz && mv libical-* src
 WORKDIR /build/src
 RUN pip3 install ninja
 RUN cmake -B build -G Ninja -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=MinSizeRel \
@@ -3119,7 +3119,7 @@ FROM toolchain AS libwebp
 # renovate: datasource=github-tags depName=webmproject/libwebp extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG LIBWEBP_VERSION=1.6.0
 WORKDIR /build
-RUN curl -fL --retry 5 https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-${LIBWEBP_VERSION}.tar.gz -o w.tar.gz && tar -xzf w.tar.gz && mv libwebp-* src
+RUN curl --retry-all-errors -fL --retry 5 https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-${LIBWEBP_VERSION}.tar.gz -o w.tar.gz && tar -xzf w.tar.gz && mv libwebp-* src
 WORKDIR /build/src
 RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=MinSizeRel -DBUILD_SHARED_LIBS=ON \
       -DWEBP_BUILD_ANIM_UTILS=OFF -DWEBP_BUILD_CWEBP=OFF -DWEBP_BUILD_DWEBP=OFF -DWEBP_BUILD_GIF2WEBP=OFF \
@@ -3133,7 +3133,7 @@ FROM toolchain AS brotli
 # renovate: datasource=github-tags depName=google/brotli extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG BROTLI_VERSION=1.2.1
 WORKDIR /build
-RUN curl -fL --retry 5 https://github.com/google/brotli/archive/refs/tags/v${BROTLI_VERSION}.tar.gz -o b.tar.gz && tar -xzf b.tar.gz && mv brotli-* src
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/google/brotli/archive/refs/tags/v${BROTLI_VERSION}.tar.gz -o b.tar.gz && tar -xzf b.tar.gz && mv brotli-* src
 WORKDIR /build/src
 RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=MinSizeRel -DBUILD_SHARED_LIBS=ON -DBROTLI_DISABLE_TESTS=ON && \
     cmake --build build && DESTDIR=/brotli cmake --install build
@@ -3142,7 +3142,7 @@ FROM toolchain AS highway
 # renovate: datasource=github-tags depName=google/highway extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG HIGHWAY_VERSION=1.4.0
 WORKDIR /build
-RUN curl -fL --retry 5 https://github.com/google/highway/archive/refs/tags/${HIGHWAY_VERSION}.tar.gz -o h.tar.gz && tar -xzf h.tar.gz && mv highway-* src
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/google/highway/archive/refs/tags/${HIGHWAY_VERSION}.tar.gz -o h.tar.gz && tar -xzf h.tar.gz && mv highway-* src
 WORKDIR /build/src
 RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON \
       -DBUILD_TESTING=OFF -DHWY_ENABLE_TESTS=OFF -DHWY_ENABLE_EXAMPLES=OFF -DHWY_ENABLE_CONTRIB=OFF -DHWY_ENABLE_INSTALL=ON && \
@@ -3152,7 +3152,7 @@ FROM toolchain AS lcms2
 # renovate: datasource=github-tags depName=mm2/Little-CMS extractVersion=^lcms(?<version>\d+(\.\d+)*)$
 ARG LCMS2_VERSION=2.20
 WORKDIR /build
-RUN curl -fL --retry 5 https://github.com/mm2/Little-CMS/releases/download/lcms${LCMS2_VERSION}/lcms2-${LCMS2_VERSION}.tar.gz -o l.tar.gz && tar -xzf l.tar.gz && mv lcms2-* src
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/mm2/Little-CMS/releases/download/lcms${LCMS2_VERSION}/lcms2-${LCMS2_VERSION}.tar.gz -o l.tar.gz && tar -xzf l.tar.gz && mv lcms2-* src
 WORKDIR /build/src
 RUN ./configure ${COMMON_CONFIGURE_ARGS} && make -j"$(nproc)" && make DESTDIR=/lcms2 install
 
@@ -3163,7 +3163,7 @@ COPY --from=lcms2 /lcms2 /
 # renovate: datasource=github-tags depName=libjxl/libjxl extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG LIBJXL_VERSION=0.12.0
 WORKDIR /build
-RUN curl -fL --retry 5 https://github.com/libjxl/libjxl/archive/refs/tags/v${LIBJXL_VERSION}.tar.gz -o j.tar.gz && tar -xzf j.tar.gz && mv libjxl-* src
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/libjxl/libjxl/archive/refs/tags/v${LIBJXL_VERSION}.tar.gz -o j.tar.gz && tar -xzf j.tar.gz && mv libjxl-* src
 WORKDIR /build/src
 RUN pip3 install ninja
 RUN cmake -B build -G Ninja -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON \
@@ -3179,7 +3179,7 @@ RUN cmake -B build -G Ninja -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=l
 FROM toolchain AS gmp
 ARG GMP_VERSION=6.3.0
 WORKDIR /build
-RUN curl -fL --retry 5 https://ftp.gnu.org/gnu/gmp/gmp-${GMP_VERSION}.tar.xz -o g.tar.xz && tar -xf g.tar.xz && mv gmp-* src
+RUN curl --retry-all-errors -fL --retry 5 https://ftp.gnu.org/gnu/gmp/gmp-${GMP_VERSION}.tar.xz -o g.tar.xz && tar -xf g.tar.xz && mv gmp-* src
 WORKDIR /build/src
 # GMP's configure probes predate C23, where `void g()` means no arguments.
 RUN CFLAGS="-O2 -std=gnu17" ./configure --prefix=/usr --enable-cxx --enable-shared --disable-static && \
@@ -3189,7 +3189,7 @@ FROM toolchain AS mpfr
 COPY --from=gmp /gmp /
 ARG MPFR_VERSION=4.2.2
 WORKDIR /build
-RUN curl -fL --retry 5 https://ftp.gnu.org/gnu/mpfr/mpfr-${MPFR_VERSION}.tar.xz -o m.tar.xz && tar -xf m.tar.xz && mv mpfr-* src
+RUN curl --retry-all-errors -fL --retry 5 https://ftp.gnu.org/gnu/mpfr/mpfr-${MPFR_VERSION}.tar.xz -o m.tar.xz && tar -xf m.tar.xz && mv mpfr-* src
 WORKDIR /build/src
 # Not COMMON_CONFIGURE_ARGS: MPFR rejects --enable-lto for a shared library.
 RUN ./configure --prefix=/usr --enable-shared --disable-static && make -j"$(nproc)" && make DESTDIR=/mpfr install
@@ -3201,7 +3201,7 @@ COPY --from=gettext-tools /gettext-tools /
 # renovate: datasource=github-tags depName=Qalculate/libqalculate extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG LIBQALCULATE_VERSION=5.13.1
 WORKDIR /build
-RUN curl -fL --retry 5 https://github.com/Qalculate/libqalculate/releases/download/v${LIBQALCULATE_VERSION}/libqalculate-${LIBQALCULATE_VERSION}.tar.gz -o q.tar.gz && tar -xzf q.tar.gz && mv libqalculate-* src
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/Qalculate/libqalculate/releases/download/v${LIBQALCULATE_VERSION}/libqalculate-${LIBQALCULATE_VERSION}.tar.gz -o q.tar.gz && tar -xzf q.tar.gz && mv libqalculate-* src
 WORKDIR /build/src
 RUN ./configure --prefix=/usr --enable-shared --disable-static --disable-textport --without-icu --without-readline --disable-nls && \
     make -j"$(nproc)" && make DESTDIR=/libqalculate install
@@ -3215,7 +3215,7 @@ COPY --from=libgcrypt /libgcrypt /
 # renovate: datasource=gitlab-tags depName=GNOME/libsecret registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG LIBSECRET_VERSION=0.21.8
 WORKDIR /build
-RUN curl -fL --retry 5 https://download.gnome.org/sources/libsecret/${LIBSECRET_VERSION%.*}/libsecret-${LIBSECRET_VERSION}.tar.xz -o s.tar.xz && tar -xf s.tar.xz && mv libsecret-* src
+RUN curl --retry-all-errors -fL --retry 5 https://download.gnome.org/sources/libsecret/${LIBSECRET_VERSION%.*}/libsecret-${LIBSECRET_VERSION}.tar.xz -o s.tar.xz && tar -xf s.tar.xz && mv libsecret-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
 # secret-file-collection.c calls open() relying on glibc to pull in fcntl.h;
@@ -3244,7 +3244,7 @@ ARG CARGO_C_VERSION=0.10.26
 ARG LIBRSVG_VERSION=2.63.4
 RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
     cargo install cargo-c --version ${CARGO_C_VERSION} --locked --features vendored-openssl --root /usr/local
-RUN curl -fL --retry 5 https://download.gnome.org/sources/librsvg/${LIBRSVG_VERSION%.*}/librsvg-${LIBRSVG_VERSION}.tar.xz -o r.tar.xz && tar -xf r.tar.xz && mv librsvg-* src
+RUN curl --retry-all-errors -fL --retry 5 https://download.gnome.org/sources/librsvg/${LIBRSVG_VERSION%.*}/librsvg-${LIBRSVG_VERSION}.tar.xz -o r.tar.xz && tar -xf r.tar.xz && mv librsvg-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
 RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
@@ -3262,7 +3262,7 @@ ARG NIRI_VERSION=26.04
 ENV CARGO_TARGET_DIR=/cargo-target
 RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=niri-target,target=/cargo-target,sharing=locked \
-    curl -fsSL --retry 5 https://github.com/YaLTeR/niri/archive/refs/tags/v${NIRI_VERSION}.tar.gz | tar -xz && \
+    curl --retry-all-errors -fsSL --retry 5 https://github.com/YaLTeR/niri/archive/refs/tags/v${NIRI_VERSION}.tar.gz | tar -xz && \
     cd niri-${NIRI_VERSION} && \
     cargo build --release --locked && \
     install -s -Dm755 /cargo-target/release/niri /niri/usr/bin/niri && \
@@ -3283,7 +3283,7 @@ ARG XWAYLAND_SATELLITE_VERSION=0.8.3
 ENV CARGO_TARGET_DIR=/cargo-target
 RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=niri-target,target=/cargo-target,sharing=locked \
-    curl -fsSL --retry 5 https://github.com/Supreeeme/xwayland-satellite/archive/refs/tags/v${XWAYLAND_SATELLITE_VERSION}.tar.gz | tar -xz && \
+    curl --retry-all-errors -fsSL --retry 5 https://github.com/Supreeeme/xwayland-satellite/archive/refs/tags/v${XWAYLAND_SATELLITE_VERSION}.tar.gz | tar -xz && \
     cd xwayland-satellite-${XWAYLAND_SATELLITE_VERSION} && \
     cargo build --release --locked -F systemd && \
     install -s -Dm755 /cargo-target/release/xwayland-satellite /xwayland-satellite/usr/bin/xwayland-satellite && \
@@ -3338,7 +3338,7 @@ COPY --from=libjxl /libjxl /
 # renovate: datasource=github-tags depName=noctalia-dev/noctalia extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG NOCTALIA_VERSION=5.4.1
 WORKDIR /build
-RUN curl -fL --retry 5 https://github.com/noctalia-dev/noctalia/archive/refs/tags/v${NOCTALIA_VERSION}.tar.gz -o n.tar.gz && tar -xzf n.tar.gz && mv noctalia-${NOCTALIA_VERSION} src
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/noctalia-dev/noctalia/archive/refs/tags/v${NOCTALIA_VERSION}.tar.gz -o n.tar.gz && tar -xzf n.tar.gz && mv noctalia-${NOCTALIA_VERSION} src
 WORKDIR /build/src
 RUN pip3 install meson ninja
 RUN meson setup buildDir --prefix=/usr --libdir=lib --buildtype=release -Dstrip=true -Dtests=disabled -Djemalloc=disabled && \
@@ -3353,7 +3353,7 @@ FROM toolchain AS adwaita-cursors
 # renovate: datasource=gitlab-tags depName=GNOME/adwaita-icon-theme registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG ADWAITA_ICON_THEME_VERSION=51.0
 WORKDIR /build
-RUN curl -fL --retry 5 https://download.gnome.org/sources/adwaita-icon-theme/${ADWAITA_ICON_THEME_VERSION%%.*}/adwaita-icon-theme-${ADWAITA_ICON_THEME_VERSION}.tar.xz -o a.tar.xz && tar -xf a.tar.xz && mv adwaita-icon-theme-* src
+RUN curl --retry-all-errors -fL --retry 5 https://download.gnome.org/sources/adwaita-icon-theme/${ADWAITA_ICON_THEME_VERSION%%.*}/adwaita-icon-theme-${ADWAITA_ICON_THEME_VERSION}.tar.xz -o a.tar.xz && tar -xf a.tar.xz && mv adwaita-icon-theme-* src
 RUN d=/adwaita-cursors/usr/share/icons && mkdir -p $d/Adwaita $d/default && \
     cp -a src/Adwaita/cursors $d/Adwaita/cursors && \
     printf '[Icon Theme]\nName=Adwaita\nComment=The Adwaita cursor theme\n' > $d/Adwaita/index.theme && \
@@ -3387,7 +3387,7 @@ COPY --from=gettext-tools /gettext-tools /
 # renovate: datasource=github-tags depName=flatpak/xdg-desktop-portal-gtk extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG XDG_DESKTOP_PORTAL_GTK_VERSION=1.15.3
 WORKDIR /build
-RUN curl -fL --retry 5 https://github.com/flatpak/xdg-desktop-portal-gtk/releases/download/${XDG_DESKTOP_PORTAL_GTK_VERSION}/xdg-desktop-portal-gtk-${XDG_DESKTOP_PORTAL_GTK_VERSION}.tar.xz -o x.tar.xz && tar -xf x.tar.xz && mv xdg-desktop-portal-gtk-* src
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/flatpak/xdg-desktop-portal-gtk/releases/download/${XDG_DESKTOP_PORTAL_GTK_VERSION}/xdg-desktop-portal-gtk-${XDG_DESKTOP_PORTAL_GTK_VERSION}.tar.xz -o x.tar.xz && tar -xf x.tar.xz && mv xdg-desktop-portal-gtk-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} --libexecdir=lib -Dwallpaper=disabled -Dsettings=disabled -Dlockdown=disabled && \
