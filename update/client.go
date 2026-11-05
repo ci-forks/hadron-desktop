@@ -13,8 +13,10 @@ import (
 // InspectInfo is what the daemon's Inspect answers: which image a reference
 // really names, and whether the daemon will install it.
 type InspectInfo struct {
-	Ref, Digest, OS, Arch, Flavor, Version, Hadron string
-	Trusted                                        bool
+	Ref, Digest, OS, Arch, Flavor, Version string
+	// Trusted: a published release; Hadron: trusted, or labelled as a
+	// Hadron Desktop image by its publisher.
+	Trusted, Hadron bool
 	// Refusal is why the daemon will not install the image; Overridable says
 	// an explicit second answer from the user can lift it.
 	Refusal     string
@@ -149,7 +151,7 @@ func (c *client) Inspect(ref string, advanced bool) (InspectInfo, error) {
 	}
 	return InspectInfo{
 		Ref: str(m, "ref"), Digest: str(m, "digest"), OS: str(m, "os"), Arch: str(m, "arch"),
-		Flavor: str(m, "flavor"), Version: str(m, "version"), Hadron: str(m, "hadron"),
+		Flavor: str(m, "flavor"), Version: str(m, "version"), Hadron: boolean(m, "hadron"),
 		Trusted: boolean(m, "trusted"), Refusal: str(m, "refusal"), Overridable: boolean(m, "overridable"),
 	}, nil
 }

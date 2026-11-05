@@ -27,6 +27,8 @@ type fakeDaemon struct {
 	calls   []string
 	events  chan Event
 	applied [3]string
+	// inspectAdv is the advanced argument of every Inspect call.
+	inspectAdv []bool
 }
 
 func (f *fakeDaemon) rec(s string) { f.calls = append(f.calls, s) }
@@ -44,8 +46,12 @@ func (f *fakeDaemon) Releases() ([]string, error) {
 	f.rec("Releases")
 	return f.releases, nil
 }
+
+// Inspect answers like the real daemon: an overridable refusal disappears
+// when the caller asks with advanced=true.
 func (f *fakeDaemon) Inspect(ref string, adv bool) (InspectInfo, error) {
 	f.rec("Inspect")
+	f.inspectAdv = append(f.inspectAdv, adv)
 	if len(f.inspectEr) > 0 {
 		e := f.inspectEr[0]
 		f.inspectEr = f.inspectEr[1:]
@@ -53,6 +59,9 @@ func (f *fakeDaemon) Inspect(ref string, adv bool) (InspectInfo, error) {
 	}
 	i := f.info
 	i.Ref = ref
+	if adv && i.Overridable {
+		i.Refusal, i.Overridable = "", false
+	}
 	return i, nil
 }
 func (f *fakeDaemon) Apply(ref, digest string, adv bool) error {
@@ -181,7 +190,8 @@ func TestUpgradeImageIsAdvanced(t *testing.T) {
 	if code, _, e := runCLI("", "upgrade", "--yes", "--image", "ghcr.io/x/y:t"); code != exitOK {
 		t.Fatalf("code %d %s", code, e)
 	}
-	if f.applied[0] != "ghcr.io/x/y:t" || f.applied[2] != "adv" {
+	// A trusted image needs no override, so Apply does not ask for one.
+	if f.applied[0] != "ghcr.io/x/y:t" || f.applied[2] != "" {
 		t.Fatalf("Apply got %v", f.applied)
 	}
 }
@@ -196,12 +206,78 @@ func TestUnlabelledImageAsksASecondQuestionDefaultingToNo(t *testing.T) {
 	if code != exitOK || f.called("Apply") || !strings.Contains(out, "This is not a Hadron Desktop image. Install it anyway? [y/N]") {
 		t.Fatalf("code %d, out %q, calls %v", code, out, f.calls)
 	}
-	// An explicit yes goes through.
+	// An explicit yes goes through, with the override on Apply only: the
+	// inspection asked without it, so the refusal was shown.
 	f = okDaemon()
 	f.info = InspectInfo{Digest: digestA, Refusal: "not a Hadron Desktop image", Overridable: true}
 	useDaemon(t, f)
-	if code, _, _ := runCLI("y\n", "upgrade", "--yes", "--image", "ghcr.io/x/y:t"); code != exitOK || !f.called("Apply") {
-		t.Fatalf("code %d, calls %v", code, f.calls)
+	code, out, _ = runCLI("y\n", "upgrade", "--yes", "--image", "ghcr.io/x/y:t")
+	if code != exitOK || !f.called("Apply") || f.applied[2] != "adv" {
+		t.Fatalf("code %d, calls %v, applied %v", code, f.calls, f.applied)
+	}
+	for _, adv := range f.inspectAdv {
+		if adv {
+			t.Fatalf("Inspect asked with advanced=true: %v", f.inspectAdv)
+		}
+	}
+	if !strings.Contains(out, "Source:   not a Hadron Desktop image") {
+		t.Fatalf("source line: %q", out)
+	}
+}
+
+// TestSourceLineFollowsTheVerdict: "labelled by its publisher" only for an
+// image that carries the Hadron labels.
+func TestSourceLineFollowsTheVerdict(t *testing.T) {
+	for _, c := range []struct {
+		info InspectInfo
+		want string
+	}{
+		{InspectInfo{Digest: digestA, Trusted: true, Hadron: true}, "Source:   a published Hadron Desktop release (trusted)"},
+		{InspectInfo{Digest: digestA, Hadron: true}, "Source:   labelled by its publisher, not a published release"},
+		{InspectInfo{Digest: digestA}, "Source:   not a Hadron Desktop image"},
+	} {
+		setup(t, "v0.1.0", "v0.2.0")
+		f := okDaemon()
+		f.info = c.info
+		useDaemon(t, f)
+		_, out, _ := runCLI("n\n", "upgrade", "--image", "ghcr.io/x/y:t")
+		if !strings.Contains(out, c.want) {
+			t.Errorf("%+v: output %q lacks %q", c.info, out, c.want)
+		}
+	}
+}
+
+// TestUnlabelledImageThroughTheRealService runs the CLI against the D-Bus
+// service with a fake backend: the second question must come from the
+// daemon's own refusal, and --yes must not answer it.
+func TestUnlabelledImageThroughTheRealService(t *testing.T) {
+	dg := daemonEnv(t, "v0.0.5")
+	b := &fakeBackend{}
+	f := startService(t, NewDaemon(b), &fakeAuth{allow: true})
+	old, oldWait := dialDaemon, busyWait
+	dialDaemon = func() (daemonClient, error) {
+		conn, err := dbus.Connect(f.addr)
+		if err != nil {
+			return nil, err
+		}
+		return &client{conn: conn, obj: conn.Object(busName, busPath)}, nil
+	}
+	busyWait = 0
+	t.Cleanup(func() { dialDaemon, busyWait = old, oldWait })
+
+	code, out, errOut := runCLI("", "upgrade", "--yes", "--image", thirdParty)
+	if code != exitOK || !strings.Contains(out, "This is not a Hadron Desktop image. Install it anyway? [y/N]") ||
+		!strings.Contains(out, "Source:   not a Hadron Desktop image") ||
+		!strings.Contains(out, "Cancelled.") || len(b.calls()) != 0 {
+		t.Fatalf("--yes alone: code %d, out %q, stderr %q, upgrades %v", code, out, errOut, b.calls())
+	}
+	code, out, errOut = runCLI("y\n", "upgrade", "--yes", "--image", thirdParty)
+	if code != exitOK || !strings.Contains(out, "is installed") {
+		t.Fatalf("yes: code %d, out %q, stderr %q", code, out, errOut)
+	}
+	want := "oci:quay.io/kairos-community/hadron-desktop@" + dg[thirdParty]
+	if got := b.calls(); len(got) != 1 || got[0] != want {
+		t.Fatalf("upgrades %q, want [%q]", got, want)
 	}
 }
 
@@ -602,7 +678,8 @@ func TestUpgradeImageFromStdin(t *testing.T) {
 	f := okDaemon()
 	useDaemon(t, f)
 	code, out, errOut := runCLI("ghcr.io/me/img:1\ny\n", "upgrade", "--image", "-")
-	if code != exitOK || !strings.Contains(out, "Image reference:") || f.applied[0] != "ghcr.io/me/img:1" || f.applied[2] != "adv" {
+	// okDaemon's image is trusted, so no override goes with Apply.
+	if code != exitOK || !strings.Contains(out, "Image reference:") || f.applied[0] != "ghcr.io/me/img:1" || f.applied[2] != "" {
 		t.Fatalf("code %d, out %q, stderr %q, applied %v", code, out, errOut, f.applied)
 	}
 

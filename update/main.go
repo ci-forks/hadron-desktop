@@ -636,10 +636,14 @@ func cmdRollback(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 // installFlow is every install: inspect what the reference names, show it,
 // ask, apply, follow the job to its end, offer the reboot. The questions go
-// through one reader, as in the direct path.
+// through one reader, as in the direct path. advanced says the user asked
+// for an arbitrary image (--image): only then may an overridable refusal be
+// lifted, and only by an explicit answer.
 func installFlow(c daemonClient, rel Release, ref string, advanced, yes, reboot bool, in *bufio.Reader, stdout, stderr io.Writer) int {
+	// Always inspect without the override, so the daemon reports the
+	// refusal it would make and the user is asked about it.
 	var info InspectInfo
-	err := retryBusy(func() (err error) { info, err = c.Inspect(ref, advanced); return })
+	err := retryBusy(func() (err error) { info, err = c.Inspect(ref, false); return })
 	if err != nil {
 		return netFail(stderr, "cannot inspect the image: ", err)
 	}
@@ -650,24 +654,33 @@ func installFlow(c daemonClient, rel Release, ref string, advanced, yes, reboot 
 	}
 	fmt.Fprintf(stdout, "Image:    %s\nDigest:   %s\nFlavor:   %s\nVersion:  %s\n",
 		repo, info.Digest, orUnknown(info.Flavor), orUnknown(info.Version))
-	if info.Trusted {
+	switch {
+	case info.Trusted:
 		fmt.Fprintln(stdout, "Source:   a published Hadron Desktop release (trusted)")
-	} else {
+	case info.Hadron:
 		fmt.Fprintln(stdout, "Source:   labelled by its publisher, not a published release")
+	default:
+		fmt.Fprintln(stdout, "Source:   not a Hadron Desktop image")
 	}
 
+	override := false
 	if info.Refusal != "" {
-		if !info.Overridable {
+		if !info.Overridable || !advanced {
 			fmt.Fprintln(stderr, "hadron-update:", info.Refusal)
 			return exitError
 		}
 		fmt.Fprintln(stdout, info.Refusal)
+		question := "This is not a Hadron Desktop image. Install it anyway?"
+		if info.Hadron {
+			question = "This is not a published Hadron Desktop release. Install it anyway?"
+		}
 		// --yes never answers this one: it is the question that stops a
 		// mistyped image from replacing the system.
-		if !confirm(in, stdout, "This is not a Hadron Desktop image. Install it anyway?", false) {
+		if !confirm(in, stdout, question, false) {
 			fmt.Fprintln(stdout, "Cancelled.")
 			return exitOK
 		}
+		override = true
 	}
 	fmt.Fprintln(stdout, "The running system is not touched; the new one is used from the next boot.")
 	if !yes && !confirm(in, stdout, "Continue?", true) {
@@ -681,7 +694,7 @@ func installFlow(c daemonClient, rel Release, ref string, advanced, yes, reboot 
 		return exitError
 	}
 	defer stop()
-	if err := c.Apply(ref, info.Digest, advanced); err != nil {
+	if err := c.Apply(ref, info.Digest, override); err != nil {
 		return daemonFail(stderr, "", err)
 	}
 	// A Check that failed between Watch and Apply leaves StateError behind;
