@@ -258,3 +258,20 @@
 - [ ] **Step 2: Implement** the labels, the signing step and the doc edits.
 - [ ] **Step 3: Verify** `actionlint` (`docker run --rm -v "$PWD":/repo -w /repo rhysd/actionlint:1.7.7 -no-color`) — Expected: no output; `docker build --target kairos` is not run locally (hours) — say so in the PR; the next fork rehearsal (`git push ci-forks vX-rc.N`) checks labels and signatures end to end.
 - [ ] **Step 4: Commit** `feat(release): label and sign the upgrade images`.
+
+### Task 12: Restart into the previous system
+
+Added after the plan was approved (maintainer decision, 2026-11-05): a one-time rollback from the tray, with no download.
+
+**Files:**
+- Modify: `update/daemon.go`, `update/dbus.go`, `update/client.go`, `update/menu.go`, `update/trayapp.go`, `update/main.go`, and their tests
+
+**Interfaces:**
+- Consumes: `Daemon`, the D-Bus service, `BuildMenu`, the CLI.
+- Produces: `Backend.RebootPrevious() error` (runs `kairos-agent bootentry` to select the passive entry for the next boot only, then `systemctl reboot`); `Daemon.RebootPrevious() error` with the same refusals as `Reboot` (busy, rebooting) plus `ErrRebootPending` (a pending install would be the passive slot's replacement — refuse); D-Bus method `RebootPrevious()` authorized by `io.kairos.hadron-update.reboot`; menu item `rollback` ("Restart into the previous system"), shown in idle/up-to-date/update-available/error states, hidden while busy or reboot-pending; CLI `hadron-update rollback` (asks once, default No).
+
+- [ ] **Step 1: Write the failing tests:** daemon — RebootPrevious calls the backend once in idle, refused with ErrBusy while a job runs and with ErrRebootPending after an install; D-Bus — NotAuthorized without polkit; menu — `rollback` present/absent per state; CLI — `rollback` asks, `n` does nothing.
+- [ ] **Step 2: Run** — Expected: FAIL.
+- [ ] **Step 3: Implement**; read the pinned kairos-agent's `bootentry` command (kairos agent/pkg/action/bootentries.go) for the exact selection of the passive entry and its one-shot behaviour, and use that.
+- [ ] **Step 4: Run** `cd update && go test -race ./...` — Expected: PASS.
+- [ ] **Step 5: Commit** `feat(update): restart into the previous system`.
