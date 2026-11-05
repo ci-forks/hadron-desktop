@@ -177,15 +177,19 @@ and get the `polkitd` system user.
   (default No, never answered by `--yes`) before it applies with it.
 - **update.conf:** `advanced=` is read without regard to case. true, yes, 1
   and on turn advanced mode on; false, no, 0 and off turn it off; any other
-  value turns it off and is logged. No file or no key: on.
+  value, or a file that exists but cannot be read, turns it off and is
+  logged. No file or no key: on.
 - **Idle exit:** `Status` does not count as activity, and a watcher polls
   `Status` only while a job runs, so a running tray does not keep the root
   service up. The newest release tag is kept in `/run/hadron-update/latest`
   for the next instance.
 - **Flatpak callers:** a mutating call from a process in a Flatpak sandbox
-  (`/proc/<pid>/root/.flatpak-info`, pid from the bus) is refused before
-  polkit is asked: the app runs as the user, so the `admin` rule would let it
-  install. The polkit rule itself is unchanged.
+  (`/proc/<pid>/root/.flatpak-info`) is refused before polkit is asked: the
+  app runs as the user, so the `admin` rule would let it install. The process
+  comes from the bus (`GetConnectionCredentials`: the pidfd when the bus sends
+  one, else the pid). The check fails closed: the root must resolve (not a
+  zombie), and the pidfd's pid, or the pid's start time, must be the same
+  before and after. The polkit rule itself is unchanged.
 - **Registry token service:** only an https token realm is fetched; the daemon
   runs as root and the realm comes from a registry any user can name.
 
