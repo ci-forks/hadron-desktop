@@ -3373,9 +3373,47 @@ RUN d=/adwaita-cursors/usr/share/icons && mkdir -p $d/Adwaita $d/default && \
     printf '[Icon Theme]\nInherits=Adwaita\n' > $d/default/index.theme && \
     test -e $d/Adwaita/cursors/default
 
+# GSettings schemas for the GTK portal's Settings interface, which is how
+# Flatpak apps learn the colour scheme (org.freedesktop.appearance
+# color-scheme) and, for GTK3 apps, the theme. xdg-desktop-portal-gtk reads
+# both from org.gnome.desktop.interface. Hadron's defaults are a vendor
+# override: dark colour scheme, and Adwaita-dark for GTK3. GTK3 has the dark
+# Adwaita built in only as a variant, so the theme named Adwaita-dark is a
+# one-line stylesheet that imports it.
+#
+# No dconf: without it GLib uses its in-memory backend, which still reads the
+# compiled schemas with this override, so every app and portal sees the dark
+# defaults. dconf would only add per-user changes saved across logins, for a
+# daemon, a GIO module and its cache in every image. The default stage
+# compiles the schemas (glib-compile-schemas); installs under DESTDIR skip it.
+FROM toolchain AS gsettings-desktop-schemas
+COPY --from=glib2 /glib2 /
+COPY --from=pcre2 /pcre2 /
+# renovate: datasource=gitlab-tags depName=GNOME/gsettings-desktop-schemas registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
+ARG GSETTINGS_SCHEMAS_VERSION=47.1
+RUN mkdir -p /gsettings-desktop-schemas
+WORKDIR /build
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://download.gnome.org/sources/gsettings-desktop-schemas/${GSETTINGS_SCHEMAS_VERSION%.*}/gsettings-desktop-schemas-${GSETTINGS_SCHEMAS_VERSION}.tar.xz -o s.tar.xz && tar -xf s.tar.xz && rm s.tar.xz && mv gsettings-desktop-schemas-* src
+WORKDIR /build/src
+RUN pip3 install meson ninja
+RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dintrospection=false && \
+    DESTDIR=/gsettings-desktop-schemas ninja -C buildDir install
+RUN d=/gsettings-desktop-schemas/usr/share && \
+    printf '%s\n' '# Hadron Desktop defaults: dark apps, including Flatpak apps through the portal.' \
+      '[org.gnome.desktop.interface]' "color-scheme='prefer-dark'" "gtk-theme='Adwaita-dark'" \
+      > $d/glib-2.0/schemas/90_hadron.gschema.override && \
+    mkdir -p $d/themes/Adwaita-dark/gtk-3.0 && \
+    printf '@import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css");\n' \
+      > $d/themes/Adwaita-dark/gtk-3.0/gtk.css && \
+    cp -a $d/glib-2.0/schemas /tmp/schemas && glib-compile-schemas --strict /tmp/schemas && \
+    test "$(gsettings --schemadir /tmp/schemas get org.gnome.desktop.interface color-scheme 2>/dev/null)" = "'prefer-dark'" && \
+    rm -rf /tmp/schemas
+
 # xdg-desktop-portal-gtk: the file chooser (and app chooser, print, settings)
-# Flatpak apps open through the portal. niri's portals.conf prefers gnome, then
-# gtk; the GNOME backend needs GTK4 and mutter interfaces, so gtk it is.
+# Flatpak apps open through the portal, on Sway and niri (i3 has its own X11
+# build below). niri's portals.conf prefers gnome, then gtk; the GNOME backend
+# needs GTK4 and mutter interfaces, so gtk it is. Its Settings interface serves
+# the dark colour scheme from the gsettings-desktop-schemas stage.
 FROM toolchain AS xdg-desktop-portal-gtk
 COPY --from=glib2 /glib2 /
 COPY --from=pcre2 /pcre2 /
@@ -3397,14 +3435,149 @@ COPY --from=libdrm /libdrm /
 COPY --from=gtk3 /gtk3 /
 COPY --from=xdg-desktop-portal /xdg-desktop-portal /
 COPY --from=gettext-tools /gettext-tools /
+COPY --from=gsettings-desktop-schemas /gsettings-desktop-schemas /
 # renovate: datasource=github-tags depName=flatpak/xdg-desktop-portal-gtk extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG XDG_DESKTOP_PORTAL_GTK_VERSION=1.15.3
 WORKDIR /build
 RUN curl --retry-all-errors -fL --retry 5 https://github.com/flatpak/xdg-desktop-portal-gtk/releases/download/${XDG_DESKTOP_PORTAL_GTK_VERSION}/xdg-desktop-portal-gtk-${XDG_DESKTOP_PORTAL_GTK_VERSION}.tar.xz -o x.tar.xz && tar -xf x.tar.xz && mv xdg-desktop-portal-gtk-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
-RUN meson setup buildDir ${COMMON_MESON_FLAGS} --libexecdir=lib -Dwallpaper=disabled -Dsettings=disabled -Dlockdown=disabled && \
-    DESTDIR=/xdg-desktop-portal-gtk ninja -C buildDir install
+RUN meson setup buildDir ${COMMON_MESON_FLAGS} --libexecdir=lib -Dwallpaper=disabled -Dsettings=enabled -Dlockdown=disabled && \
+    DESTDIR=/xdg-desktop-portal-gtk ninja -C buildDir install && \
+    ! ldd /xdg-desktop-portal-gtk/usr/lib/xdg-desktop-portal-gtk | grep 'not found'
+
+# inih: the INI parser xdg-desktop-portal-wlr reads its config with.
+FROM toolchain AS inih
+# renovate: datasource=github-tags depName=benhoyt/inih extractVersion=^r(?<version>\d+)$
+ARG INIH_VERSION=62
+RUN mkdir -p /inih
+WORKDIR /build
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://github.com/benhoyt/inih/archive/refs/tags/r${INIH_VERSION}.tar.gz -o inih.tar.gz && tar -xf inih.tar.gz && rm inih.tar.gz && mv inih-* src
+WORKDIR /build/src
+RUN pip3 install meson ninja
+RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Ddefault_library=shared -Ddistro_install=true && \
+    DESTDIR=/inih ninja -C buildDir install
+
+# xdg-desktop-portal-wlr: the Screenshot and ScreenCast backends on Sway. It
+# captures through wlroots' screencopy protocol and streams through PipeWire;
+# a screen share asks which output with slurp.
+FROM toolchain AS xdg-desktop-portal-wlr
+COPY --from=libucontext /libucontext /
+COPY --from=wayland /wayland /
+COPY --from=libdrm /libdrm /
+COPY --from=mesa /mesa /
+COPY --from=glib2 /glib2 /
+COPY --from=pcre2 /pcre2 /
+COPY --from=alsa-lib /alsa-lib /
+COPY --from=pipewire /pipewire /
+COPY --from=inih /inih /
+# renovate: datasource=github-tags depName=emersion/xdg-desktop-portal-wlr extractVersion=^v(?<version>\d+(\.\d+)*)$
+ARG XDG_DESKTOP_PORTAL_WLR_VERSION=0.8.4
+RUN mkdir -p /xdg-desktop-portal-wlr
+WORKDIR /build
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://github.com/emersion/xdg-desktop-portal-wlr/releases/download/v${XDG_DESKTOP_PORTAL_WLR_VERSION}/xdg-desktop-portal-wlr-${XDG_DESKTOP_PORTAL_WLR_VERSION}.tar.gz -o x.tar.gz && tar -xf x.tar.gz && rm x.tar.gz && mv xdg-desktop-portal-wlr-* src
+WORKDIR /build/src
+RUN pip3 install meson ninja
+RUN meson setup buildDir ${COMMON_MESON_FLAGS} --libexecdir=lib -Dsd-bus-provider=libsystemd -Dsystemd=enabled -Dman-pages=disabled && \
+    DESTDIR=/xdg-desktop-portal-wlr ninja -C buildDir install && \
+    ! ldd /xdg-desktop-portal-wlr/usr/lib/xdg-desktop-portal-wlr | grep 'not found'
+
+# at-spi2-core: ATK and the AT-SPI bridge. GTK3's X11 backend requires the
+# bridge (the Wayland build above does not). Same version as Dockerfile.agent,
+# whose X11-enabled build overwrites these libraries in the agent image; this
+# one leaves X11 off so the i3 image needs no libXtst. --libexecdir=lib for
+# the same reason as flatpak: /usr/libexec is a persistent path on Kairos.
+FROM toolchain AS at-spi2-core
+COPY --from=glib2 /glib2 /
+COPY --from=pcre2 /pcre2 /
+COPY --from=libucontext /libucontext /
+# renovate: datasource=gitlab-tags depName=GNOME/at-spi2-core registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
+ARG ATSPI_VERSION=2.54.0
+RUN mkdir -p /at-spi2-core
+WORKDIR /build
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://download.gnome.org/sources/at-spi2-core/${ATSPI_VERSION%.*}/at-spi2-core-${ATSPI_VERSION}.tar.xz -o a.tar.xz && tar -xf a.tar.xz && rm a.tar.xz && mv at-spi2-core-* src
+WORKDIR /build/src
+RUN pip3 install meson ninja
+RUN meson setup buildDir ${COMMON_MESON_FLAGS} --libexecdir=lib \
+      -Ddefault_bus=dbus-daemon -Ddbus_daemon=/usr/bin/dbus-daemon -Duse_systemd=true \
+      -Dgtk2_atk_adaptor=false -Ddocs=false -Dintrospection=disabled -Dx11=disabled && \
+    DESTDIR=/at-spi2-core ninja -C buildDir install
+
+# GTK3 with the X11 backend, for the i3 image only: xdg-desktop-portal-gtk
+# needs a GTK that can open a window on XLibre. The Wayland variants keep the
+# Wayland-only gtk3 stage, so they gain no X11 libraries.
+FROM toolchain AS gtk3-x11
+COPY --from=glib2 /glib2 /
+COPY --from=pcre2 /pcre2 /
+COPY --from=xorgproto /xorgproto /
+COPY --from=xcbproto /xcbproto /
+COPY --from=libxau /libxau /
+COPY --from=libxcb /libxcb /
+COPY --from=x11-libs /x11-libs /
+COPY --from=cairo-x11 /cairo-x11 /
+COPY --from=pango-x11 /pango-x11 /
+COPY --from=harfbuzz /harfbuzz /
+COPY --from=fribidi /fribidi /
+COPY --from=freetype /freetype /
+COPY --from=fontconfig /fontconfig /
+COPY --from=libpng /libpng /
+COPY --from=pixman /pixman /
+COPY --from=gdk-pixbuf /gdk-pixbuf /
+COPY --from=at-spi2-core /at-spi2-core /
+COPY --from=libdrm /libdrm /
+COPY --from=mesa-x11 /mesa-x11 /
+COPY --from=libepoxy-x11 /libepoxy-x11 /
+COPY --from=libucontext /libucontext /
+# renovate: datasource=gitlab-tags depName=GNOME/gtk registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
+ARG GTK3_VERSION=3.24.43
+RUN mkdir -p /gtk3-x11
+WORKDIR /build
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://download.gnome.org/sources/gtk+/${GTK3_VERSION%.*}/gtk+-${GTK3_VERSION}.tar.xz -o gtk.tar.xz && tar -xf gtk.tar.xz && rm gtk.tar.xz && mv gtk+-* gtk-src
+WORKDIR /build/gtk-src
+RUN pip3 install meson ninja
+RUN meson setup buildDir ${COMMON_MESON_FLAGS} \
+    -Dx11_backend=true -Dwayland_backend=false -Dbroadway_backend=false \
+    -Dintrospection=false -Dgtk_doc=false -Dman=false -Ddemos=false -Dexamples=false -Dtests=false \
+    -Dprint_backends=file -Dcolord=no
+RUN DESTDIR=/gtk3-x11 ninja -C buildDir install
+
+# xdg-desktop-portal-gtk again, built against gtk3-x11 for i3. Same source and
+# options as the stage above.
+FROM toolchain AS xdg-desktop-portal-gtk-x11
+COPY --from=glib2 /glib2 /
+COPY --from=pcre2 /pcre2 /
+COPY --from=xorgproto /xorgproto /
+COPY --from=xcbproto /xcbproto /
+COPY --from=libxau /libxau /
+COPY --from=libxcb /libxcb /
+COPY --from=x11-libs /x11-libs /
+COPY --from=cairo-x11 /cairo-x11 /
+COPY --from=pango-x11 /pango-x11 /
+COPY --from=harfbuzz /harfbuzz /
+COPY --from=fribidi /fribidi /
+COPY --from=freetype /freetype /
+COPY --from=fontconfig /fontconfig /
+COPY --from=libpng /libpng /
+COPY --from=pixman /pixman /
+COPY --from=gdk-pixbuf /gdk-pixbuf /
+COPY --from=at-spi2-core /at-spi2-core /
+COPY --from=libdrm /libdrm /
+COPY --from=mesa-x11 /mesa-x11 /
+COPY --from=libepoxy-x11 /libepoxy-x11 /
+COPY --from=libucontext /libucontext /
+COPY --from=gtk3-x11 /gtk3-x11 /
+COPY --from=xdg-desktop-portal /xdg-desktop-portal /
+COPY --from=gettext-tools /gettext-tools /
+COPY --from=gsettings-desktop-schemas /gsettings-desktop-schemas /
+# renovate: datasource=github-tags depName=flatpak/xdg-desktop-portal-gtk extractVersion=^(?<version>\d+(\.\d+)*)$
+ARG XDG_DESKTOP_PORTAL_GTK_VERSION=1.15.3
+WORKDIR /build
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/flatpak/xdg-desktop-portal-gtk/releases/download/${XDG_DESKTOP_PORTAL_GTK_VERSION}/xdg-desktop-portal-gtk-${XDG_DESKTOP_PORTAL_GTK_VERSION}.tar.xz -o x.tar.xz && tar -xf x.tar.xz && mv xdg-desktop-portal-gtk-* src
+WORKDIR /build/src
+RUN pip3 install meson ninja
+RUN meson setup buildDir ${COMMON_MESON_FLAGS} --libexecdir=lib -Dwallpaper=disabled -Dsettings=enabled -Dlockdown=disabled && \
+    DESTDIR=/xdg-desktop-portal-gtk-x11 ninja -C buildDir install && \
+    ! ldd /xdg-desktop-portal-gtk-x11/usr/lib/xdg-desktop-portal-gtk | grep 'not found'
 
 # ===========================================================================
 # M6: real-hardware firmware (optional)
@@ -3507,6 +3680,14 @@ COPY --from=nerdfont /nerdfont /
 COPY --from=libxau /libxau /
 COPY --from=libxcb /libxcb /
 COPY --from=ly /ly /
+# Portals, so Flatpak apps get file dialogs and the dark colour scheme (gtk)
+# and screenshots and screen sharing (wlr). sway-portals.conf picks them.
+COPY --from=gstreamer /gstreamer /
+COPY --from=inih /inih /
+COPY --from=xdg-desktop-portal /xdg-desktop-portal /
+COPY --from=xdg-desktop-portal-gtk /xdg-desktop-portal-gtk /
+COPY --from=xdg-desktop-portal-wlr /xdg-desktop-portal-wlr /
+COPY --from=gsettings-desktop-schemas /gsettings-desktop-schemas /
 
 
 # XLibre/i3 root. This mirrors the shared networking/audio/container-facing
@@ -3562,6 +3743,14 @@ COPY --from=bluez /bluez /
 # Shared visual assets + login manager.
 COPY --from=nerdfont /nerdfont /
 COPY --from=ly /ly /
+# Portals, so Flatpak apps get file dialogs and the dark colour scheme. The GTK
+# backend needs a GTK3 with the X11 backend (and its AT-SPI bridge) here.
+COPY --from=gstreamer /gstreamer /
+COPY --from=at-spi2-core /at-spi2-core /
+COPY --from=gtk3-x11 /gtk3-x11 /
+COPY --from=xdg-desktop-portal /xdg-desktop-portal /
+COPY --from=xdg-desktop-portal-gtk-x11 /xdg-desktop-portal-gtk-x11 /
+COPY --from=gsettings-desktop-schemas /gsettings-desktop-schemas /
 
 
 # COSMIC root. Shares the networking/audio/bluetooth runtime with the other
@@ -3707,6 +3896,7 @@ COPY --from=json-glib /json-glib /
 COPY --from=gstreamer /gstreamer /
 COPY --from=xdg-desktop-portal /xdg-desktop-portal /
 COPY --from=xdg-desktop-portal-gtk /xdg-desktop-portal-gtk /
+COPY --from=gsettings-desktop-schemas /gsettings-desktop-schemas /
 # Terminal, clipboard, fonts, icons, login screen.
 COPY --from=tllist /tllist /
 COPY --from=fcft /fcft /
@@ -3845,6 +4035,11 @@ RUN chmod 1777 /tmp; \
     ldconfig 2>/dev/null || true; \
     # Register the bundled fonts for the selected bar, terminal, and launcher.
     fc-cache -f 2>/dev/null || true; \
+    # Compile the GSettings schemas the variant ships (GTK's, and on Sway, i3
+    # and niri gsettings-desktop-schemas with Hadron's dark override): the
+    # stages install them under DESTDIR, where meson skips this, and GLib
+    # aborts a GTK app that opens a file chooser with no compiled schemas.
+    if [ -d /usr/share/glib-2.0/schemas ]; then glib-compile-schemas /usr/share/glib-2.0/schemas || exit 1; fi; \
     for g in audio video render input bluetooth seat docker; do groupadd -f "$g"; done; \
     mkdir -p /var/lib/docker /var/lib/xkb; \
     # The selected session launcher lives in /usr/bin (NOT /usr/local): Kairos mounts /usr/local

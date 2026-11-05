@@ -54,6 +54,15 @@ kairos-init from the Kairos monorepo (`ghcr.io/kairos-io/kairos/kairos-init:mast
 - **Audio:** PipeWire + WirePlumber.
 - **Bluetooth:** BlueZ.
 - **Containers:** rootful docker + distrobox (mutable dev-env containers).
+- **Flatpak portals:** xdg-desktop-portal on every variant, so Flatpak apps
+  get file dialogs. Sway uses xdg-desktop-portal-gtk, plus
+  xdg-desktop-portal-wlr for screenshots and screen sharing; i3 uses
+  xdg-desktop-portal-gtk on a GTK3 built for X11; niri uses
+  xdg-desktop-portal-gtk; COSMIC uses xdg-desktop-portal-cosmic.
+- **Dark mode:** Flatpak apps follow the dark colour scheme through the
+  portal's Settings interface. On Sway, i3 and niri the GTK portal reads it
+  from a GSettings vendor override (`color-scheme='prefer-dark'`, GTK3 theme
+  `Adwaita-dark`); on COSMIC the COSMIC portal reports COSMIC's own theme.
 - **Real-hardware firmware:** optional curated `linux-firmware` subset
   (`--build-arg FIRMWARE=true`).
 - **Hardware GL:** optional Mesa `iris`/`radeonsi` (`--build-arg GPU=full`).
