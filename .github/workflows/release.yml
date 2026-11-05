@@ -33,6 +33,11 @@ env:
   # Makefile declares `AGENT_IMAGE ?= agent-desktop:dev`), so one value keeps the
   # ISO build and the gates on the exact same tag.
   AGENT_IMAGE: agent-desktop:dev
+  # Registry build cache (see CACHE_REF in the Makefile). Each image reads and
+  # writes $CACHE_REF-<flavor>, so the next release only rebuilds the stages
+  # that changed. Pull requests read the same refs (agent-gates.yml).
+  CACHE_REF: ghcr.io/${{ github.repository }}:buildcache
+  CACHE_PUSH: "true"
 
 jobs:
   build:
@@ -85,6 +90,17 @@ jobs:
             /usr/share/dotnet
           docker system prune --all --force
           df -h /
+
+      - name: Use the containerd image store
+        shell: bash
+        run: scripts/ci-containerd-store.sh
+
+      # Before the build: the build cache is read from and written to GHCR.
+      - name: Log in to GHCR
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       # BuildKit never writes a build's base image into the local image store,
       # so `docker image inspect` would find nothing and the build manifest
@@ -151,11 +167,8 @@ jobs:
             "dist/$asset" "dist/$asset.build.json"
       - name: Push the ${{ matrix.desktop }} upgrade image
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           target="${IMAGE_REPO}:${DESKTOP}-${RELEASE_TAG}"
           docker tag "${DESKTOP}-desktop:dev" "$target"
           docker push "$target"
@@ -240,6 +253,16 @@ jobs:
         with:
           go-version-file: agent/go.mod
           cache-dependency-path: agent/go.sum
+
+      - name: Use the containerd image store
+        shell: bash
+        run: scripts/ci-containerd-store.sh
+
+      - name: Log in to GHCR
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       # Same reason as the desktop job: the manifest's base digest is read back
       # from the local image store, which only a real pull populates.
@@ -370,11 +393,8 @@ jobs:
       # pullable as an upgrade.
       - name: Push the agent upgrade image
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           target="${IMAGE_REPO}:agent-${RELEASE_TAG}"
           docker tag "$AGENT_IMAGE" "$target"
           docker push "$target"

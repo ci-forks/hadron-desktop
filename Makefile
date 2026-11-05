@@ -17,6 +17,7 @@
 #   make IMAGE=sway-desktop:hw             # change the image tag
 #   make BASE_IMAGE=ghcr.io/...:vX        # pin a different Hadron base
 #   make VERSION=v1.2.3                   # stamp a Kairos version
+#   make CACHE_REF=ghcr.io/o/r:cache      # reuse a registry build cache (CI)
 
 DESKTOP      ?= sway
 IMAGE        ?= $(DESKTOP)-desktop:dev
@@ -54,6 +55,20 @@ ifdef VERSION
 BUILD_ARGS += --build-arg VERSION=$(VERSION)
 endif
 
+# Registry build cache, for CI. A fresh runner rebuilds every stage from source
+# (hours for LLVM, Mesa, COSMIC), so CI points CACHE_REF at a registry ref and
+# each image reads <CACHE_REF>-<name>; CACHE_PUSH=true also writes it back.
+# mode=max exports every stage, not only the final image's layers, which is
+# what lets a later build skip the long stages. The push is best effort: a
+# cache that fails to upload must not fail a build that already succeeded.
+# Exporting needs the containerd image store when using the default builder.
+CACHE_REF  ?=
+CACHE_PUSH ?=
+comma := ,
+cache_from = --cache-from type=registry$(comma)ref=$(CACHE_REF)-$(1)
+cache_to   = --cache-to type=registry$(comma)ref=$(CACHE_REF)-$(1)$(comma)mode=max$(comma)ignore-error=true
+cache_args = $(if $(CACHE_REF),$(call cache_from,$(1)) $(if $(filter true,$(CACHE_PUSH)),$(call cache_to,$(1))))
+
 export DOCKER_BUILDKIT := 1
 
 .PHONY: all image images iso agent-image agent-iso vm vm-install check-boot-ux print-base-image clean
@@ -68,7 +83,7 @@ all: iso
 # anyway, silently shipping a stale initramfs. Busting it keeps the initramfs
 # honest; it is the cheap stage at the very end.
 image:
-	docker build $(BUILD_ARGS) --no-cache-filter kairos -t $(IMAGE) .
+	docker build $(BUILD_ARGS) $(call cache_args,$(DESKTOP)) --no-cache-filter kairos -t $(IMAGE) .
 
 images:
 	$(MAKE) DESKTOP=sway image
@@ -76,7 +91,7 @@ images:
 
 agent-image:
 	$(MAKE) DESKTOP=i3 IMAGE=$(AGENT_BASE_IMAGE) $(if $(VERSION),VERSION=$(VERSION),) image
-	docker build -f Dockerfile.agent --target agent \
+	docker build -f Dockerfile.agent --target agent $(call cache_args,agent) \
 	  --build-arg BASE_IMAGE=$(AGENT_BASE_IMAGE) \
 	  --build-arg HADRON_VERSION=$(HADRON_VERSION) \
 	  $(if $(VERSION),--build-arg VERSION=$(VERSION),) \
