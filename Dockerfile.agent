@@ -61,8 +61,8 @@ RUN mkdir -p /agent-runtime /build && \
 WORKDIR /build
 
 # XTest is Cua's native foreground keyboard and pointer injection path on X11.
-RUN curl -fL --retry 5 \
-      https://www.x.org/releases/individual/lib/libXtst-${LIBXTST_VERSION}.tar.xz \
+RUN curl --retry-all-errors -fL --retry 5 \
+      https://xorg.freedesktop.org/archive/individual/lib/libXtst-${LIBXTST_VERSION}.tar.xz \
       -o libXtst.tar.xz && \
     tar -xf libXtst.tar.xz && \
     cd libXtst-${LIBXTST_VERSION} && \
@@ -75,7 +75,7 @@ RUN curl -fL --retry 5 \
 # The AT-SPI launcher reads these schemas to decide whether accessibility is
 # enabled and which toolkit behavior to expose in the desktop session.
 RUN SCHEMAS_SERIES="${GSETTINGS_SCHEMAS_VERSION%.*}" && \
-    curl -fL --retry 5 \
+    curl --retry-all-errors -fL --retry 5 \
       https://download.gnome.org/sources/gsettings-desktop-schemas/${SCHEMAS_SERIES}/gsettings-desktop-schemas-${GSETTINGS_SCHEMAS_VERSION}.tar.xz \
       -o gsettings-desktop-schemas.tar.xz && \
     tar -xf gsettings-desktop-schemas.tar.xz
@@ -87,7 +87,7 @@ RUN meson setup build --prefix=/usr --libdir=lib --buildtype=release \
 
 WORKDIR /build
 RUN ATSPI_SERIES="${ATSPI_VERSION%.*}" && \
-    curl -fL --retry 5 \
+    curl --retry-all-errors -fL --retry 5 \
       https://download.gnome.org/sources/at-spi2-core/${ATSPI_SERIES}/at-spi2-core-${ATSPI_VERSION}.tar.xz \
       -o at-spi2-core.tar.xz && \
     tar -xf at-spi2-core.tar.xz
@@ -109,7 +109,7 @@ RUN test -x /agent-runtime/usr/libexec/at-spi-bus-launcher && \
 
 WORKDIR /build
 RUN GTK_SERIES="${GTK3_VERSION%.*}" && \
-    curl -fL --retry 5 \
+    curl --retry-all-errors -fL --retry 5 \
       https://download.gnome.org/sources/gtk+/${GTK_SERIES}/gtk+-${GTK3_VERSION}.tar.xz \
       -o gtk.tar.xz && \
     tar -xf gtk.tar.xz
@@ -135,7 +135,7 @@ ENV CARGO_HOME=/usr/local/cargo \
     CFLAGS="-Os -pipe -fomit-frame-pointer -fno-unroll-loops -fno-asynchronous-unwind-tables -ffunction-sections -fdata-sections" \
     LDFLAGS="-Wl,--gc-sections -Wl,--as-needed"
 WORKDIR /build
-RUN curl -fL --retry 5 \
+RUN curl --retry-all-errors -fL --retry 5 \
       https://github.com/trycua/cua/archive/${CUA_COMMIT}.tar.gz \
       -o cua.tar.gz && \
     mkdir -p /build/cua && \
