@@ -2995,7 +2995,14 @@ COPY --from=gettext-tools /gettext-tools /
 ARG MUSL_LOCALES_VERSION=0.1.0
 ARG APORTS_COMMIT=65780305dd2517157357121ccddbe95c84e6d5a4
 WORKDIR /build
-RUN curl --retry-all-errors -fsSL --retry 5 https://git.adelielinux.org/adelie/musl-locales/-/archive/${MUSL_LOCALES_VERSION}/musl-locales-${MUSL_LOCALES_VERSION}.tar.bz2 | tar -xj && \
+# git.adelielinux.org refuses connections from GitHub's runners (a release
+# build waited 14 minutes for it). Alpine mirrors the same tarball (identical
+# sha512, see aports main/musl-locales/APKBUILD) in its distfiles.
+RUN { curl --connect-timeout 20 --retry 2 --retry-all-errors -fsSL -o musl-locales.tar.bz2 \
+        https://git.adelielinux.org/adelie/musl-locales/-/archive/${MUSL_LOCALES_VERSION}/musl-locales-${MUSL_LOCALES_VERSION}.tar.bz2 || \
+      curl --retry-all-errors -fsSL --retry 5 -o musl-locales.tar.bz2 \
+        https://distfiles.alpinelinux.org/distfiles/v3.22/musl-locales-${MUSL_LOCALES_VERSION}.tar.bz2; } && \
+    tar -xjf musl-locales.tar.bz2 && rm musl-locales.tar.bz2 && \
     cd musl-locales-${MUSL_LOCALES_VERSION} && \
     curl --retry-all-errors -fsSL --retry 5 https://raw.githubusercontent.com/alpinelinux/aports/${APORTS_COMMIT}/main/musl-locales/add-all-available-locales.patch | patch -p1 && \
     sed -i '/printf("a_DJ\\n/s/\\n/.UTF-8\\n/g' locale.c && grep -q 'de_DE.UTF-8' locale.c && \
