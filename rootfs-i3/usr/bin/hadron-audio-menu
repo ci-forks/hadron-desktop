@@ -13,6 +13,6 @@ list=$(wpctl status 2>/dev/null | awk '
 
 [ -n "$list" ] || exit 0
 sel=$(printf '%s\n' "$list" | cut -f1 | dmenu -i -l 10 -p 'Audio output' \
-    -fn 'DejaVu Sans-11' -nb '#1a1b26' -nf '#c0caf5' -sb '#7aa2f7' -sf '#16161e') || exit 0
+    -fn 'Inter Variable-11' -nb '#1a1b26' -nf '#c0caf5' -sb '#7aa2f7' -sf '#16161e') || exit 0
 id=$(printf '%s\n' "$list" | awk -F'\t' -v s="$sel" '$1==s{print $2; exit}')
 [ -n "$id" ] && wpctl set-default "$id"

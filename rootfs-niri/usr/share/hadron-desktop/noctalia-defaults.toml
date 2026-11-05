@@ -7,6 +7,10 @@
 # window are kept in a separate file that overrides both.
 
 [shell]
+# The Hadron interface font, as on the other variants. Monospace text (the
+# tooltips' values, code in notes) asks fontconfig for `monospace`, which
+# /etc/fonts/conf.d/60-hadron.conf makes JetBrains Mono.
+font_family = "Inter Variable"
 # Show the password prompt when an app asks for privileges (date and time,
 # Flatpak system installs). Without an agent those requests fail.
 polkit_agent = true
