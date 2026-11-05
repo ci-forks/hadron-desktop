@@ -19,6 +19,7 @@
 #   HADRON_FLATPAK       flatpak binary (default "flatpak").
 #   HADRON_BROWSER_EXEC  if set, do not exec -- return after invoking flatpak, so
 #                        tests can assert the argv without replacing the process.
+#   HADRON_BROWSER_POLL  seconds between checks for a running Chromium (default 5).
 set -eu
 
 FLATPAK="${HADRON_FLATPAK:-flatpak}"
@@ -32,6 +33,15 @@ if [ -z "${DISPLAY:-}" ]; then
     echo "DISPLAY not set yet; will retry" >&2
     exit 1
 fi
+
+# Chromium keeps one instance per profile: a second `flatpak run` only asks the
+# running one to open a window, then exits 0. If Chromium is already up (an
+# earlier instance of this unit, or one started some other way), launching
+# would add an about:blank window every RestartSec, and the browser tool
+# refuses to choose between several windows. Wait for it to exit instead.
+while "$FLATPAK" ps --columns=application 2>/dev/null | grep -qx "$APP"; do
+    sleep "${HADRON_BROWSER_POLL:-5}"
+done
 
 set -- "$FLATPAK" run \
     --socket=x11 --socket=session-bus \
