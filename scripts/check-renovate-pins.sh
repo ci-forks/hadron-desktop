@@ -15,10 +15,10 @@ cd "$(dirname "$0")/.."
 #     or no tags Renovate can read.
 #   LIBNL, WPA, HOSTAPD, WIRELESS_REGDB: tags do not spell the version
 #     (libnl3_11_0, hostap_2_11, master-2024-10-07).
-#   GPERF, NCURSES, GETTEXT, SBC: tarball-only releases.
+#   GPERF, NCURSES, GETTEXT, SBC, GMP, MPFR: tarball-only releases.
 unmanaged="HADRON FREETYPE LIBGPGERROR LIBASSUAN GPGME LIBGCRYPT LIBKSBA NPTH
 SQLITE NTBTLS GNUPG ZIG DEJAVU LIBDBUSMENU STARTUP_NOTIFICATION ATK LIBEV LIBNL
-WPA HOSTAPD WIRELESS_REGDB GPERF NCURSES GETTEXT SBC"
+WPA HOSTAPD WIRELESS_REGDB GPERF NCURSES GETTEXT SBC GMP MPFR"
 
 missing=$(awk -v unmanaged="$unmanaged" '
   BEGIN { n = split(unmanaged, u, /[ \n]+/); for (i = 1; i <= n; i++) skip[u[i]] = 1 }

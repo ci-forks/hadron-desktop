@@ -3051,6 +3051,7 @@ RUN mkdir -p /stb/usr/include/stb && \
     done
 
 FROM toolchain AS nlohmann-json
+# renovate: datasource=github-tags depName=nlohmann/json extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG NLOHMANN_JSON_VERSION=3.12.0
 WORKDIR /build
 RUN curl -fL --retry 5 https://github.com/nlohmann/json/releases/download/v${NLOHMANN_JSON_VERSION}/json.tar.xz -o j.tar.xz && tar -xf j.tar.xz && mv json src
@@ -3059,6 +3060,7 @@ RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DJSON_BuildTests=OFF -DJSON_Inst
     DESTDIR=/nlohmann-json cmake --install build
 
 FROM toolchain AS tomlplusplus
+# renovate: datasource=github-tags depName=marzer/tomlplusplus extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG TOMLPLUSPLUS_VERSION=3.4.0
 WORKDIR /build
 RUN curl -fL --retry 5 https://github.com/marzer/tomlplusplus/archive/refs/tags/v${TOMLPLUSPLUS_VERSION}.tar.gz -o t.tar.gz && tar -xzf t.tar.gz && mv tomlplusplus-* src
@@ -3068,6 +3070,7 @@ RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dbuild_tests=false -Dbuild_examp
     DESTDIR=/tomlplusplus ninja -C buildDir install
 
 FROM toolchain AS md4c
+# renovate: datasource=github-tags depName=mity/md4c extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG MD4C_VERSION=0.6.0
 WORKDIR /build
 RUN curl -fL --retry 5 https://github.com/mity/md4c/archive/refs/tags/v${MD4C_VERSION}.tar.gz -o m.tar.gz && tar -xzf m.tar.gz && mv md4c-* src
@@ -3076,6 +3079,7 @@ RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAK
     cmake --build build && DESTDIR=/md4c cmake --install build
 
 FROM toolchain AS libsodium
+# renovate: datasource=github-tags depName=jedisct1/libsodium extractVersion=^(?<version>\d+(\.\d+)*)-RELEASE$
 ARG LIBSODIUM_VERSION=1.0.22
 RUN mkdir -p /libsodium
 WORKDIR /build
@@ -3087,6 +3091,7 @@ RUN ./configure ${COMMON_CONFIGURE_ARGS} && make -j"$(nproc)" && make DESTDIR=/l
 # Hadron's libsystemd links libucontext, so the linker needs it too.
 FROM toolchain AS sdbus-cpp
 COPY --from=libucontext /libucontext /
+# renovate: datasource=github-tags depName=Kistler-Group/sdbus-cpp extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG SDBUS_CPP_VERSION=2.3.1
 WORKDIR /build
 RUN curl -fL --retry 5 https://github.com/Kistler-Group/sdbus-cpp/archive/refs/tags/v${SDBUS_CPP_VERSION}.tar.gz -o s.tar.gz && tar -xzf s.tar.gz && mv sdbus-cpp-* src
@@ -3098,6 +3103,7 @@ RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAK
 # libical: calendar events (the clock panel's agenda, CalDAV). System time
 # zone data, no GLib binding.
 FROM toolchain AS libical
+# renovate: datasource=github-tags depName=libical/libical extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG LIBICAL_VERSION=4.0.7
 WORKDIR /build
 RUN curl -fL --retry 5 https://github.com/libical/libical/archive/refs/tags/v${LIBICAL_VERSION}.tar.gz -o i.tar.gz && tar -xzf i.tar.gz && mv libical-* src
@@ -3110,6 +3116,7 @@ RUN cmake -B build -G Ninja -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=l
     cmake --build build && DESTDIR=/libical cmake --install build
 
 FROM toolchain AS libwebp
+# renovate: datasource=github-tags depName=webmproject/libwebp extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG LIBWEBP_VERSION=1.6.0
 WORKDIR /build
 RUN curl -fL --retry 5 https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-${LIBWEBP_VERSION}.tar.gz -o w.tar.gz && tar -xzf w.tar.gz && mv libwebp-* src
@@ -3123,6 +3130,7 @@ RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAK
 # libjxl (JPEG XL) and the three libraries it needs, all from the system rather
 # than its git submodules, which a release tarball does not carry.
 FROM toolchain AS brotli
+# renovate: datasource=github-tags depName=google/brotli extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG BROTLI_VERSION=1.2.1
 WORKDIR /build
 RUN curl -fL --retry 5 https://github.com/google/brotli/archive/refs/tags/v${BROTLI_VERSION}.tar.gz -o b.tar.gz && tar -xzf b.tar.gz && mv brotli-* src
@@ -3131,6 +3139,7 @@ RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAK
     cmake --build build && DESTDIR=/brotli cmake --install build
 
 FROM toolchain AS highway
+# renovate: datasource=github-tags depName=google/highway extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG HIGHWAY_VERSION=1.4.0
 WORKDIR /build
 RUN curl -fL --retry 5 https://github.com/google/highway/archive/refs/tags/${HIGHWAY_VERSION}.tar.gz -o h.tar.gz && tar -xzf h.tar.gz && mv highway-* src
@@ -3140,6 +3149,7 @@ RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAK
     cmake --build build && DESTDIR=/highway cmake --install build
 
 FROM toolchain AS lcms2
+# renovate: datasource=github-tags depName=mm2/Little-CMS extractVersion=^lcms(?<version>\d+(\.\d+)*)$
 ARG LCMS2_VERSION=2.20
 WORKDIR /build
 RUN curl -fL --retry 5 https://github.com/mm2/Little-CMS/releases/download/lcms${LCMS2_VERSION}/lcms2-${LCMS2_VERSION}.tar.gz -o l.tar.gz && tar -xzf l.tar.gz && mv lcms2-* src
@@ -3150,6 +3160,7 @@ FROM toolchain AS libjxl
 COPY --from=brotli /brotli /
 COPY --from=highway /highway /
 COPY --from=lcms2 /lcms2 /
+# renovate: datasource=github-tags depName=libjxl/libjxl extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG LIBJXL_VERSION=0.12.0
 WORKDIR /build
 RUN curl -fL --retry 5 https://github.com/libjxl/libjxl/archive/refs/tags/v${LIBJXL_VERSION}.tar.gz -o j.tar.gz && tar -xzf j.tar.gz && mv libjxl-* src
@@ -3187,6 +3198,7 @@ FROM toolchain AS libqalculate
 COPY --from=gmp /gmp /
 COPY --from=mpfr /mpfr /
 COPY --from=gettext-tools /gettext-tools /
+# renovate: datasource=github-tags depName=Qalculate/libqalculate extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG LIBQALCULATE_VERSION=5.13.1
 WORKDIR /build
 RUN curl -fL --retry 5 https://github.com/Qalculate/libqalculate/releases/download/v${LIBQALCULATE_VERSION}/libqalculate-${LIBQALCULATE_VERSION}.tar.gz -o q.tar.gz && tar -xzf q.tar.gz && mv libqalculate-* src
@@ -3200,6 +3212,7 @@ COPY --from=glib2 /glib2 /
 COPY --from=pcre2 /pcre2 /
 COPY --from=libgpg-error /libgpg-error /
 COPY --from=libgcrypt /libgcrypt /
+# renovate: datasource=gitlab-tags depName=GNOME/libsecret registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG LIBSECRET_VERSION=0.21.8
 WORKDIR /build
 RUN curl -fL --retry 5 https://download.gnome.org/sources/libsecret/${LIBSECRET_VERSION%.*}/libsecret-${LIBSECRET_VERSION}.tar.xz -o s.tar.xz && tar -xf s.tar.xz && mv libsecret-* src
@@ -3225,7 +3238,9 @@ RUN ldconfig
 # librsvg (SVG icons and wallpapers) is Rust behind a C API, built with
 # cargo-c. cargo-c itself is compiled here, against Hadron's libraries.
 FROM niri-build AS librsvg
+# renovate: datasource=crate depName=cargo-c
 ARG CARGO_C_VERSION=0.10.26
+# renovate: datasource=gitlab-tags depName=GNOME/librsvg registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG LIBRSVG_VERSION=2.63.4
 RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
     cargo install cargo-c --version ${CARGO_C_VERSION} --locked --features vendored-openssl --root /usr/local
@@ -3242,6 +3257,7 @@ RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry
 # niri's release profile keeps line-table debug info (~130 MB binary); the
 # installed copy is stripped.
 FROM niri-build AS niri
+# renovate: datasource=github-tags depName=YaLTeR/niri extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG NIRI_VERSION=26.04
 ENV CARGO_TARGET_DIR=/cargo-target
 RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
@@ -3262,6 +3278,7 @@ RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry
 # xwayland-satellite: runs Xwayland as an ordinary Wayland client, so X11 apps
 # work under niri. niri starts it on demand when it is on PATH.
 FROM niri-build AS xwayland-satellite
+# renovate: datasource=github-tags depName=Supreeeme/xwayland-satellite extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG XWAYLAND_SATELLITE_VERSION=0.8.3
 ENV CARGO_TARGET_DIR=/cargo-target
 RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
@@ -3318,6 +3335,7 @@ COPY --from=brotli /brotli /
 COPY --from=highway /highway /
 COPY --from=lcms2 /lcms2 /
 COPY --from=libjxl /libjxl /
+# renovate: datasource=github-tags depName=noctalia-dev/noctalia extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG NOCTALIA_VERSION=5.4.1
 WORKDIR /build
 RUN curl -fL --retry 5 https://github.com/noctalia-dev/noctalia/archive/refs/tags/v${NOCTALIA_VERSION}.tar.gz -o n.tar.gz && tar -xzf n.tar.gz && mv noctalia-${NOCTALIA_VERSION} src
@@ -3332,6 +3350,7 @@ RUN ! ldd /noctalia/usr/bin/noctalia | grep 'not found' && \
 # system default. Without a cursor theme niri and GTK apps fall back to a bare
 # built-in arrow and no resize or text cursors.
 FROM toolchain AS adwaita-cursors
+# renovate: datasource=gitlab-tags depName=GNOME/adwaita-icon-theme registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG ADWAITA_ICON_THEME_VERSION=51.0
 WORKDIR /build
 RUN curl -fL --retry 5 https://download.gnome.org/sources/adwaita-icon-theme/${ADWAITA_ICON_THEME_VERSION%%.*}/adwaita-icon-theme-${ADWAITA_ICON_THEME_VERSION}.tar.xz -o a.tar.xz && tar -xf a.tar.xz && mv adwaita-icon-theme-* src
@@ -3365,6 +3384,7 @@ COPY --from=libdrm /libdrm /
 COPY --from=gtk3 /gtk3 /
 COPY --from=xdg-desktop-portal /xdg-desktop-portal /
 COPY --from=gettext-tools /gettext-tools /
+# renovate: datasource=github-tags depName=flatpak/xdg-desktop-portal-gtk extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG XDG_DESKTOP_PORTAL_GTK_VERSION=1.15.3
 WORKDIR /build
 RUN curl -fL --retry 5 https://github.com/flatpak/xdg-desktop-portal-gtk/releases/download/${XDG_DESKTOP_PORTAL_GTK_VERSION}/xdg-desktop-portal-gtk-${XDG_DESKTOP_PORTAL_GTK_VERSION}.tar.xz -o x.tar.xz && tar -xf x.tar.xz && mv xdg-desktop-portal-gtk-* src
