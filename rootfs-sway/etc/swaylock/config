@@ -1,6 +1,9 @@
 # swaylock for Hadron Desktop: the Hadron palette, matching the Sway theme.
 # Colours: generated from theme/palette.toml by tools/gen-theme.py.
 # A user's ~/.config/swaylock/config replaces this file.
+# The plain Hadron background, scaled to fill; `color` shows if it is missing.
+image=/usr/share/backgrounds/hadron/hadron-plain-night-1920x1080.png
+scaling=fill
 color=1a1b26
 font=Inter Variable
 indicator-radius=90

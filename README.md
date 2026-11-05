@@ -428,7 +428,8 @@ hadron-desktop/
   rootfs-sway/        # Wayland/Sway session config and native tools
   rootfs-i3/          # XLibre/i3 session config and native tools
   tools/
-    hadron-xroot.c    # tiny X11 root-window background helper
+    hadron-xroot.c    # i3 wallpaper: a PNG scaled to fill each monitor, or a colour
+    gen-wallpaper.py  # draws the Hadron wallpapers from theme/palette.toml (at build time)
     vm.sh             # variant-aware QEMU launcher
   test/
     run.sh            # default Sway build -> ISO -> QEMU -> assert

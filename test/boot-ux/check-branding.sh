@@ -38,6 +38,15 @@ check "grubmenu.cfg leaves splash/quiet to kairos-init" \
 check "grubmenu.cfg preserves any pre-existing extra_cmdline" \
     "grep -q 'set extra_cmdline=\"\${extra_cmdline}' $G"
 
+# The Hadron wallpapers are drawn at build time; every variant points at these.
+WP=/usr/share/backgrounds/hadron
+for w in hadron-orbits-night-3840x2160 hadron-plain-night-1920x1080; do
+    check "wallpaper $w.png is a PNG" "[ \"\$(head -c 4 $WP/$w.png | tail -c 3)\" = PNG ]"
+done
+case "${EXPECTED%% *}" in niri|cosmic)
+    check "the day wallpaper is a PNG" "[ \"\$(head -c 4 $WP/hadron-orbits-day-3840x2160.png | tail -c 3)\" = PNG ]" ;;
+esac
+
 # Release identity: hadron-update builds the upgrade image reference from it.
 R=/etc/hadron-desktop/release
 FLAVOR="${EXPECTED_FLAVOR:-${EXPECTED%% *}}"

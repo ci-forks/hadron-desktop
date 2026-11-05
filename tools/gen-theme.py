@@ -72,7 +72,7 @@ RULES = {
     "rootfs-sway/etc/sway/config": ("hash", "hash", WM_VARS),
     "rootfs-i3/etc/i3/config": ("hash", "hash", WM_VARS + [
         DMENU,
-        (r"^exec --no-startup-id hadron-xroot '#{hex}'$", "base"),
+        (r"^exec_always --no-startup-id hadron-xroot '#{hex}' /usr/share/backgrounds/hadron/[\w.-]+\.png$", "base"),
         (r"^set \$lock i3lock .*--color={hex}$", "base"),
     ]),
     "rootfs-i3/usr/bin/hadron-screenshot": ("hash", "hash", [
