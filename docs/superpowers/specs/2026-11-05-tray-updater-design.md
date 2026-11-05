@@ -32,8 +32,8 @@ to another desktop variant, or (advanced) install any OCI image they name.
   CLI.
 - Upgrading the recovery partition.
 - Automatic (unattended) upgrades.
-- Credentials for private registries in the UI. A private image works only if
-  root's registry config already has the credentials.
+- Private images. Inspection is anonymous, so an image that needs registry
+  credentials is refused with a sentence saying so.
 
 ## Decisions (made by the user)
 
