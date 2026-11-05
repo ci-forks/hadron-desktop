@@ -112,10 +112,20 @@ func (u *recUI) waitView(t *testing.T, what string, ok func(trayView) bool) tray
 	return trayView{}
 }
 
+// syncBuf is a log sink the tray goroutine and the test share.
+type syncBuf struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuf) Write(p []byte) (int, error) { s.mu.Lock(); defer s.mu.Unlock(); return s.b.Write(p) }
+func (s *syncBuf) String() string              { s.mu.Lock(); defer s.mu.Unlock(); return s.b.String() }
+
 // trayHarness runs a trayApp against f until the test ends.
 type trayHarness struct {
 	app      *trayApp
 	ui       *recUI
+	log      *syncBuf
 	mu       sync.Mutex
 	notes    []string
 	launches [][]string
@@ -136,9 +146,9 @@ func (h *trayHarness) launched() [][]string {
 func startTray(t *testing.T, dial func() (daemonClient, error), first, every time.Duration) *trayHarness {
 	t.Helper()
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	h := &trayHarness{ui: &recUI{}}
+	h := &trayHarness{ui: &recUI{}, log: &syncBuf{}}
 	rel := Release{Flavor: "sway", Version: "v0.1.0", ImageRepo: "ghcr.io/kairos-community/hadron-desktop", GitHubRepo: "kairos-community/hadron-desktop"}
-	h.app = newTrayApp(rel, h.ui, dial, &bytes.Buffer{})
+	h.app = newTrayApp(rel, h.ui, dial, h.log)
 	h.app.firstCheck, h.app.interval, h.app.retry = first, every, 5*time.Millisecond
 	h.app.notify = func(summary, body string) error {
 		h.mu.Lock()
@@ -233,7 +243,7 @@ func TestTrayUnmanagedNeverChecks(t *testing.T) {
 	f := &trayFake{st: Status{State: StateUnmanaged, Advanced: true}}
 	h := startTray(t, dialFake(f), time.Millisecond, time.Millisecond)
 	v := h.ui.waitView(t, "unmanaged", func(v trayView) bool { return len(v.Menu) > 0 })
-	if got := strings.Join(ids(v.Menu), ","); got != "status,advanced" {
+	if got := strings.Join(ids(v.Menu), ","); got != "status" {
 		t.Fatalf("menu %v", got)
 	}
 	time.Sleep(20 * time.Millisecond)
@@ -260,6 +270,47 @@ func TestTrayRetriesAnUnavailableService(t *testing.T) {
 		return v.Icon == "error" && v.Tooltip == "Update service not available"
 	})
 	h.ui.waitView(t, "recovery", func(v trayView) bool { return v.Icon == "idle" })
+	// Three failed dials, one line: the loss is logged, not every retry.
+	if n := strings.Count(h.log.String(), "not available"); n != 1 {
+		t.Fatalf("logged the outage %d times: %q", n, h.log.String())
+	}
+}
+
+// A scheduled check while a job runs would only get Busy, after retryBusy
+// held the tray for seconds; it waits for the job instead.
+func TestTraySkipsTheCheckDuringAJob(t *testing.T) {
+	f := &trayFake{st: Status{State: StateApplying, Installed: "v0.1.0"}}
+	h := startTray(t, dialFake(f), time.Millisecond, time.Millisecond)
+	h.ui.waitView(t, "busy", func(v trayView) bool { return v.Icon == "busy" })
+	time.Sleep(30 * time.Millisecond)
+	if f.count("Check") != 0 {
+		t.Fatal("checked while a job runs")
+	}
+	f.push(Event{Status: &Status{State: StateRebootPending, Installed: "v0.1.0"}})
+	deadline := time.Now().Add(5 * time.Second)
+	for f.count("Check") == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("no check after the job ended")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestTrayLogsAFailedNotificationRecord(t *testing.T) {
+	f := &trayFake{st: Status{State: StateIdle}, afterCheck: available()}
+	// The first check waits long enough for the state dir to be broken below.
+	h := startTray(t, dialFake(f), 50*time.Millisecond, time.Hour)
+	// A file where the state directory should be: markNotified cannot write.
+	blocker := filepath.Join(t.TempDir(), "state")
+	os.WriteFile(blocker, nil, 0o644)
+	t.Setenv("XDG_STATE_HOME", blocker)
+	deadline := time.Now().Add(5 * time.Second)
+	for !strings.Contains(h.log.String(), "recording that v0.2.0 was announced") {
+		if time.Now().After(deadline) {
+			t.Fatalf("log %q", h.log.String())
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
 
 func TestTrayProgressIsTheTooltip(t *testing.T) {
@@ -328,7 +379,12 @@ func TestTrayClicks(t *testing.T) {
 	for _, id := range []string{"install-latest", "releases/v0.2.0", "switch/i3", "advanced", "cancel"} {
 		h.app.clicks <- id
 	}
-	want := [][]string{{"upgrade"}, {"upgrade", "--version", "v0.2.0"}, {"switch", "i3"}, {"upgrade", "--image", "-"}}
+	want := [][]string{
+		{"upgrade", "--pause-on-error"},
+		{"upgrade", "--pause-on-error", "--version", "v0.2.0"},
+		{"switch", "i3", "--pause-on-error"},
+		{"upgrade", "--pause-on-error", "--image", "-"},
+	}
 	deadline := time.Now().Add(5 * time.Second)
 	for f.count("Cancel") == 0 && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)

@@ -59,6 +59,7 @@ type trayApp struct {
 	st       Status
 	releases []Latest
 	line     string    // the last progress line of the running job
+	down     bool      // the service was unreachable at the last try
 	due      time.Time // when the next Check runs
 }
 
@@ -87,7 +88,11 @@ func (a *trayApp) run(ctx context.Context) {
 			return
 		}
 		if err != nil {
-			a.log.Printf("the update service is not available: %v", err)
+			// Log the loss once, not at every retry.
+			if !a.down {
+				a.log.Printf("the update service is not available: %v", err)
+			}
+			a.down = true
 			a.ui.Show(trayView{Icon: "error", Tooltip: unavailableText, Menu: []MenuItem{{ID: "status", Label: unavailableText}}})
 		}
 		a.idle(ctx, a.retry)
@@ -117,11 +122,12 @@ func (a *trayApp) session(ctx context.Context, c daemonClient) error {
 	if err != nil {
 		return err
 	}
-	a.setStatus(st)
 	events, stop, err := c.Watch()
 	if err != nil {
 		return err
 	}
+	a.down = false
+	a.setStatus(st)
 	defer func() { stop() }()
 
 	// An unmanaged system has nothing to check against, so no timer runs.
@@ -143,6 +149,12 @@ func (a *trayApp) session(ctx context.Context, c daemonClient) error {
 		case id := <-a.clicks:
 			a.click(c, id)
 		case <-timer:
+			if busyState(a.st.State) {
+				// The service is busy with a job: Check would only answer
+				// Busy, after retryBusy held this goroutine for seconds.
+				t.Reset(a.retry)
+				continue
+			}
 			if err := a.check(c); err != nil && daemonErrName(err) == "" {
 				// The bus or the activation failed, not the check: keep
 				// the schedule, and try again once the service is back.
@@ -173,8 +185,7 @@ func (a *trayApp) session(ctx context.Context, c daemonClient) error {
 // exit nothing changes. During a job it means the service died with it: the
 // job is lost, and the menu must not keep promising it.
 func (a *trayApp) serviceGone() {
-	switch a.st.State {
-	case StateChecking, StateInspecting, StateApplying:
+	if busyState(a.st.State) {
 		st := a.st
 		st.State, st.Detail = StateError, "the update service stopped during the update"
 		a.setStatus(st)
@@ -225,19 +236,20 @@ func (a *trayApp) render() {
 }
 
 // click acts on a menu item. Anything that needs details or an answer opens
-// a terminal running the CLI; Cancel and Restart are the click itself, and
+// a terminal running the CLI, which waits for Enter before closing over an
+// error (--pause-on-error); Cancel and Restart are the click itself, and
 // polkit decides. c is nil while the service is unreachable.
 func (a *trayApp) click(c daemonClient, id string) {
 	var err error
 	switch {
 	case id == "install-latest":
-		err = a.launch("upgrade")
+		err = a.launch("upgrade", "--pause-on-error")
 	case strings.HasPrefix(id, "releases/"):
-		err = a.launch("upgrade", "--version", strings.TrimPrefix(id, "releases/"))
+		err = a.launch("upgrade", "--pause-on-error", "--version", strings.TrimPrefix(id, "releases/"))
 	case strings.HasPrefix(id, "switch/"):
-		err = a.launch("switch", strings.TrimPrefix(id, "switch/"))
+		err = a.launch("switch", strings.TrimPrefix(id, "switch/"), "--pause-on-error")
 	case id == "advanced":
-		err = a.launch("upgrade", "--image", "-")
+		err = a.launch("upgrade", "--pause-on-error", "--image", "-")
 	case c == nil && (id == "cancel" || id == "restart"):
 		err = errServiceUnavailable
 	case id == "cancel":
@@ -283,7 +295,17 @@ func announce(c daemonClient, rel Release, st Status, noIcon bool, notify func(s
 	if err := notify(fmt.Sprintf("Hadron Desktop %s is available", st.Latest), body); err != nil {
 		return err
 	}
-	return markNotified(st.Latest)
+	if err := markNotified(st.Latest); err != nil {
+		// The user was told; only the record failed, so the next session
+		// announces it again.
+		return fmt.Errorf("recording that %s was announced: %w", st.Latest, err)
+	}
+	return nil
+}
+
+// busyState reports whether the service is running a job.
+func busyState(s State) bool {
+	return s == StateChecking || s == StateInspecting || s == StateApplying
 }
 
 // defaultSessionFile names the variant's session settings, among them

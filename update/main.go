@@ -138,7 +138,18 @@ func cmdStatus(name string, args []string, stdout, stderr io.Writer) int {
 	return exitOK
 }
 
-func cmdUpgrade(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+// pauseOnError keeps a terminal the tray opened from closing over an error:
+// with --pause-on-error (set by the tray, not in the usage text), a non-zero
+// exit first waits for one line on stdin. EOF ends the wait too.
+func pauseOnError(pause bool, code int, in *bufio.Reader, stdout io.Writer) {
+	if !pause || code == exitOK {
+		return
+	}
+	fmt.Fprintln(stdout, "Press Enter to close.")
+	_, _ = in.ReadString('\n')
+}
+
+func cmdUpgrade(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	fs := newFlags("upgrade", stderr)
 	version := fs.String("version", "", "release to install")
 	imageFlag := fs.String("image", "", "any OCI image to install (advanced mode)")
@@ -148,12 +159,14 @@ func cmdUpgrade(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// already shown the plan, asked, and checked the image, so the child only
 	// runs kairos-agent. Not in the usage text.
 	asRootChild := fs.Bool("as-root", false, "")
+	pause := fs.Bool("pause-on-error", false, "")
 	if err := fs.Parse(args); err != nil {
 		return exitUsage
 	}
-	// One reader for both questions: a second bufio.Reader over the same
+	// One reader for every question: a second bufio.Reader over the same
 	// stdin would lose whatever the first one had already buffered.
 	in := bufio.NewReader(stdin)
+	defer func() { pauseOnError(*pause, code, in, stdout) }()
 
 	rel, err := LoadRelease(releaseFile())
 	if err != nil {
@@ -486,10 +499,11 @@ func newestRelease(c daemonClient, stderr io.Writer) (string, int) {
 	return newest, exitOK
 }
 
-func cmdSwitch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+func cmdSwitch(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	fs := newFlags("switch", stderr)
 	yes := fs.Bool("yes", false, "do not ask")
 	reboot := fs.Bool("reboot", false, "reboot when done")
+	pause := fs.Bool("pause-on-error", false, "")
 	// The flavor comes first on the command line; flags may follow it.
 	var flavor string
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
@@ -501,6 +515,8 @@ func cmdSwitch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if flavor == "" && fs.NArg() == 1 {
 		flavor = fs.Arg(0)
 	}
+	in := bufio.NewReader(stdin)
+	defer func() { pauseOnError(*pause, code, in, stdout) }()
 	if flavor == "" || fs.NArg() > 1 {
 		fmt.Fprint(stderr, usage)
 		return exitUsage
@@ -531,11 +547,10 @@ func cmdSwitch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return exitError
 	}
 	defer c.Close()
-	in := bufio.NewReader(stdin)
 
-	newest, code := newestRelease(c, stderr)
-	if code != exitOK {
-		return code
+	newest, rc := newestRelease(c, stderr)
+	if rc != exitOK {
+		return rc
 	}
 	ref, err := ReleaseRef(rel, flavor, newest)
 	if err != nil {

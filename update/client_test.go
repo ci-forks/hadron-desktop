@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"strings"
@@ -590,5 +591,56 @@ func TestUpgradeImageFromStdin(t *testing.T) {
 	useDaemon(t, f)
 	if code, out, _ := runCLI("ghcr.io/me/img:1\n", "upgrade", "--image", "-"); code != exitUsage || strings.Contains(out, "Image reference:") {
 		t.Fatalf("advanced off: code %d, out %q; must refuse before asking", code, out)
+	}
+}
+
+// readSpy reports whether anything read stdin.
+type readSpy struct {
+	mu   sync.Mutex
+	r    *strings.Reader
+	read bool
+}
+
+func (s *readSpy) Read(p []byte) (int, error) {
+	s.mu.Lock()
+	s.read = true
+	s.mu.Unlock()
+	return s.r.Read(p)
+}
+
+func runSpy(stdin string, args ...string) (int, string, *readSpy) {
+	spy := &readSpy{r: strings.NewReader(stdin)}
+	var out, errb bytes.Buffer
+	code := run(args, spy, &out, &errb)
+	return code, out.String(), spy
+}
+
+// The tray opens the CLI in a terminal that closes when it exits; with
+// --pause-on-error a failure stays on screen until Enter (or EOF).
+func TestPauseOnError(t *testing.T) {
+	setup(t, "v0.1.0", "v0.2.0") // no daemon: upgrade and switch fail
+	for _, args := range [][]string{
+		{"upgrade", "--pause-on-error"},
+		{"switch", "i3", "--pause-on-error"},
+	} {
+		code, out, spy := runSpy("\n", args...)
+		if code != exitError || !strings.Contains(out, "Press Enter to close.") || !spy.read {
+			t.Errorf("%v: code %d, out %q, read %v", args, code, out, spy.read)
+		}
+		if code, _, _ := runSpy("", args...); code != exitError {
+			t.Errorf("%v: EOF must end the wait, code %d", args, code)
+		}
+		code, out, spy = runSpy("\n", args[:len(args)-1]...)
+		if code != exitError || strings.Contains(out, "Press Enter") || spy.read {
+			t.Errorf("%v without the flag: code %d, out %q, read %v", args, code, out, spy.read)
+		}
+	}
+
+	f := okDaemon()
+	f.releases = []string{"v0.1.0"}
+	useDaemon(t, f)
+	code, out, spy := runSpy("\n", "upgrade", "--pause-on-error")
+	if code != exitOK || strings.Contains(out, "Press Enter") || spy.read {
+		t.Fatalf("success: code %d, out %q, read %v", code, out, spy.read)
 	}
 }

@@ -144,19 +144,28 @@ func TestBuildMenuAdvancedFollowsStatus(t *testing.T) {
 	}
 }
 
+// The service refuses every install on an unmanaged system, so the menu
+// offers none, advanced mode or not.
 func TestBuildMenuUnmanaged(t *testing.T) {
-	st := Status{State: StateUnmanaged, Advanced: true}
-	m := BuildMenu(st, menuReleases, "")
-	got := ids(m)
-	if strings.Join(got, ",") != "status,advanced" {
-		t.Fatalf("ids = %v, want status and advanced only", got)
+	m := BuildMenu(Status{State: StateUnmanaged, Advanced: true}, menuReleases, "")
+	if got := ids(m); strings.Join(got, ",") != "status" {
+		t.Fatalf("ids = %v, want status only", got)
 	}
 	if m[0].Label != "Unmanaged image" {
 		t.Fatalf("status label %q", m[0].Label)
 	}
-	st.Advanced = false
-	if got := ids(BuildMenu(st, menuReleases, "")); strings.Join(got, ",") != "status" {
-		t.Fatalf("ids = %v with advanced=false", got)
+}
+
+func TestBuildMenuOffersOnlyReleaseTags(t *testing.T) {
+	rel := []Latest{{Tag: "v0.0.6"}, {Tag: "nightly"}, {Tag: ""}, {Tag: "v0.0.7-rc1"}}
+	var got []string
+	for _, id := range ids(BuildMenu(menuStatus(StateUpToDate), rel, "sway")) {
+		if tag, ok := strings.CutPrefix(id, "releases/"); ok {
+			got = append(got, tag)
+		}
+	}
+	if strings.Join(got, ",") != "v0.0.6,v0.0.7-rc1" {
+		t.Fatalf("release items %v", got)
 	}
 }
 

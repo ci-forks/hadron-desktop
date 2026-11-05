@@ -62,11 +62,8 @@ func shorten(s string, n int) string {
 func BuildMenu(st Status, releases []Latest, flavor string) []MenuItem {
 	menu := []MenuItem{{ID: "status", Label: statusLine(st)}}
 	if st.State == StateUnmanaged {
-		// Nothing here was installed from a release, so there is nothing to
-		// update along; only an explicit image can be offered.
-		if st.Advanced {
-			menu = append(menu, MenuItem{ID: "advanced", Label: "Install an image…", Enabled: true})
-		}
+		// Nothing here was installed from a release, and the service
+		// refuses every install on such a system: offer nothing.
 		return menu
 	}
 	can := installsAllowed(st.State)
@@ -83,7 +80,8 @@ func BuildMenu(st Status, releases []Latest, flavor string) []MenuItem {
 
 	var rel []MenuItem
 	for _, r := range releases {
-		if r.Tag == "" || r.Tag == st.Installed {
+		// Only release tags: anything else would fail `upgrade --version`.
+		if _, ok := parseSemver(r.Tag); !ok || r.Tag == st.Installed {
 			continue
 		}
 		rel = append(rel, MenuItem{ID: "releases/" + r.Tag, Label: r.Tag, Enabled: can})
