@@ -82,7 +82,8 @@ Two parts, both in the existing `update/` Go module and built in the existing
 States: idle → checking → up-to-date | update-available → inspecting →
 applying → reboot-pending | error. While reboot-pending, `Apply` is refused: a
 second upgrade would push the never-booted image into the passive slot and
-overwrite the known-good one.
+overwrite the known-good one. Once `kairos-agent upgrade` has started, a
+failure also ends in reboot-pending, not error (see "Failed install" below).
 
 ### hadron-update tray (user)
 
@@ -160,6 +161,33 @@ and get the `polkitd` system user.
   flavor and sets no pin.
 - **Module:** `update/` stops being stdlib-only; the `update-build` stage
   comment changes with it.
+- **Failed install:** kairos-agent moves active to passive and the new image
+  to active before its after-upgrade hook, and returns that hook's error. A
+  failure can therefore come after the swap. Once `kairos-agent upgrade` has
+  started, every outcome keeps the reboot marker in `/run/hadron-update/` and
+  ends in reboot-pending; the marker says `started`, `installed` or `failed`,
+  and Status reports it as `pending`. After a failure or an interrupted write
+  the tray and the CLI say "restart before trying again", and `Apply` and
+  `RebootPrevious` stay refused until the restart. Only a failure before
+  kairos-agent starts (a refusal, the network, a moved tag) ends in error.
+- **Releases only, unless Advanced:** every image that is not trusted by name
+  is refused without advanced mode, labelled or not: unlabelled as "not a
+  Hadron Desktop image", labelled as "not a published Hadron Desktop release".
+  The CLI always inspects without the override and asks the second question
+  (default No, never answered by `--yes`) before it applies with it.
+- **update.conf:** `advanced=` is read without regard to case. true, yes, 1
+  and on turn advanced mode on; false, no, 0 and off turn it off; any other
+  value turns it off and is logged. No file or no key: on.
+- **Idle exit:** `Status` does not count as activity, and a watcher polls
+  `Status` only while a job runs, so a running tray does not keep the root
+  service up. The newest release tag is kept in `/run/hadron-update/latest`
+  for the next instance.
+- **Flatpak callers:** a mutating call from a process in a Flatpak sandbox
+  (`/proc/<pid>/root/.flatpak-info`, pid from the bus) is refused before
+  polkit is asked: the app runs as the user, so the `admin` rule would let it
+  install. The polkit rule itself is unchanged.
+- **Registry token service:** only an https token realm is fetched; the daemon
+  runs as root and the realm comes from a registry any user can name.
 
 ## Constraints
 
