@@ -3474,6 +3474,74 @@ RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dmanpage=false -Dvapi=false -Dgt
       -Dbash_completion=disabled -Dtpm2=false -Dpam=false -Dcrypto=libgcrypt && \
     DESTDIR=/libsecret ninja -C buildDir install
 
+# gnome-keyring: the Secret Service (org.freedesktop.secrets) on every variant,
+# so Electron and Chromium apps, Flatpak ones included, keep passwords in an
+# encrypted keyring instead of a plain text file. pam_gnome_keyring.so unlocks
+# the "login" keyring with the login password: ly's and greetd's PAM services
+# already call it as an optional module. It needs gcr 3 (gck-1, gcr-base-3),
+# which needs p11-kit. No gcr-prompter (that is GTK): a keyring that the login
+# did not unlock cannot be unlocked by a dialog.
+FROM toolchain AS gnome-keyring
+COPY --from=glib2 /glib2 /
+COPY --from=pcre2 /pcre2 /
+COPY --from=libgpg-error /libgpg-error /
+COPY --from=libgcrypt /libgcrypt /
+COPY --from=gettext-tools /gettext-tools /
+# Hadron's libsystemd links libucontext (musl has no getcontext).
+COPY --from=libucontext /libucontext /
+# renovate: datasource=github-releases depName=p11-glue/p11-kit
+ARG P11_KIT_VERSION=0.26.5
+# renovate: datasource=gitlab-tags depName=GNOME/gcr registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>3\.\d+(\.\d+)*)$
+ARG GCR3_VERSION=3.41.2
+# renovate: datasource=gitlab-tags depName=GNOME/gnome-keyring registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
+ARG GNOME_KEYRING_VERSION=51.1
+RUN pip3 install meson ninja
+WORKDIR /build
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/p11-glue/p11-kit/releases/download/${P11_KIT_VERSION}/p11-kit-${P11_KIT_VERSION}.tar.xz -o p.tar.xz && \
+    curl --retry-all-errors -fL --retry 5 https://download.gnome.org/sources/gcr/${GCR3_VERSION%.*}/gcr-${GCR3_VERSION}.tar.xz -o g.tar.xz && \
+    curl --retry-all-errors -fL --retry 5 https://download.gnome.org/sources/gnome-keyring/${GNOME_KEYRING_VERSION%.*}/gnome-keyring-${GNOME_KEYRING_VERSION}.tar.xz -o k.tar.xz && \
+    for f in p g k; do tar -xf $f.tar.xz && rm $f.tar.xz; done
+# Each project installs into the build root too, so the next one finds it.
+# DESTDIR=/ for that: without a DESTDIR gcr's post-install script runs
+# gtk-update-icon-cache, which is not here.
+# p11-kit without its trust module: Hadron's CA bundle comes from the base
+# image, and gcr only needs the PKCS#11 module loader.
+RUN cd p11-kit-* && \
+    meson setup buildDir ${COMMON_MESON_FLAGS} -Dtrust_module=disabled -Dlibffi=disabled \
+      -Dsystemd=disabled -Dbash_completion=disabled -Dzsh_completion=disabled \
+      -Dgtk_doc=false -Dman=false -Dnls=false -Dtest=false && \
+    DESTDIR=/gnome-keyring ninja -C buildDir install && DESTDIR=/ ninja -C buildDir install
+# gpg_path is only a string gcr would run for OpenPGP keys; the keyring never
+# does, and Hadron's gpg is not in this stage. gcr 3.41.2 asks for the path of
+# ssh-add and ssh-agent even with ssh_agent=false, so build-only stubs stand in.
+# musl declares getpass() (console-interaction.c) only under _GNU_SOURCE.
+RUN printf '#!/bin/sh\nexit 1\n' > /usr/local/bin/ssh-add && cp /usr/local/bin/ssh-add /usr/local/bin/ssh-agent && \
+    chmod +x /usr/local/bin/ssh-add /usr/local/bin/ssh-agent && \
+    cd gcr-* && \
+    CFLAGS="${CFLAGS:-} -D_GNU_SOURCE" meson setup buildDir ${COMMON_MESON_FLAGS} -Dgtk=false -Dintrospection=false \
+      -Dgtk_doc=false -Dssh_agent=false -Dsystemd=disabled -Dgpg_path=/usr/bin/gpg && \
+    DESTDIR=/gnome-keyring ninja -C buildDir install && DESTDIR=/ ninja -C buildDir install
+# The toolchain has libsystemd.pc but no systemd.pc, which gnome-keyring reads
+# the user unit directory from.
+RUN printf 'prefix=/usr\nsystemduserunitdir=${prefix}/lib/systemd/user\n\nName: systemd\nDescription: systemd\nVersion: 257\n' \
+      > /usr/lib/pkgconfig/systemd.pc
+RUN cd gnome-keyring-* && \
+    meson setup buildDir ${COMMON_MESON_FLAGS} -Dpam=true -Dssh-agent=false -Dsystemd=enabled \
+      -Dselinux=disabled -Dlibcap-ng=disabled -Ddebug-mode=false -Dmanpage=false && \
+    DESTDIR=/gnome-keyring ninja -C buildDir install
+# Headers, pkg-config files and the test-only modules (devel/) are not
+# shipped. gcr installs D-Bus activation files for gcr-prompter even when it
+# does not build it (-Dgtk=false).
+RUN rm -rf /gnome-keyring/usr/include /gnome-keyring/usr/lib/pkgconfig \
+      /gnome-keyring/usr/share/gtk-doc /gnome-keyring/usr/share/vala /gnome-keyring/usr/share/GConf \
+      /gnome-keyring/usr/share/dbus-1/services/org.gnome.keyring.SystemPrompter.service \
+      /gnome-keyring/usr/share/dbus-1/services/org.gnome.keyring.PrivatePrompter.service \
+      /gnome-keyring/usr/lib/gnome-keyring/devel && \
+    test -x /gnome-keyring/usr/bin/gnome-keyring-daemon && \
+    test -f /gnome-keyring/usr/lib/security/pam_gnome_keyring.so && \
+    test -f /gnome-keyring/usr/lib/systemd/user/gnome-keyring-daemon.socket && \
+    test -f /gnome-keyring/usr/share/dbus-1/services/org.freedesktop.secrets.service
+
 # niri's build environment: COSMIC's (Rust, libclang, the Wayland/input/GPU
 # stack, PipeWire) plus cairo and pango, which niri draws its overlays with.
 FROM cosmic-build AS niri-build
@@ -4448,6 +4516,9 @@ COPY --from=bubblewrap /bubblewrap /
 COPY --from=xdg-dbus-proxy /xdg-dbus-proxy /
 COPY --from=ostree /ostree /
 COPY --from=flatpak /flatpak /
+# The Secret Service (gnome-keyring, with gcr 3 and p11-kit), on every variant.
+COPY --from=libgcrypt /libgcrypt /
+COPY --from=gnome-keyring /gnome-keyring /
 # XDG MIME database — required for GLib content-type detection, which appstream/
 # libxmlb rely on to decompress the gzipped Flathub catalog (fixes flatpak search).
 COPY --from=shared-mime-info /shared-mime-info /
@@ -4584,6 +4655,10 @@ RUN chmod 1777 /tmp; \
     systemctl enable NetworkManager.service wpa_supplicant.service 2>/dev/null || true; \
     # M3: PipeWire + WirePlumber as per-user services
     systemctl --global enable pipewire.socket pipewire-pulse.socket wireplumber.service 2>/dev/null || true; \
+    # The keyring's control socket, so pam_gnome_keyring (ly, greetd) unlocks
+    # the login keyring in a daemon the user's systemd owns.
+    systemctl --global enable gnome-keyring-daemon.socket; \
+    test -L /etc/systemd/user/sockets.target.wants/gnome-keyring-daemon.socket || exit 1; \
     # M4: Bluetooth daemon. `enable` only links it into bluetooth.target.wants,
     # but Kairos forces multi-user.target (bluetooth.target is never reached), so
     # like ly it must be pulled into multi-user.target directly or bluetoothd

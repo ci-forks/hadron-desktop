@@ -30,7 +30,7 @@ The baseline:
 | Hardware keys | volume, mute, brightness, play/pause/next, with an on-screen level. `hadron-media-key` on sway and i3 (wpctl, logind `SetBrightness`, MPRIS, and a mako or dunst progress pop-up); Noctalia and COSMIC (cosmic-settings-daemon, cosmic-osd) handle the keys themselves, except that COSMIC's playback keys call `hadron-media-key` because Hadron has no playerctl |
 | Hadron menu on Super+Escape | one menu for apps, Wi-Fi, Bluetooth, audio, capture, update, help and power: `hadron-menu` through `hadron-pick` (fuzzel on sway, niri and COSMIC; dmenu on i3). Each entry opens what the variant uses: the `hadron-*` menus, Noctalia's panels, COSMIC Settings and cosmic-osd. COSMIC's own Super+Escape lock moves to Super+Alt+L, niri's shortcut-inhibit toggle to Super+Shift+Escape |
 | Bluetooth menu | pair, connect, disconnect, forget, power. `hadron-bluetooth-menu` (bluetoothctl through `hadron-pick`) on sway and i3, Super+Shift+B and the waybar module; the Noctalia control center and COSMIC's Bluetooth applet |
-| Saved-password store | gnome-keyring, so Electron and Chromium Flatpaks do not store secrets in plain text. Planned, not in any variant yet |
+| Saved-password store | gnome-keyring (Secret Service and its portal) on all four variants, so Electron and Chromium Flatpaks do not store secrets in plain text. `pam_gnome_keyring` in ly's and greetd's PAM services unlocks the login keyring with the login password; `gnome-keyring-daemon.socket` is enabled for every user. The agent removes it (autologin, nothing can unlock it) |
 
 ## Adding a variant
 
