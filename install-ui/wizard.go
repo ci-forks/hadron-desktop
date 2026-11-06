@@ -87,6 +87,10 @@ func choiceFromEnv() (Choice, bool, error) {
 		Password: os.Getenv("HADRON_PASS"),
 		Github:   os.Getenv("HADRON_GITHUB"),
 		Disk:     os.Getenv("HADRON_DISK"),
+
+		KeyboardLayout:  orDefault(os.Getenv("HADRON_KEYBOARD_LAYOUT"), defaultLayout),
+		KeyboardVariant: os.Getenv("HADRON_KEYBOARD_VARIANT"),
+		Timezone:        orDefault(os.Getenv("HADRON_TIMEZONE"), defaultTimezone),
 	}
 	if c.Hostname == "" {
 		c.Hostname = defaultHostname
@@ -114,6 +118,15 @@ func choiceFromEnv() (Choice, bool, error) {
 	if err := validateGithub(c.Github); err != nil {
 		return c, true, fmt.Errorf("HADRON_GITHUB: %w", err)
 	}
+	// Optional, defaulting to US English and UTC. The renderer would replace
+	// a bad value with the default, but a typo here should fail the install,
+	// not install a machine with a keyboard the operator did not ask for.
+	if err := validateKeyboard(c.KeyboardLayout, c.KeyboardVariant); err != nil {
+		return c, true, fmt.Errorf("HADRON_KEYBOARD_LAYOUT/HADRON_KEYBOARD_VARIANT: %w", err)
+	}
+	if err := validateTimezone(c.Timezone); err != nil {
+		return c, true, fmt.Errorf("HADRON_TIMEZONE: %w", err)
+	}
 	return c, true, nil
 }
 
@@ -137,8 +150,12 @@ func dirOf(path string) string {
 
 type wizardStep int
 
+// The keyboard comes first: the console switches to the chosen keymap, so the
+// password is typed with the layout the installed system will use for it.
 const (
-	stepHostname wizardStep = iota
+	stepKeyboard wizardStep = iota
+	stepTimezone
+	stepHostname
 	stepUser
 	stepPass
 	stepGithub
@@ -147,6 +164,8 @@ const (
 )
 
 var stepName = map[wizardStep]string{
+	stepKeyboard: "keyboard",
+	stepTimezone: "timezone",
 	stepHostname: "hostname",
 	stepUser:     "username",
 	stepPass:     "password",
@@ -164,14 +183,66 @@ type wizardModel struct {
 	err     string
 	done    bool
 	aborted bool
+
+	keyboards []Keyboard
+	kbPick    picker
+	zones     []string
+	tzPick    picker
+	// keymapsDir is where the console keymaps are looked up, and
+	// applyKeymap loads one on the live console. newWizard makes it a no-op.
+	keymapsDir  string
+	applyKeymap func(string)
 }
 
+// newWizard is the wizard with the built-in keyboard and timezone lists and
+// no console side effects. runWizard uses newWizardWith and the image's lists.
 func newWizard(disks []Disk) wizardModel {
-	m := wizardModel{step: stepHostname, disks: disks}
+	return newWizardWith(disks, curatedKeyboards, curatedTimezones, defaultTimezone)
+}
+
+func newWizardWith(disks []Disk, keyboards []Keyboard, zones []string, tz string) wizardModel {
+	m := wizardModel{
+		step:        stepKeyboard,
+		disks:       disks,
+		keyboards:   keyboards,
+		zones:       zones,
+		applyKeymap: func(string) {},
+	}
+	m.choice.KeyboardLayout = defaultLayout
+	m.choice.Timezone = defaultTimezone
+	if validateTimezone(tz) == nil && indexOf(zones, tz) >= 0 {
+		m.choice.Timezone = tz
+	}
+	kl := make([]string, len(keyboards))
+	for i, k := range keyboards {
+		kl[i] = k.Description + "  " + k.Code()
+	}
+	m.kbPick = newPicker(kl)
+	m.tzPick = newPicker(zones)
 	m.in = textinput.New()
-	m.enter(stepHostname)
+	m.enter(stepKeyboard)
 	return m
 }
+
+func indexOf(list []string, v string) int {
+	for i, s := range list {
+		if s == v {
+			return i
+		}
+	}
+	return -1
+}
+
+func (m *wizardModel) keyboardIndex() int {
+	for i, k := range m.keyboards {
+		if k.Layout == m.choice.KeyboardLayout && k.Variant == m.choice.KeyboardVariant {
+			return i
+		}
+	}
+	return -1
+}
+
+func (m *wizardModel) isList() bool { return m.step == stepKeyboard || m.step == stepTimezone }
 
 // enter re-seeds the input for step s from already-collected state, so values
 // survive back-navigation instead of being silently cleared.
@@ -181,6 +252,18 @@ func (m *wizardModel) enter(s wizardStep) {
 	m.in.EchoMode = textinput.EchoNormal
 	m.in.Prompt = "> "
 	switch s {
+	case stepKeyboard:
+		// The list steps use the input as a search filter, empty on entry,
+		// with the cursor on the current choice.
+		m.in.Prompt = "search: "
+		m.in.SetValue("")
+		m.kbPick.filter("")
+		m.kbPick.selectIndex(m.keyboardIndex())
+	case stepTimezone:
+		m.in.Prompt = "search: "
+		m.in.SetValue("")
+		m.tzPick.filter("")
+		m.tzPick.selectIndex(indexOf(m.zones, m.choice.Timezone))
 	case stepHostname:
 		m.in.SetValue(orDefault(m.choice.Hostname, defaultHostname))
 	case stepUser:
@@ -230,12 +313,15 @@ func (m wizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.aborted = true
 		return m, tea.Quit
 	case "esc":
-		if m.step > stepHostname {
+		if m.step > stepKeyboard {
 			m.enter(m.step - 1)
 		}
 		return m, nil
 	}
 
+	if m.isList() {
+		return m.updateList(key)
+	}
 	if m.step == stepDisk {
 		return m.updateDisk(key)
 	}
@@ -287,6 +373,51 @@ func (m wizardModel) commitField() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// updateList drives the keyboard and timezone steps: arrows move, enter
+// picks the entry under the cursor, anything else edits the search filter.
+func (m wizardModel) updateList(key tea.KeyMsg) (tea.Model, tea.Cmd) {
+	p := &m.kbPick
+	if m.step == stepTimezone {
+		p = &m.tzPick
+	}
+	switch key.String() {
+	case "up":
+		p.move(-1)
+		return m, nil
+	case "down":
+		p.move(1)
+		return m, nil
+	case "pgup":
+		p.move(-pickerRows)
+		return m, nil
+	case "pgdown":
+		p.move(pickerRows)
+		return m, nil
+	case "enter":
+		i, ok := p.selected()
+		if !ok {
+			m.err = "nothing matches the search"
+			return m, nil
+		}
+		if m.step == stepKeyboard {
+			k := m.keyboards[i]
+			m.choice.KeyboardLayout, m.choice.KeyboardVariant = k.Layout, k.Variant
+			m.choice.ConsoleKeymap = consoleKeymap(m.keymapsDir, k.Layout, k.Variant)
+			m.applyKeymap(m.choice.ConsoleKeymap)
+			m.enter(stepTimezone)
+		} else {
+			m.choice.Timezone = m.zones[i]
+			m.enter(stepHostname)
+		}
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.in, cmd = m.in.Update(key)
+	p.filter(m.in.Value())
+	m.err = ""
+	return m, cmd
+}
+
 func (m wizardModel) updateDisk(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch key.String() {
 	case "up", "k":
@@ -318,6 +449,34 @@ func (m wizardModel) View() string {
 		tnDim.Render(" // desktop install · "+stepName[m.step]) + "\n\n")
 
 	switch m.step {
+	case stepKeyboard, stepTimezone:
+		p, labels := m.kbPick, m.kbPick.labels
+		if m.step == stepTimezone {
+			p, labels = m.tzPick, m.tzPick.labels
+		}
+		b.WriteString("  " + prompt(m.step) + "\n")
+		b.WriteString("  " + m.in.View() + "\n\n")
+		from, to := p.window()
+		for pos := from; pos < to; pos++ {
+			line := labels[p.match[pos]]
+			if pos == p.cursor {
+				b.WriteString("  " + tnAcc.Render("> "+line) + "\n")
+			} else {
+				b.WriteString("    " + tnDim.Render(line) + "\n")
+			}
+		}
+		if len(p.match) == 0 {
+			b.WriteString("    " + tnDim.Render("no match") + "\n")
+		}
+		if m.err != "" {
+			b.WriteString("\n  " + haltRed.Render(m.err) + "\n")
+		}
+		hint := "type to search · up/down select · enter confirm"
+		if m.step > stepKeyboard {
+			hint += " · esc back"
+		}
+		b.WriteString("\n  " + tnDim.Render(hint) + "\n")
+
 	case stepDisk:
 		b.WriteString("  " + tnDim.Render("the selected disk will be ERASED") + "\n\n")
 		for i, d := range m.disks {
@@ -332,6 +491,8 @@ func (m wizardModel) View() string {
 
 	case stepReview:
 		b.WriteString("  " + haltRed.Render("this ERASES "+m.choice.Disk+" and installs hadron-desktop") + "\n\n")
+		b.WriteString("    keyboard   " + tnHot.Render(keyboardLabel(m.choice)) + "\n")
+		b.WriteString("    timezone   " + tnHot.Render(m.choice.Timezone) + "\n")
 		b.WriteString("    hostname   " + tnHot.Render(m.choice.Hostname) + "\n")
 		b.WriteString("    username   " + tnHot.Render(m.choice.Username) + "\n")
 		b.WriteString("    ssh keys   " + tnHot.Render(orDefault(githubLabel(m.choice.Github), "none")) + "\n")
@@ -344,13 +505,13 @@ func (m wizardModel) View() string {
 		if m.err != "" {
 			b.WriteString("\n  " + haltRed.Render(m.err) + "\n")
 		}
-		hint := "enter continue"
-		if m.step > stepHostname {
-			hint += " · esc back"
-		}
-		b.WriteString("\n  " + tnDim.Render(hint) + "\n")
+		b.WriteString("\n  " + tnDim.Render("enter continue · esc back") + "\n")
 	}
 	return b.String()
+}
+
+func keyboardLabel(c Choice) string {
+	return Keyboard{Layout: c.KeyboardLayout, Variant: c.KeyboardVariant}.Code()
 }
 
 func githubLabel(g string) string {
@@ -362,6 +523,10 @@ func githubLabel(g string) string {
 
 func prompt(s wizardStep) string {
 	switch s {
+	case stepKeyboard:
+		return tnDim.Render("keyboard layout")
+	case stepTimezone:
+		return tnDim.Render("timezone")
 	case stepHostname:
 		return tnDim.Render("hostname for this machine")
 	case stepUser:
@@ -396,8 +561,17 @@ func runWizard() error {
 		return err
 	}
 
-	if !nonInteractive {
-		final, err := tea.NewProgram(newWizard(installableDisks("/sys/block")), tea.WithAltScreen()).Run()
+	if nonInteractive {
+		if err := zoneExists(zoneinfoDir, c.Timezone); err != nil {
+			return fmt.Errorf("HADRON_TIMEZONE: %w", err)
+		}
+		c.ConsoleKeymap = consoleKeymap(keymapsDir, c.KeyboardLayout, c.KeyboardVariant)
+	} else {
+		w := newWizardWith(installableDisks("/sys/block"),
+			loadKeyboards(xkbRulesList), loadTimezones(zoneinfoDir), detectTimezone("/etc/localtime"))
+		w.keymapsDir = keymapsDir
+		w.applyKeymap = loadConsoleKeymap
+		final, err := tea.NewProgram(w, tea.WithAltScreen()).Run()
 		if err != nil {
 			return err
 		}

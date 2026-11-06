@@ -32,6 +32,13 @@ input {
             // If this section is empty, niri will fetch xkb settings
             // from org.freedesktop.locale1. You can control these using
             // localectl set-x11-keymap.
+            //
+            // Hadron has no localed. Leave this section empty and niri uses
+            // the layout chosen in the installer: niri-session starts a login
+            // shell, /etc/profile.d/hadron-keyboard.sh exports it from
+            // /etc/hadron-desktop/keyboard as XKB_DEFAULT_LAYOUT and
+            // XKB_DEFAULT_VARIANT, and libxkbcommon reads those when niri
+            // gives it no layout. A layout set here replaces it.
         }
 
         // Enable numlock on startup, omitting this setting disables it.
