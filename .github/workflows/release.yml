@@ -40,8 +40,9 @@ env:
   CACHE_PUSH: "true"
 
 jobs:
-  # LLVM and clang compile for about three hours, and COSMIC and niri both need
-  # them. Built on their own runner, they no longer share one job's 330-minute
+  # LLVM and clang compile for about three hours, and every variant needs
+  # them: Mesa's llvmpipe links libLLVM, and COSMIC and niri also use clang.
+  # Built on their own runner, they no longer share one job's 330-minute
   # budget with the rest of a variant. The image is tagged by a hash of its
   # inputs (`make print-llvm-tag`), so it is built only when LLVM, its stage or
   # the Hadron release changes, and is reused by every later release.
@@ -364,6 +365,10 @@ jobs:
 
   build-agent:
     name: Gate and build agent ISO
+    # The agent image is built on i3, whose Mesa needs LLVM (llvmpipe). A
+    # failed LLVM prebuild does not stop it: it then compiles LLVM itself.
+    needs: llvm
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -376,6 +381,7 @@ jobs:
     timeout-minutes: 330
     env:
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      LLVM_IMAGE: ${{ needs.llvm.result == 'success' && needs.llvm.outputs.image || '' }}
 
     steps:
       - name: Validate release tag

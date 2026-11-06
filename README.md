@@ -66,7 +66,8 @@ kairos-init from the Kairos monorepo (`ghcr.io/kairos-io/kairos/kairos-init:mast
   `Adwaita-dark`); on COSMIC the COSMIC portal reports COSMIC's own theme.
 - **Real-hardware firmware:** optional curated `linux-firmware` subset
   (`--build-arg FIRMWARE=true`).
-- **Hardware GL:** optional Mesa `iris`/`radeonsi` (`--build-arg GPU=full`).
+- **GL:** Mesa `llvmpipe` and `virgl` in every image; optional hardware
+  `iris`/`radeonsi` (`--build-arg GPU=full`).
 
 ## Build
 
@@ -411,9 +412,15 @@ is validated by booting on a physical machine.
 
 ### Hardware GPU (accelerated GL)
 
-The default Mesa build (`GPU=vm`) ships only software/virtual drivers
-(virgl/softpipe/svga) — correct for QEMU and needs nothing from LLVM. For
-accelerated GL on real Intel/AMD laptops, build with `GPU=full`:
+The default Mesa build (`GPU=vm`) ships only software and virtual drivers:
+`llvmpipe`, `virgl`, `softpipe` and `svga`. In a VM with 3D acceleration
+(virtio-gpu with OpenGL) Mesa uses `virgl` and renders on the host GPU. On any
+other display (virtio-gpu or QXL without 3D, `-vga std`, or real hardware with
+`GPU=vm`) it uses `llvmpipe`, a multi-threaded rasterizer that compiles shaders
+with LLVM. `softpipe` is only a fallback that `GALLIUM_DRIVER=softpipe`
+selects: it is 60-190 times slower than `llvmpipe` (a key press in the COSMIC
+greeter took about 6 s to reach the screen). For accelerated GL on real
+Intel/AMD laptops, build with `GPU=full`:
 
 ```sh
 docker build --build-arg GPU=full --build-arg FIRMWARE=true \
@@ -423,24 +430,25 @@ docker build --build-arg DESKTOP=i3 --build-arg GPU=full \
   --build-arg FIRMWARE=true -t i3-desktop:hw .
 ```
 
-`GPU=full` builds Mesa `iris` (Intel) + `radeonsi` (AMD), which require LLVM.
+`GPU=full` also builds Mesa `iris` (Intel) + `radeonsi` (AMD). Every mode links
+LLVM (`llvmpipe` needs it); `iris` and `radeonsi` also need libclc and SPIRV.
 The example builds its **own** LLVM/clang/libclc + SPIRV stack on top of the
 published `hadron-toolchain` (same musl ABI — no Alpine cross-mix) as dedicated
 stages in this Dockerfile, so **the main Hadron toolchain is never touched and
-no extra orchestration is needed** — a plain `docker build` is enough. Those
-stages are gated: for `GPU=vm` (the default) BuildKit prunes them, so a normal
-build never compiles LLVM.
+no extra orchestration is needed** — a plain `docker build` is enough. The
+SPIRV stages are gated: for `GPU=vm` (the default) BuildKit prunes them. LLVM
+itself compiles for about three hours; CI and release builds take it from a
+prebuilt image instead (`LLVM_IMAGE`, see the Makefile).
 
-For the hardware path the example flips `-Dllvm=true`, sets `-Dcpp_rtti=false`
-(its libLLVM is built without RTTI), and bundles `libLLVM.so` + `libelf.so` into
-the image (the megadriver links them at runtime, ~125 MB). Building LLVM adds
-~15–20 min to the `GPU=full` build.
+Mesa is built with `-Dllvm=enabled` and `-Dcpp_rtti=false` (the libLLVM is built
+without RTTI). The image bundles only `libLLVM.so` (~125 MB), and for
+`GPU=full` also `libelf.so`, because the megadriver links them at runtime.
 
 Validated: Mesa 25.3 builds `iris`/`radeonsi`/`virgl`/`softpipe` into
 `libgallium-25.3.0.so` against the example-built libLLVM, the megadriver resolves
 all runtime symbols, and the resulting ISO boots. Actual GPU *rendering* is
-validated on physical hardware — QEMU has no real GPU, so a VM boot falls back to
-softpipe/virgl (software) while the hardware drivers ride along for real metal.
+validated on physical hardware — QEMU has no real GPU, so a VM boot uses
+llvmpipe or virgl while the hardware drivers ride along for real metal.
 
 ## Layout
 

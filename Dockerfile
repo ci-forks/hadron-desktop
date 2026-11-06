@@ -22,8 +22,10 @@ ARG HADRON_VERSION=v0.6.4
 ARG BASE_IMAGE=ghcr.io/kairos-io/hadron:${HADRON_VERSION}
 # Select the display server + window manager pair. Supported values: sway, i3.
 ARG DESKTOP=sway
-# GPU=vm (default): software/virtual GL only — no LLVM is built.
-# GPU=full: hardware GL (iris/radeonsi) — builds the LLVM/SPIRV stack below.
+# GPU=vm (default): software/virtual GL only (llvmpipe, virgl, softpipe, svga).
+#   llvmpipe links libLLVM, so the llvm stage below is built (or taken from
+#   LLVM_IMAGE), but not the SPIRV stages.
+# GPU=full: also hardware GL (iris/radeonsi), which adds the SPIRV stack below.
 ARG GPU=vm
 # kairos-init image for the bootable layer (final `kairos` stage). kairos-init
 # now lives in the kairos-io/kairos monorepo, whose master pipeline promotes
@@ -98,14 +100,18 @@ RUN make ARCH=x86_64 DESTDIR=/libucontext install
 
 
 # ===========================================================================
-# LLVM / SPIRV stack for hardware GL (Mesa iris + radeonsi).
+# LLVM / SPIRV stack for Mesa: llvmpipe (every GPU mode) and iris + radeonsi
+# (GPU=full).
 #
 # Kept ENTIRELY inside this example so the main Hadron toolchain Dockerfile is
 # never touched: these stages build LLVM/clang/libclc + SPIRV on top of the
-# published hadron-toolchain (same musl ABI — no Alpine cross-mix). They are
-# compiled ONLY for GPU=full; the `llvm-stack` indirection at the bottom makes
-# the default GPU=vm build prune all of them (BuildKit only builds referenced
-# stages), so a normal build never pays for LLVM.
+# published hadron-toolchain (same musl ABI — no Alpine cross-mix). Every build
+# uses the llvm stage, because Mesa's llvmpipe links libLLVM; without it, a VM
+# without 3D or any GPU Mesa has no driver for falls back to softpipe, which
+# takes seconds per frame. The SPIRV stages are compiled ONLY for GPU=full; the
+# `llvm-stack` indirection at the bottom makes the GPU=vm build prune them
+# (BuildKit only builds referenced stages). CI and release builds take the llvm
+# stage from a prebuilt image (LLVM_IMAGE in the Makefile).
 #
 # Validated on hadron-toolchain (musl / GCC 15): LLVM 20.1.8 (LLVM 18 fails on
 # GCC 15), amdgcn libclc, SPIRV-Tools, and llvm-spirv all compile; Mesa 25.3
@@ -192,18 +198,19 @@ RUN mkdir -p /llvm-out && \
     rsync -aHAX /s/. /llvm-out && \
     rsync -aHAX /t/. /llvm-out
 
-# Empty stand-in (GPU=vm path) — selecting this prunes every LLVM stage above.
+# LLVM only (GPU=vm path): what llvmpipe needs. Selecting this prunes the
+# SPIRV-Tools and llvm-spirv stages above.
 FROM toolchain AS llvm-stack-vm
-RUN mkdir -p /llvm-out
+COPY --from=llvm /llvm /llvm-out
 
-# Pick the stack by GPU flag. For vm this resolves to the empty stage, so the
-# heavy LLVM stages are never referenced and BuildKit skips them.
+# Pick the stack by GPU flag. For vm this resolves to the LLVM-only stage, so
+# the SPIRV stages are never referenced and BuildKit skips them.
 FROM llvm-stack-${GPU} AS llvm-stack
 
 
 FROM toolchain AS mesa
 COPY --from=libdrm /libdrm /
-# LLVM stack: a populated /usr tree for GPU=full, empty for GPU=vm.
+# LLVM stack: LLVM for GPU=vm, LLVM + libclc + SPIRV for GPU=full.
 COPY --from=llvm-stack /llvm-out /llvm-out
 RUN rsync -aHAX --keep-dirlinks /llvm-out/. / && rm -rf /llvm-out
 COPY --from=wayland /wayland /
@@ -214,17 +221,22 @@ WORKDIR /build
 RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://archive.mesa3d.org/mesa-${MESA_VERSION}.tar.xz -o mesa.tar.xz && tar -xf mesa.tar.xz && rm mesa.tar.xz && mv mesa-* mesa-src
 WORKDIR /build/mesa-src
 RUN pip3 install meson ninja setuptools mako pyyaml
-# GPU=vm (default): software/virtual GL only (virgl/softpipe/svga), no LLVM.
-# GPU=full: real hardware GL — iris (Intel) + radeonsi (AMD), linked against the
-#   LLVM/libclc/SPIRV stack built by the stages above (rsync'd into /usr). Pair
-#   with --build-arg FIRMWARE=true so the i915/amdgpu blobs are present.
+# Every mode builds llvmpipe, the software rasterizer Mesa picks for any
+# display it has no GPU driver for: a VM without 3D (virtio-gpu, QXL, -vga
+# std) or, with GPU=vm, real hardware. softpipe stays as a fallback that
+# GALLIUM_DRIVER=softpipe selects, for when llvmpipe itself is suspect.
+# GPU=vm (default): software/virtual GL only (llvmpipe/virgl/softpipe/svga).
+# GPU=full: also real hardware GL — iris (Intel) + radeonsi (AMD), linked
+#   against the LLVM/libclc/SPIRV stack built by the stages above (rsync'd into
+#   /usr). Pair with --build-arg FIRMWARE=true so the i915/amdgpu blobs are
+#   present.
 ARG GPU=vm
 # The example's libLLVM is built without RTTI, so Mesa must disable it too
-# (cpp_rtti=false) when linking LLVM; harmless for the software-only vm build.
+# (cpp_rtti=false).
 RUN if [ "$GPU" = "full" ]; then \
-      DRV="iris,radeonsi,virgl,softpipe,svga"; LLVMOPT=true; RTTI=false; \
+      DRV="iris,radeonsi,llvmpipe,virgl,softpipe,svga"; \
     else \
-      DRV="virgl,softpipe,svga"; LLVMOPT=false; RTTI=true; \
+      DRV="llvmpipe,virgl,softpipe,svga"; \
     fi; \
     meson setup buildDir ${COMMON_MESON_FLAGS} -Dplatforms=wayland \
     -Dgallium-drivers="$DRV" \
@@ -234,18 +246,17 @@ RUN if [ "$GPU" = "full" ]; then \
     -Dgles2=enabled \
     -Degl=enabled \
     -Dvulkan-drivers= \
-    -Dllvm="$LLVMOPT" \
-    -Dcpp_rtti="$RTTI" \
+    -Dllvm=enabled \
+    -Dcpp_rtti=false \
     -Dbuild-tests=false
 RUN DESTDIR=/mesa ninja -C buildDir install
-# The radeonsi/iris megadriver links libLLVM (+ libelf) at runtime; these come
-# from the toolchain and aren't otherwise in the OS image, so bundle them for
-# the GPU=full build (~125MB — the cost of hardware GL).
-RUN if [ "$GPU" = "full" ]; then \
-      mkdir -p /mesa/usr/lib && \
-      cp -a /usr/lib/libLLVM.so* /mesa/usr/lib/ && \
-      cp -a /usr/lib/libelf.so* /mesa/usr/lib/ ; \
-    fi
+# The megadriver links libLLVM at runtime (llvmpipe in every mode), and
+# radeonsi also links libelf. They come from the LLVM stack and the toolchain
+# and aren't otherwise in the OS image, so bundle them: only the shared
+# libraries, not the LLVM install (libLLVM is ~125MB, the cost of llvmpipe).
+RUN mkdir -p /mesa/usr/lib && \
+    cp -a /usr/lib/libLLVM.so* /mesa/usr/lib/ && \
+    if [ "$GPU" = "full" ]; then cp -a /usr/lib/libelf.so* /mesa/usr/lib/ ; fi
 
 
 FROM toolchain AS xkeyboard-config
@@ -2368,7 +2379,7 @@ RUN DESTDIR=/libxkb-x11 ninja -C buildDir install
 
 
 # Mesa rebuilt for the X11 platform and DRI GLX. GPU retains the same vm/full
-# semantics as the Sway Mesa stage.
+# semantics as the Sway Mesa stage, and every mode builds llvmpipe.
 FROM toolchain AS mesa-x11
 COPY --from=libdrm /libdrm /
 COPY --from=llvm-stack /llvm-out /llvm-out
@@ -2388,17 +2399,16 @@ RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://archive.mesa3d
 WORKDIR /build/src
 RUN pip3 install meson ninja setuptools mako pyyaml
 RUN if [ "$GPU" = "full" ]; then \
-      DRV="iris,radeonsi,virgl,softpipe,svga"; LLVMOPT=true; RTTI=false; \
+      DRV="iris,radeonsi,llvmpipe,virgl,softpipe,svga"; \
     else \
-      DRV="virgl,softpipe,svga"; LLVMOPT=false; RTTI=true; \
+      DRV="llvmpipe,virgl,softpipe,svga"; \
     fi; \
     meson setup buildDir ${COMMON_MESON_FLAGS} -Dplatforms=x11 \
       -Dgallium-drivers="$DRV" -Dglx=dri -Dopengl=true -Dgles1=enabled -Dgles2=enabled \
-      -Degl=enabled -Dvulkan-drivers= -Dllvm="$LLVMOPT" -Dcpp_rtti="$RTTI" -Dbuild-tests=false
+      -Degl=enabled -Dvulkan-drivers= -Dllvm=enabled -Dcpp_rtti=false -Dbuild-tests=false
 RUN DESTDIR=/mesa-x11 ninja -C buildDir install
-RUN if [ "$GPU" = "full" ]; then \
-      mkdir -p /mesa-x11/usr/lib && cp -a /usr/lib/libLLVM.so* /mesa-x11/usr/lib/ && cp -a /usr/lib/libelf.so* /mesa-x11/usr/lib/; \
-    fi
+RUN mkdir -p /mesa-x11/usr/lib && cp -a /usr/lib/libLLVM.so* /mesa-x11/usr/lib/ && \
+    if [ "$GPU" = "full" ]; then cp -a /usr/lib/libelf.so* /mesa-x11/usr/lib/; fi
 
 
 FROM toolchain AS libepoxy-x11
