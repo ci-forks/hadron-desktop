@@ -24,7 +24,7 @@ DESKTOP      ?= sway
 IMAGE        ?= $(DESKTOP)-desktop:dev
 # Hadron release to build on. scripts/bump-hadron.sh rewrites this line together
 # with the HADRON_VERSION defaults in the Dockerfiles.
-HADRON_VERSION ?= v0.6.3
+HADRON_VERSION ?= v0.6.4
 BASE_IMAGE   ?= ghcr.io/kairos-io/hadron:$(HADRON_VERSION)
 AURORA_IMAGE ?= quay.io/kairos/auroraboot:v0.29.0
 AGENT_BASE_IMAGE ?= i3-desktop:dev
