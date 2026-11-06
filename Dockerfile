@@ -2796,8 +2796,13 @@ RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://ziglang.org/dow
 ENV PATH=/opt/zig:$PATH
 RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://github.com/fairyglade/ly/archive/refs/tags/v${LY_VERSION}.tar.gz -o ly.tar.gz && tar -xzf ly.tar.gz && rm ly.tar.gz && mv ly-* ly-src
 WORKDIR /build/ly-src
-RUN zig build
-RUN zig build installexe -Dinit_system=systemd -Ddest_directory=/ly
+# -Dcpu=baseline: Zig builds for the CPU of the build machine unless told
+# otherwise. ly built on a runner with AVX-512 died with SIGILL ("trap invalid
+# opcode") 8 ms after start on every CPU without it (AMD EPYC 7763 in CI), so
+# the desktop never came up there. Build for the generic x86-64 baseline, like
+# the C and Rust code in this image.
+RUN zig build -Dcpu=baseline
+RUN zig build installexe -Dcpu=baseline -Dinit_system=systemd -Ddest_directory=/ly
 
 
 # ===========================================================================
