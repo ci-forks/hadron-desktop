@@ -4571,6 +4571,14 @@ RUN --mount=type=bind,from=kairos-init,src=/kairos-init,dst=/kairos-init \
     fips_flag=""; [ "$FIPS" = "fips" ] && fips_flag="--fips"; \
     /kairos-init -l debug -s install -m "${MODEL}" -t "${TRUSTED_BOOT}" --version "${VERSION}" $fips_flag && \
     /kairos-init -l debug -s init    -m "${MODEL}" -t "${TRUSTED_BOOT}" --version "${VERSION}" $fips_flag
+# No default `kairos` user on an installed system. kairos-init's
+# 10_accounting.yaml creates a locked one on every boot, and COSMIC's greeter
+# lists it as "Created by entities". Keep it on the live ISO and in UKI install
+# mode, where it gets the password "kairos". The script fails the build if
+# kairos-init changes that step; test/accounting/check-default-user.sh checks
+# the result.
+RUN --mount=type=bind,source=scripts/kairos-user-live-only.sh,target=/tmp/kairos-user-live-only.sh \
+    sh /tmp/kairos-user-live-only.sh /system/oem/10_accounting.yaml
 # Brand the GRUB boot-menu entry. kairos-agent reads GRUB_ENTRY_NAME from
 # /etc/kairos-release (which kairos-init just generated) when install.grub-entry-
 # name is unset, preferring it over /etc/os-release. The OS identity fields in
