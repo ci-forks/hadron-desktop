@@ -1,0 +1,273 @@
+#!/bin/sh
+# First-run app picker: Hadron ships no browser, and its apps come only from
+# Flathub. On a user's first desktop login, once the network is up, this
+# offers a short curated checklist (one browser, a few essentials) in the
+# session's terminal and installs the picked apps as user Flatpaks, from the
+# per-user `flathub` remote that hadron-user-setup keeps signed.
+#
+#   hadron-first-run-apps          open the checklist (again), by hand or from
+#                                  the Hadron menu
+#   hadron-first-run-apps --login  the session-start hook: show it once
+#   hadron-first-run-apps --ui     the checklist itself, in this terminal
+#
+# --login does nothing once the checklist was completed or dismissed (a stamp
+# in ~/.local/state/hadron/). Offline, or with no usable Flathub remote, it
+# sends a notification and tries again at the next login. It never blocks the
+# session: the compositor starts it in the background.
+#
+# The agent image does not ship this script (Dockerfile.agent removes it).
+
+state="${XDG_STATE_HOME:-$HOME/.local/state}/hadron"
+stamp="$state/first-run-apps"
+session_file="${HADRON_SESSION_FILE:-/etc/hadron-desktop/session}"
+# How long --login waits for the network, in seconds.
+net_timeout="${HADRON_FIRST_RUN_NET_TIMEOUT:-120}"
+
+# The curated list: group|Flatpak ID|label|preselected. Browsers are one
+# choice (or none); essentials are any number.
+APPS="browser|org.mozilla.firefox|Firefox|on
+browser|org.chromium.Chromium|Chromium|off
+browser|com.brave.Browser|Brave|off
+browser|io.gitlab.librewolf-community|LibreWolf|off
+extra|org.gnome.Loupe|Image viewer (Loupe)|on
+extra|org.videolan.VLC|Media player (VLC)|on
+extra|org.gnome.TextEditor|Text editor (GNOME Text Editor)|on
+extra|org.gnome.Papers|PDF viewer (Papers)|on
+extra|com.github.tchx84.Flatseal|Flatpak permissions (Flatseal)|off"
+
+DESKTOP_NAME="" TERMINAL_EXEC=""
+# shellcheck disable=SC1090
+[ -r "$session_file" ] && . "$session_file"
+if [ -z "$TERMINAL_EXEC" ]; then
+    case "$DESKTOP_NAME" in
+        i3)     TERMINAL_EXEC="st -c HadronFloat -e" ;;
+        COSMIC) TERMINAL_EXEC="cosmic-term -e" ;;
+        *)      TERMINAL_EXEC="foot --app-id=floatterm" ;;
+    esac
+fi
+
+# notify SUMMARY BODY: a desktop notification. At login the notification
+# daemon may still be starting, so retry for a while, as hadron-welcome does.
+notify() {
+    tries=0
+    until busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications \
+        org.freedesktop.Notifications Notify 'susssasa{sv}i' \
+        "Hadron Desktop" 0 "" "$1" "$2" 0 0 15000 >/dev/null 2>&1; do
+        tries=$((tries + 1))
+        [ "$tries" -ge 15 ] && { printf '%s: %s\n' "$1" "$2" >&2; return 0; }
+        sleep 2
+    done
+}
+
+# write_stamp completed|skipped: never show the checklist at login again.
+write_stamp() {
+    mkdir -p "$state" && printf '%s\n' "$1" > "$stamp"
+}
+
+# flathub_ready: the user's flathub remote exists and is enabled.
+# hadron-user-setup disables it when it cannot verify it; leave that alone.
+flathub_ready() {
+    flatpak --user remotes --columns=name,options 2>/dev/null | awk -F '\t' '
+        $1 == "flathub" && $2 !~ /(^|,)disabled(,|$)/ { ok=1 }
+        END { exit !ok }'
+}
+
+# setup_running: cosmic-initial-setup is open (its comm is cut at 15 bytes).
+setup_running() {
+    grep -qx 'cosmic-initial-' "${HADRON_PROC:-/proc}"/[0-9]*/comm 2>/dev/null
+}
+
+# On COSMIC, let cosmic-initial-setup finish first: it writes its stamp when
+# done. Give it a moment to start, then wait while it is open.
+wait_for_cosmic_setup() {
+    [ "$DESKTOP_NAME" = COSMIC ] || return 0
+    [ -e "$HOME/.config/cosmic-initial-setup-done" ] && return 0
+    sleep "${HADRON_FIRST_RUN_SETUP_GRACE:-10}"
+    while setup_running && [ ! -e "$HOME/.config/cosmic-initial-setup-done" ]; do
+        sleep 5
+    done
+}
+
+later="Open it later from the Hadron menu (Super+Escape, Install apps) or run hadron-first-run-apps."
+
+login() {
+    [ -e "$stamp" ] && exit 0
+    wait_for_cosmic_setup
+    if command -v nm-online >/dev/null 2>&1 &&
+       ! nm-online -q -t "$net_timeout" >/dev/null 2>&1; then
+        notify "No network for app setup" \
+            "Hadron will offer a browser and essential apps at your next login. $later"
+        exit 0
+    fi
+    if ! flathub_ready; then
+        notify "Flathub is not ready" \
+            "Hadron will offer a browser and essential apps at your next login. $later"
+        exit 0
+    fi
+    open_terminal
+}
+
+open_terminal() {
+    # shellcheck disable=SC2086 # TERMINAL_EXEC is split on spaces on purpose.
+    exec $TERMINAL_EXEC hadron-first-run-apps --ui
+}
+
+# --- the checklist ---------------------------------------------------------
+
+# Selected Flatpak IDs, one per line, and the apps already installed.
+selected=""
+installed=""
+
+field() { printf '%s\n' "$APPS" | sed -n "${1}p" | cut -d'|' -f"$2"; }
+count=$(printf '%s\n' "$APPS" | wc -l)
+none=0   # the "No browser" row
+
+is_selected() { printf '%s\n' "$selected" | grep -qxF "$1"; }
+is_installed() { printf '%s\n' "$installed" | grep -qxF "$1"; }
+
+# toggle N: flip row N. A browser row is a radio button: it replaces the
+# browser picked before. Row 0 picks no browser.
+toggle() {
+    n=$1
+    if [ "$n" -eq "$none" ]; then
+        clear_browsers
+        return
+    fi
+    id=$(field "$n" 2)
+    is_installed "$id" && return
+    if is_selected "$id"; then
+        selected=$(printf '%s\n' "$selected" | grep -vxF "$id")
+        return
+    fi
+    [ "$(field "$n" 1)" = browser ] && clear_browsers
+    selected=$(printf '%s\n%s' "$selected" "$id" | sed '/^$/d')
+}
+
+clear_browsers() {
+    for b in $(printf '%s\n' "$APPS" | awk -F'|' '$1 == "browser" { print $2 }'); do
+        selected=$(printf '%s\n' "$selected" | grep -vxF "$b")
+    done
+}
+
+render() {
+    [ -t 1 ] && printf '\033[H\033[2J'
+    printf 'Install a browser and essential apps\n\n'
+    printf 'Hadron Desktop includes no browser. These apps come from Flathub\n'
+    printf 'and install for your user only.\n\n'
+    i=0 group=""
+    any_browser=no
+    while IFS='|' read -r g id label _; do
+        i=$((i + 1))
+        if [ "$g" != "$group" ]; then
+            [ "$g" = browser ] && printf 'Browser (pick one):\n'
+            if [ "$g" = extra ]; then
+                mark="( )"; [ "$any_browser" = no ] && mark="(*)"
+                printf '  %d %s No browser\n\nEssentials:\n' "$none" "$mark"
+            fi
+            group=$g
+        fi
+        if is_installed "$id"; then
+            mark=" - " label="$label (installed)"
+            [ "$g" = browser ] && any_browser=yes
+        elif [ "$g" = browser ]; then
+            mark="( )"; is_selected "$id" && { mark="(*)"; any_browser=yes; }
+        else
+            mark="[ ]"; is_selected "$id" && mark="[x]"
+        fi
+        printf '  %d %s %s\n' "$i" "$mark" "$label"
+    done <<EOF
+$APPS
+EOF
+    printf '\nType numbers to change the choice, Enter to install, s to skip.\n> '
+}
+
+install_selected() {
+    # In the order of the list: the browser first.
+    todo=""
+    for id in $(printf '%s\n' "$APPS" | cut -d'|' -f2); do
+        is_selected "$id" && todo="$todo $id"
+    done
+    total=$(printf '%s\n' "$todo" | wc -w)
+    ok="" failed="" n=0
+    for id in $todo; do
+        n=$((n + 1))
+        label=$(printf '%s\n' "$APPS" | awk -F'|' -v id="$id" '$2 == id { print $3 }')
+        printf '\n[%d/%d] Installing %s: %s\n' "$n" "$total" "$label" "$id"
+        if flatpak --user install --assumeyes flathub "$id"; then
+            ok="${ok:+$ok, }$label"
+        else
+            failed="${failed:+$failed, }$label"
+        fi
+    done
+    if [ -z "$failed" ]; then
+        write_stamp completed
+        printf '\nDone. Installed: %s.\n' "${ok:-nothing}"
+        [ -n "$ok" ] && notify "Apps installed" "Installed: $ok. Find them with the app launcher."
+    elif [ -n "$ok" ]; then
+        # Some installed: the checklist did its job; the rest can be retried.
+        write_stamp completed
+        printf '\nInstalled: %s. Failed: %s.\n' "$ok" "$failed"
+        notify "Some apps did not install" "Installed: $ok. Failed: $failed. $later"
+    else
+        # Nothing installed, most likely Flathub was not reachable: ask again
+        # at the next login.
+        printf '\nNo app installed. Failed: %s.\n' "$failed"
+        notify "Apps did not install" "Failed: $failed. Hadron will ask again at your next login. $later"
+    fi
+}
+
+ui() {
+    # Closing the window or Ctrl+C dismisses the checklist like s does.
+    trap 'write_stamp skipped; exit 0' HUP INT TERM
+    if command -v flatpak >/dev/null 2>&1; then
+        installed=$(flatpak list --app --columns=application 2>/dev/null)
+    fi
+    selected=$(printf '%s\n' "$APPS" | awk -F'|' '$4 == "on" { print $2 }')
+    for id in $(printf '%s\n' "$selected"); do
+        is_installed "$id" && selected=$(printf '%s\n' "$selected" | grep -vxF "$id")
+    done
+    # An installed browser counts as the browser choice.
+    for b in $(printf '%s\n' "$APPS" | awk -F'|' '$1 == "browser" { print $2 }'); do
+        is_installed "$b" && clear_browsers
+    done
+    while :; do
+        render
+        if ! IFS= read -r answer; then
+            write_stamp skipped
+            exit 0
+        fi
+        case "$answer" in
+            "") break ;;
+            s|S|skip)
+                write_stamp skipped
+                printf '\nSkipped. %s\n' "$later"
+                pause
+                exit 0 ;;
+        esac
+        for n in $answer; do
+            case "$n" in ''|*[!0-9]*) continue ;; esac
+            [ "$n" -le "$count" ] && toggle "$n"
+        done
+    done
+    trap - HUP INT TERM
+    if [ -z "$(printf '%s\n' "$selected" | sed '/^$/d')" ]; then
+        write_stamp completed
+        printf '\nNothing to install. %s\n' "$later"
+    else
+        install_selected
+    fi
+    pause
+}
+
+pause() {
+    [ -t 0 ] || return 0
+    printf 'Press Enter to close.'
+    read -r _ || :
+}
+
+case "${1:-}" in
+    --login) login ;;
+    --ui)    ui ;;
+    "")      if [ -t 0 ] && [ -t 1 ]; then ui; else open_terminal; fi ;;
+    *)       echo "usage: hadron-first-run-apps [--login]" >&2; exit 2 ;;
+esac

@@ -204,3 +204,9 @@ RUN rm -f /etc/systemd/user/sockets.target.wants/gnome-keyring-daemon.socket \
       /usr/share/xdg-desktop-portal/portals/gnome-keyring.portal \
       /usr/lib/security/pam_gnome_keyring.so && \
     ! ls /usr/share/dbus-1/services | grep -q -e secrets -e keyring
+# No first-run app picker: the appliance is driven by an agent, not a person
+# picking apps at first login. Remove the script and the i3 line that starts
+# it; hadron-menu hides its entry when the script is missing.
+RUN rm -f /usr/bin/hadron-first-run-apps && \
+    sed -i '/hadron-first-run-apps/d' /etc/i3/config && \
+    ! grep -rhsv '^[[:space:]]*#' /etc/i3 /etc/xdg/autostart | grep -q 'hadron-first-run-apps'

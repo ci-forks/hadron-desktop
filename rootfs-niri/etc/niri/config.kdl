@@ -288,6 +288,9 @@ spawn-at-startup "hadron-noctalia"
 // when a new Hadron Desktop is out and installs it.
 spawn-at-startup "hadron-welcome"
 spawn-at-startup "hadron-update" "tray"
+// First-run app picker (a browser and essentials from Flathub), once per
+// user, after the network is up.
+spawn-at-startup "hadron-first-run-apps" "--login"
 
 // Apps that read these only from the environment.
 environment {

@@ -112,8 +112,13 @@ kept under `build/sway-desktop/` and `build/i3-desktop/`.
   points at all three. In Sway, i3 and niri, `Super+Alt+L` locks the screen
   and `Print` takes a screenshot. Sway and i3 also lock the screen when idle
   and before suspend.
-- **Apps:** `flatpak install flathub <app>`; `distrobox` for a mutable Linux to
-  tinker in.
+- **Apps:** Hadron includes no browser. At your first login, when the
+  network is up, a short checklist offers a browser (Firefox, Chromium, Brave
+  or LibreWolf) and some essential apps, and installs them from Flathub for
+  your user. Skip it if you like; "Install apps" in the Hadron menu or
+  `hadron-first-run-apps` opens it again. Anything else:
+  `flatpak install flathub <app>`; `distrobox` for a mutable Linux to tinker
+  in.
 - **Updates:** a tray icon shows the installed release and tells you when a
   new Hadron Desktop release is out; its menu checks, installs, reboots and
   pins. Everything the icon does is also in the terminal:

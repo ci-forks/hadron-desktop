@@ -1,10 +1,10 @@
 #!/bin/sh
 # The Hadron menu, on Super+Escape in every variant: one place to reach the
-# apps, Wi-Fi, Bluetooth, audio, screenshots, updates, the shortcut sheet and
-# the power actions. The picker is hadron-pick (fuzzel on Wayland, dmenu on
-# i3). Each entry opens what the variant already uses for it: the hadron-*
-# menus on sway and i3, Noctalia's panels on niri, COSMIC Settings and
-# cosmic-osd on COSMIC.
+# apps, the first-run app picker, Wi-Fi, Bluetooth, audio, screenshots,
+# updates, the shortcut sheet and the power actions. The picker is
+# hadron-pick (fuzzel on Wayland, dmenu on i3). Each entry opens what the
+# variant already uses for it: the hadron-* menus on sway and i3, Noctalia's
+# panels on niri, COSMIC Settings and cosmic-osd on COSMIC.
 #
 # Updates go through hadron-update in a terminal, as the update icon does:
 # the update service and polkit decide who may install (the admin group).
@@ -116,10 +116,25 @@ power() {
 }
 
 # Each entry is "Label<TAB>icon"; hadron-pick shows the icon in fuzzel only.
-sel=$(printf '%s\t%s\n' Apps 󰀻 Wi-Fi 󰖩 Bluetooth 󰂯 Audio 󰕾 Capture 󰄀 \
-    Update 󰚰 Help 󰌌 Power 󰐥 | pick Hadron 8) || exit 0
+# "Install apps" reopens the first-run app picker. The agent image does not
+# ship it.
+tab=$(printf '\t')
+entries="Apps${tab}󰀻"
+command -v hadron-first-run-apps >/dev/null 2>&1 && entries="$entries
+Install apps${tab}󰏗"
+entries="$entries
+Wi-Fi${tab}󰖩
+Bluetooth${tab}󰂯
+Audio${tab}󰕾
+Capture${tab}󰄀
+Update${tab}󰚰
+Help${tab}󰌌
+Power${tab}󰐥"
+n=$(printf '%s\n' "$entries" | wc -l)
+sel=$(printf '%s\n' "$entries" | pick Hadron "$n") || exit 0
 case "$sel" in
     Apps)      apps ;;
+    "Install apps") exec hadron-first-run-apps ;;
     Wi-Fi)     panel wifi ;;
     Bluetooth) panel bluetooth ;;
     Audio)     panel audio ;;

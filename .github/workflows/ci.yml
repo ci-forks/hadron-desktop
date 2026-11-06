@@ -80,3 +80,7 @@ jobs:
           done
           jq empty rootfs-sway/etc/xdg/waybar/config
           jq empty rootfs-niri/usr/share/hadron-desktop/noctalia-palettes/Hadron.json
+
+      # The selection and stamp logic, against a fake flatpak in Alpine.
+      - name: First-run app picker
+        run: test/first-run/check-first-run-apps.sh
