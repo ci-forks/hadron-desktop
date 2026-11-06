@@ -1,0 +1,102 @@
+#!/bin/sh
+# Put the Hadron GRUB theme on COS_STATE, and remove what older Hadron
+# releases left there.
+#
+#   hadron-grub-theme STATE_DIR          write what is missing or out of date
+#   hadron-grub-theme --check STATE_DIR  exit 0 if STATE_DIR is up to date
+#
+# STATE_DIR is where COS_STATE is mounted. The oem stage
+# 09_hadron_grub_theme.yaml runs this at install, upgrade and reset, and on
+# every boot with --check, so a system upgraded from an older Hadron release is
+# corrected on its first boot.
+#
+# What goes on COS_STATE:
+#   grubmenu                     our grubmenu.cfg, which /etc/cos/grub.cfg sources
+#   themes/hadron/               theme.txt and background.tga
+#   grub2/fonts/unicode.pf2      the font theme.txt names, "Unifont Regular 16".
+#                                On EFI this is $prefix/fonts, which
+#                                `loadfont unicode` in /etc/cos/grub.cfg reads.
+#   hadron/grub2/<platform>/     the image's EFI GRUB modules and moddep.lst.
+#                                The installed EFI GRUB has no gfxmenu or tga
+#                                module at its $prefix, so grubmenu.cfg loads
+#                                them from here.
+#
+# No command.lst, and the modules do not go in grub2/<platform>, which is the
+# EFI $prefix. GRUB reads <prefix>/<platform>/command.lst when it starts and
+# each time $prefix is set, and keeps the commands it lists after $prefix
+# changes back. Its `rmmod: minicmd` line turns the no-op rmmod function in
+# /etc/cos/grub.cfg into a real command, so `rmmod tpm` prints "no such module".
+# Hadron up to v0.0.7 copied the whole tree to grub2/<platform>. When
+# command.lst is there, every file except the modules kairos-agent puts there is
+# removed.
+set -eu
+
+BR=/etc/kairos/branding
+THEME=$BR/hadron-theme
+# The modules kairos-agent copies to $prefix/<platform> itself
+# (GetGrubModules in kairos agent/pkg/constants/constants.go).
+AGENT_MODS="loopback.mod squash4.mod xzio.mod gzio.mod regexp.mod"
+
+check=0
+if [ "${1:-}" = "--check" ]; then
+    check=1
+    shift
+fi
+ST="${1:?usage: hadron-grub-theme [--check] STATE_DIR}"
+
+same() {
+    [ -f "$2" ] && [ "$(md5sum < "$1")" = "$(md5sum < "$2")" ]
+}
+
+stale=0
+# copy SRC DST: copy SRC to DST if DST differs. Under --check, only record it.
+copy() {
+    same "$1" "$2" && return 0
+    stale=1
+    [ "$check" = 1 ] && return 0
+    mkdir -p "$(dirname "$2")"
+    cp -fv "$1" "$2"
+}
+
+copy "$BR/grubmenu.cfg" "$ST/grubmenu"
+copy "$THEME/theme.txt" "$ST/themes/hadron/theme.txt"
+copy "$THEME/background.tga" "$ST/themes/hadron/background.tga"
+copy "$THEME/unicode.pf2" "$ST/grub2/fonts/unicode.pf2"
+
+for src in /usr/lib/grub/*-efi; do
+    [ -f "$src/gfxmenu.mod" ] || continue
+    platform="${src##*/}"
+    dst="$ST/hadron/grub2/$platform"
+    # The modules have to match the GRUB core on the ESP, which is refreshed
+    # from the same image, so compare the files that change with each GRUB
+    # build and copy the whole tree when one differs.
+    if ! same "$src/moddep.lst" "$dst/moddep.lst" ||
+        ! same "$src/gfxmenu.mod" "$dst/gfxmenu.mod" ||
+        ! same "$src/tga.mod" "$dst/tga.mod"; then
+        stale=1
+        if [ "$check" = 0 ]; then
+            rm -rf "$dst"
+            mkdir -p "$dst"
+            cp -f "$src"/*.mod "$src/moddep.lst" "$dst/"
+            echo "copied $platform GRUB modules to $dst"
+        fi
+    fi
+
+    old="$ST/grub2/$platform"
+    if [ -f "$old/command.lst" ]; then
+        stale=1
+        if [ "$check" = 0 ]; then
+            for f in "$old"/*; do
+                case " $AGENT_MODS " in
+                *" ${f##*/} "*) ;;
+                *) rm -rf "$f" ;;
+                esac
+            done
+            echo "removed the GRUB module tree an older release copied to $old"
+        fi
+    fi
+done
+
+if [ "$check" = 1 ]; then
+    exit "$stale"
+fi

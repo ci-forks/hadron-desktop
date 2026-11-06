@@ -4649,8 +4649,8 @@ RUN sed -i '/^loadfont unicode/a set color_normal=light-gray/black\nset color_hi
 # clobbering the overlay copy, so re-apply ours AFTER kairos-init: it switches the
 # installed menu to gfxterm and `set theme=` to themes/hadron/theme.txt. 08_grub
 # copies this to COS_STATE/grubmenu at install; 09_hadron_grub_theme.yaml (oem)
-# puts the theme dir (theme.txt + background.tga), the vendored unicode.pf2 font,
-# and the grub module tree on STATE so gfxmenu/tga/the theme all resolve there.
+# runs /usr/libexec/hadron-grub-theme, which puts the theme dir, the font and the
+# EFI grub modules on STATE so gfxmenu/tga/the theme all resolve there.
 # (hadron-theme/ isn't written by kairos-init, so its COPY at line ~1982 survives.)
 COPY rootfs/etc/kairos/branding/grubmenu.cfg /etc/kairos/branding/grubmenu.cfg
 # Console font. kairos-init may regenerate /etc/vconsole.conf, so re-apply ours

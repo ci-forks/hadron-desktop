@@ -6,13 +6,17 @@
 # the live boot menu reads "hadron-desktop" rather than "Kairos". `--override-name`
 # only renames the output .iso file, not the menu.
 #
-# This is a snapshot of upstream grub_live_bios.cfg with three changes:
+# This is a snapshot of upstream grub_live_bios.cfg with these changes:
 #   1. menuentry titles "Kairos*" -> "hadron-desktop*"
 #   2. the Tokyo Night gfxterm theme loaded from the ISO
 #   3. the quiet cmdline added to the normal boot paths (recovery/debug kept verbose)
 #   4. $hadron_vt_palette on every entry: the console's 16 colours set to the
 #      Hadron palette, as the installed menu does (rootfs/etc/kairos/branding/
 #      grubmenu.cfg); generated from theme/palette.toml by tools/gen-theme.py
+#   5. no `echo Loading kernel...`/`echo Loading initrd...` in the entries: the
+#      text box GRUB opens for them covers the theme
+#   6. smbios runs only on arm64, where the Thor board is: elsewhere a failed
+#      lookup prints an error on the menu
 # Keep `CDLABEL=COS_LIVE`, the ($root)/boot/kernel + initrd paths, and the
 # {{NOMODESET}}/{{EXTEND_CMDLINE}} placeholders intact. AuroraBoot does NOT expand
 # those placeholders for an overlaid file (it only substitutes its own default), so
@@ -47,60 +51,57 @@ fi
 
 set hadron_vt_palette="vt.default_red=0x1a,0xf7,0x9e,0xe0,0x7a,0xbb,0x7d,0xa9,0x73,0xf7,0x9e,0xe0,0x7a,0xbb,0x7d,0xc0 vt.default_grn=0x1b,0x76,0xce,0xaf,0xa2,0x9a,0xcf,0xb1,0x7a,0x76,0xce,0xaf,0xa2,0x9a,0xcf,0xca vt.default_blu=0x26,0x8e,0x6a,0x68,0xf7,0xf7,0xff,0xd6,0xa2,0x8e,0x6a,0x68,0xf7,0xf7,0xff,0xf5"
 
-# Get model
-smbios --type 4 --get-string 5 --set model
+# Get model. Thor is an arm64 board, and on firmware without the SMBIOS entry
+# a failed lookup prints an error on the menu, so ask only on arm64.
+set model=""
+if [ "${grub_cpu}" = "arm64" ]; then
+  smbios --type 4 --get-string 5 --set model
+fi
 # For Thor we need to set the ignored clk and pd, otherwise devices will die during boot
-if test $model == "Thor"; then
+# The expansion must be quoted: unquoted, an empty model (smbios missing or the
+# lookup failing) or a multi-word one (QEMU host CPU strings) splits into
+# multiple test arguments and the comparison wrongly evaluates to true,
+# leaking $thor_options into the cmdline.
+if [ "${model}" = "Thor" ]; then
   echo "Thor device detected, setting ignored clocks and power domains and proper console output"
   set thor_options="pd_ignore_unused clk_ignore_unused console=ttyUTC0,115200 earlycon=tegra_utc,mmio32,0xc5a0000"
+  export thor_options
 fi
 
 # Add nomodeset only on x86/amd64-class arches.
 # Template placeholders: {{NOMODESET}} and {{EXTEND_CMDLINE}} are replaced at build time.
 menuentry "hadron-desktop" --class os --unrestricted {
-    echo Loading kernel...
     linux ($root)/boot/kernel cdroot root=live:CDLABEL=COS_LIVE rd.live.dir=/ rd.live.squashimg=rootfs.squashfs net.ifnames=1 console=ttyS0 console=tty1 rd.cos.disable vga=795{{NOMODESET}} install-mode selinux=0 $thor_options rd.live.overlay.overlayfs quiet splash loglevel=3 udev.log_level=3 systemd.show_status=false rd.systemd.show_status=false $hadron_vt_palette{{EXTEND_CMDLINE}}
-    echo Loading initrd...
     initrd ($root)/boot/initrd
 }
 
 menuentry "hadron-desktop (manual)" --class os --unrestricted {
-    echo Loading kernel...
     linux ($root)/boot/kernel cdroot root=live:CDLABEL=COS_LIVE rd.live.dir=/ rd.live.squashimg=rootfs.squashfs net.ifnames=1 console=ttyS0 console=tty1 rd.cos.disable vga=795{{NOMODESET}} selinux=0 $thor_options rd.live.overlay.overlayfs quiet splash loglevel=3 udev.log_level=3 systemd.show_status=false rd.systemd.show_status=false $hadron_vt_palette{{EXTEND_CMDLINE}}
-    echo Loading initrd...
     initrd ($root)/boot/initrd
 }
 
 menuentry "hadron-desktop (interactive install)" --class os --unrestricted {
-    echo Loading kernel...
     linux ($root)/boot/kernel cdroot root=live:CDLABEL=COS_LIVE rd.live.dir=/ rd.live.squashimg=rootfs.squashfs net.ifnames=1 console=ttyS0 console=tty1 rd.cos.disable vga=795{{NOMODESET}} install-mode-interactive selinux=0 $thor_options rd.live.overlay.overlayfs quiet splash loglevel=3 udev.log_level=3 systemd.show_status=false rd.systemd.show_status=false $hadron_vt_palette{{EXTEND_CMDLINE}}
-    echo Loading initrd...
     initrd ($root)/boot/initrd
 }
 
 menuentry "hadron-desktop (remote recovery mode)" --class os --unrestricted {
-    echo Loading kernel...
     linux ($root)/boot/kernel cdroot root=live:CDLABEL=COS_LIVE rd.live.dir=/ rd.live.squashimg=rootfs.squashfs net.ifnames=1 console=ttyS0 console=tty1 rd.cos.disable vga=795{{NOMODESET}} kairos.remote_recovery_mode selinux=0 $thor_options rd.live.overlay.overlayfs $hadron_vt_palette{{EXTEND_CMDLINE}}
-    echo Loading initrd...
     initrd ($root)/boot/initrd
 }
 
 menuentry "hadron-desktop (boot local node from livecd)" --class os --unrestricted {
-    echo Loading kernel...
     linux ($root)/boot/kernel cdroot root=live:CDLABEL=COS_LIVE rd.live.dir=/ rd.live.squashimg=rootfs.squashfs net.ifnames=1 console=ttyS0 console=tty1 kairos.boot_live_mode vga=795{{NOMODESET}} selinux=0 $thor_options rd.live.overlay.overlayfs quiet splash loglevel=3 udev.log_level=3 systemd.show_status=false rd.systemd.show_status=false $hadron_vt_palette{{EXTEND_CMDLINE}}
-    echo Loading initrd...
     initrd ($root)/boot/initrd
 }
 
 menuentry "hadron-desktop (debug)" --class os --unrestricted {
-    echo Loading kernel...
     linux ($root)/boot/kernel cdroot root=live:CDLABEL=COS_LIVE rd.live.dir=/ rd.live.squashimg=rootfs.squashfs net.ifnames=1 console=tty0 rd.debug rd.shell rd.cos.disable rd.immucore.debug vga=795{{NOMODESET}} selinux=0 $thor_options rd.live.overlay.overlayfs $hadron_vt_palette{{EXTEND_CMDLINE}}
-    echo Loading initrd...
     initrd ($root)/boot/initrd
 }
 
 if [ "${grub_platform}" = "efi" ]; then
-    hiddenentry "Text mode" --hotkey "t" {
+    menuentry "Text mode" --hotkey "t" {
         set textmode=true
         terminal_output console
     }

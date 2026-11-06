@@ -1,0 +1,53 @@
+# Create the two GRUB environment files that /etc/cos/grub.cfg looks for, so
+# its `search --file` calls find them and print no error on the boot menu.
+#
+#   /grubenv on COS_OEM: kairos-agent writes it only for `kairos-agent
+#     bootentry` or install grub_options, so after a plain install every boot
+#     prints "no such device: /grubenv".
+#   /boot_assessment on COS_STATE: 08_grub writes it on the first boot, after
+#     GRUB has already searched for it, so the first boot after an install or a
+#     reset prints "no such device: /boot_assessment".
+#
+# Both are empty environment blocks, the same thing the first write would
+# create. This is a workaround until Kairos creates them itself:
+# https://github.com/kairos-io/kairos/pull/6009. Delete this file once Hadron
+# builds on a Kairos release with that fix.
+#
+# An encrypted COS_OEM is skipped: GRUB cannot read it, and kairos-agent then
+# keeps grubenv on COS_STATE.
+name: "Hadron GRUB environment files"
+stages:
+    after-install:
+    - &grubenvfiles
+      name: "Create empty grubenv and boot_assessment"
+      if: grep -vq "rd.immucore.uki" /proc/cmdline
+      commands:
+      - |
+          create() {
+              label=$1 file=$2
+              dev=$(blkid -L "$label" || true)
+              [ -n "$dev" ] || return 0
+              case "$(blkid -o value -s TYPE "$dev")" in
+              ext2|ext3|ext4) ;;
+              *) return 0 ;;
+              esac
+              mnt=/tmp/mnt/HADRONENV
+              mkdir -p $mnt
+              mount "$dev" $mnt || return 0
+              [ -e "$mnt/$file" ] || grub2-editenv "$mnt/$file" create
+              umount $mnt
+          }
+          create COS_OEM grubenv
+          create COS_STATE boot_assessment
+
+    after-reset:
+    - <<: *grubenvfiles
+
+    # A system installed before this file existed has no /grubenv. /oem is
+    # COS_OEM, mounted read-write; a /dev/mapper source means it is encrypted.
+    boot:
+    - name: "Create an empty grubenv on COS_OEM"
+      if: |
+          grep -vq "rd.immucore.uki" /proc/cmdline && [ ! -f /run/cos/live_mode ] && [ ! -f /run/cos/write_protected ] && [ ! -e /oem/grubenv ] && findmnt -no SOURCE /oem | grep -q '^/dev/' && ! findmnt -no SOURCE /oem | grep -q '^/dev/mapper/'
+      commands:
+      - grub2-editenv /oem/grubenv create
