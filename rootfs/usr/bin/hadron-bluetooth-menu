@@ -1,0 +1,102 @@
+#!/bin/sh
+# Bluetooth menu for the sway and i3 variants (BlueZ via bluetoothctl), bound
+# to Super+Shift+B. Turns the adapter on and off, scans, pairs a new device
+# and connects, disconnects or forgets a known one. The picker is hadron-pick
+# (fuzzel on sway, dmenu on i3). niri (Noctalia) and COSMIC use the Bluetooth
+# panel of their own shell.
+#
+# Pairing uses bluetoothctl's default agent with no one to answer it, so it
+# works for devices that pair without a code (most headphones, speakers and
+# mice). A device that asks for a PIN or passkey fails with a notification;
+# pair it once with `bluetoothctl` in a terminal.
+menu() { hadron-pick "$1" "${2:-14}"; }
+
+notify() {
+    busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications \
+        org.freedesktop.Notifications Notify 'susssasa{sv}i' \
+        "Hadron Desktop" 0 "" "Bluetooth" "$1" 0 0 4000 >/dev/null 2>&1 || true
+}
+
+# The marker for the connected device: the dot the sway menus use, ASCII in
+# dmenu, as the i3 menus do.
+if [ -n "${WAYLAND_DISPLAY:-}" ]; then on='● '; else on='* '; fi
+
+show=$(bluetoothctl show 2>/dev/null)
+case "$show" in
+    *Controller*) ;;
+    *) notify "No Bluetooth adapter found."; exit 0 ;;
+esac
+
+if printf '%s\n' "$show" | grep -q 'Powered: no'; then
+    [ "$(printf 'Turn Bluetooth on\n' | menu 'Bluetooth is off' 1)" = "Turn Bluetooth on" ] || exit 0
+    bluetoothctl power on >/dev/null 2>&1 || notify "Could not turn Bluetooth on. Is it blocked by a switch or rfkill?"
+    exit 0
+fi
+
+# `bluetoothctl devices [Filter]` prints "Device AA:BB:CC:DD:EE:FF Name".
+macs() { bluetoothctl devices "$@" 2>/dev/null | awk '$1 == "Device" { print $2 }'; }
+connected=$(macs Connected)
+paired=$(macs Paired)
+
+# One line per device: "<marker>Name  (state)<TAB>MAC", connected devices
+# first, then paired, then new ones, each by name. The state tells the user
+# what choosing the line does next.
+list=$(bluetoothctl devices 2>/dev/null | awk -v conn="$connected" -v pair="$paired" -v on="$on" '
+    BEGIN {
+        n = split(conn, c, "\n"); for (i = 1; i <= n; i++) isconn[c[i]] = 1
+        n = split(pair, p, "\n"); for (i = 1; i <= n; i++) ispair[p[i]] = 1
+    }
+    $1 == "Device" {
+        mac = $2; name = $0; sub(/^Device [^ ]+ ?/, "", name)
+        if (name == "") name = mac
+        if (mac in isconn)      { rank = 0; mark = on;   state = "connected" }
+        else if (mac in ispair) { rank = 1; mark = "  "; state = "paired" }
+        else                    { rank = 2; mark = "  "; state = "new" }
+        printf "%d %s\t%s%s  (%s)\t%s\n", rank, tolower(name), mark, name, state, mac
+    }' | sort | cut -f2-)
+
+sel=$(printf '%s\n  ---------\n  Scan for devices\n  Turn Bluetooth off\n' "$(printf '%s\n' "$list" | cut -f1)" |
+    sed '/^$/d' | menu 'Bluetooth') || exit 0
+
+case "$sel" in
+    *'---------'|'') exit 0 ;;
+    '  Turn Bluetooth off') bluetoothctl power off >/dev/null 2>&1; exit 0 ;;
+    '  Scan for devices')
+        notify "Scanning for devices for 10 seconds."
+        bluetoothctl --timeout 10 scan on >/dev/null 2>&1
+        exec "$0" ;;
+esac
+
+line=$(printf '%s\n' "$list" | awk -F'\t' -v s="$sel" '$1 == s { print; exit }')
+mac=${line##*	}
+[ -n "$line" ] && [ -n "$mac" ] || exit 0
+name=$(printf '%s' "$sel" | sed -e "s/^$on//" -e 's/^  //' -e 's/  ([a-z]*)$//')
+
+case "$sel" in
+    *'(connected)')
+        act=$(printf '  Disconnect\n  Forget\n' | menu "$name" 2) || exit 0 ;;
+    *'(paired)')
+        act=$(printf '  Connect\n  Forget\n' | menu "$name" 2) || exit 0 ;;
+    *)
+        act='  Pair' ;;
+esac
+
+# try OK FAIL CMD...: run a bluetoothctl command, then notify OK or FAIL.
+try() {
+    ok=$1 fail=$2; shift 2
+    if bluetoothctl "$@" >/dev/null 2>&1 </dev/null; then notify "$ok"; else notify "$fail"; fi
+}
+
+case "$act" in
+    '  Connect')    try "Connected to $name." "Could not connect to $name." connect "$mac" ;;
+    '  Disconnect') try "Disconnected from $name." "Could not disconnect from $name." disconnect "$mac" ;;
+    '  Forget')     try "Forgot $name." "Could not forget $name." remove "$mac" ;;
+    '  Pair')
+        notify "Pairing with $name."
+        if bluetoothctl pair "$mac" >/dev/null 2>&1 </dev/null; then
+            bluetoothctl trust "$mac" >/dev/null 2>&1
+            try "Paired and connected to $name." "Paired with $name, but could not connect." connect "$mac"
+        else
+            notify "Could not pair with $name. If it asks for a code, pair it with bluetoothctl in a terminal."
+        fi ;;
+esac

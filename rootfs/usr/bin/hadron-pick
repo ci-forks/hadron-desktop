@@ -1,0 +1,16 @@
+#!/bin/sh
+# The menu picker the shared hadron-* menus use: reads one choice per line on
+# stdin, prints the chosen line, and exits non-zero when the user cancels.
+#
+#   printf '%s\n' One Two | hadron-pick 'Prompt' [LINES]
+#
+# fuzzel on Wayland, dmenu on X11 (i3), in the Hadron palette, with the same
+# look as the per-variant Wi-Fi, audio and power menus.
+prompt=${1:-Select}
+lines=${2:-14}
+
+if [ -n "${WAYLAND_DISPLAY:-}" ] && command -v fuzzel >/dev/null 2>&1; then
+    exec fuzzel --dmenu --width=48 --lines="$lines" --prompt="$prompt > "
+fi
+exec dmenu -i -l "$lines" -p "$prompt" -fn 'Inter Variable-11' \
+    -nb '#1a1b26' -nf '#c0caf5' -sb '#7aa2f7' -sf '#16161e'

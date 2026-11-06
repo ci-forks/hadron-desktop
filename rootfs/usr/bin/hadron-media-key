@@ -1,0 +1,127 @@
+#!/bin/sh
+# Hardware keys for the sway and i3 variants: volume, mute, screen brightness
+# and media playback, with the new level shown as a notification with a
+# progress bar (mako on sway, dunst on i3). niri (Noctalia) and COSMIC handle
+# these keys in their own shell; COSMIC calls this script only for the
+# playback keys, which it would otherwise send to playerctl.
+#
+#   hadron-media-key volume-up | volume-down | mute | mic-mute
+#   hadron-media-key brightness-up | brightness-down
+#   hadron-media-key play-pause | next | previous | stop
+#
+# No extra tools: volume through wpctl, brightness through logind's
+# SetBrightness (allowed for the user of the active session, no polkit or
+# udev rule needed), players through MPRIS on the session bus, and the
+# on-screen level through the notification server, all with busctl.
+set -u
+
+STEP=5  # percent per key press
+
+# osd SUMMARY BODY PERCENT: show or update the one on-screen level
+# notification. Its id is kept in the runtime directory and passed as
+# replaces_id, so a held key updates one pop-up instead of stacking new ones.
+# The stack tags do the same for dunst and for servers that know them.
+osd() {
+    idfile="${XDG_RUNTIME_DIR:-/tmp}/hadron-osd-id"
+    id=0
+    [ -r "$idfile" ] && id=$(cat "$idfile" 2>/dev/null)
+    case "$id" in ''|*[!0-9]*) id=0 ;; esac
+    out=$(busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications \
+        org.freedesktop.Notifications Notify 'susssasa{sv}i' \
+        "Hadron Desktop" "$id" "" "$1" "$2" 0 \
+        3 value i "$3" x-dunst-stack-tag s hadron-osd x-canonical-private-synchronous s hadron-osd \
+        1500 2>/dev/null) || return 0
+    printf '%s\n' "${out#u }" > "$idfile" 2>/dev/null || true
+}
+
+# volume_osd TARGET NAME: show the volume of a wpctl target.
+# `wpctl get-volume` prints "Volume: 0.40", plus " [MUTED]" when muted.
+volume_osd() {
+    v=$(wpctl get-volume "$1" 2>/dev/null) || return 0
+    pct=$(printf '%s\n' "$v" | awk '{ printf "%d", $2 * 100 + 0.5 }')
+    case "$v" in
+        *MUTED*) osd "$2" "Muted" 0 ;;
+        *)       osd "$2" "$pct%" "$pct" ;;
+    esac
+}
+
+# backlight: print the backlight device the kernel and systemd prefer
+# (firmware, then platform, then raw), or nothing on a machine without one.
+backlight() {
+    for want in firmware platform raw; do
+        for d in /sys/class/backlight/*; do
+            [ -r "$d/type" ] || continue
+            [ "$(cat "$d/type")" = "$want" ] && { basename "$d"; return; }
+        done
+    done
+}
+
+brightness() {
+    dev=$(backlight)
+    [ -n "$dev" ] || exit 0
+    max=$(cat "/sys/class/backlight/$dev/max_brightness")
+    cur=$(cat "/sys/class/backlight/$dev/brightness")
+    [ "$max" -gt 0 ] || exit 0
+    step=$((max * STEP / 100)); [ "$step" -ge 1 ] || step=1
+    # Never go fully dark: on many panels 0 turns the backlight off.
+    floor=$((max / 100)); [ "$floor" -ge 1 ] || floor=1
+    case "$1" in
+        up)   new=$((cur + step)) ;;
+        down) new=$((cur - step)) ;;
+    esac
+    [ "$new" -le "$max" ] || new=$max
+    [ "$new" -ge "$floor" ] || new=$floor
+    for s in auto self; do
+        busctl call org.freedesktop.login1 "/org/freedesktop/login1/session/$s" \
+            org.freedesktop.login1.Session SetBrightness ssu backlight "$dev" "$new" \
+            >/dev/null 2>&1 && break
+    done
+    pct=$(((new * 100 + max / 2) / max))
+    osd "Brightness" "$pct%" "$pct"
+}
+
+# player: print the MPRIS player to control: the first one that is playing,
+# else the first one on the bus.
+player() {
+    first=""
+    for p in $(busctl --user list --no-legend 2>/dev/null |
+            awk '$1 ~ /^org\.mpris\.MediaPlayer2\./ { print $1 }'); do
+        [ -n "$first" ] || first=$p
+        status=$(busctl --user get-property "$p" /org/mpris/MediaPlayer2 \
+            org.mpris.MediaPlayer2.Player PlaybackStatus 2>/dev/null)
+        [ "$status" = 's "Playing"' ] && { echo "$p"; return; }
+    done
+    echo "$first"
+}
+
+media() {
+    p=$(player)
+    [ -n "$p" ] || exit 0
+    busctl --user call "$p" /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player "$1" \
+        >/dev/null 2>&1 || true
+}
+
+case "${1:-}" in
+    volume-up)
+        # 150%, the same ceiling as scrolling on the waybar volume module.
+        wpctl set-volume -l 1.5 @DEFAULT_AUDIO_SINK@ "$STEP%+"
+        volume_osd @DEFAULT_AUDIO_SINK@ Volume ;;
+    volume-down)
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ "$STEP%-"
+        volume_osd @DEFAULT_AUDIO_SINK@ Volume ;;
+    mute)
+        wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+        volume_osd @DEFAULT_AUDIO_SINK@ Volume ;;
+    mic-mute)
+        wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle
+        volume_osd @DEFAULT_AUDIO_SOURCE@ Microphone ;;
+    brightness-up)   brightness up ;;
+    brightness-down) brightness down ;;
+    play-pause) media PlayPause ;;
+    next)       media Next ;;
+    previous)   media Previous ;;
+    stop)       media Stop ;;
+    *)
+        echo "usage: hadron-media-key volume-up|volume-down|mute|mic-mute|brightness-up|brightness-down|play-pause|next|previous|stop" >&2
+        exit 2 ;;
+esac

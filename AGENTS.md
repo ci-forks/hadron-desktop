@@ -27,9 +27,9 @@ The baseline:
 | Audio | PipeWire and WirePlumber started with the session, media keys work |
 | Screenshots and screen lock | a key binding for each. Lockers: swaylock (sway, niri), i3lock (i3), COSMIC's own; sway (swayidle) and i3 (xss-lock) also lock on idle and before suspend. i3 takes screenshots with `hadron-screenshot`. The agent overlay starts no locker |
 | Flatpak apps with working file dialogs and dark mode | flatpak, xdg-desktop-portal and a backend reporting `color-scheme`: the GTK backend with its Settings interface (plus xdg-desktop-portal-wlr on sway) on sway, i3 and niri, reading the `prefer-dark` override in gsettings-desktop-schemas; COSMIC's own portal |
-| Hardware keys | volume, mute, brightness, play/pause/next, with an on-screen level. Known gap: sway and i3 lack brightness and media keys |
+| Hardware keys | volume, mute, brightness, play/pause/next, with an on-screen level. `hadron-media-key` on sway and i3 (wpctl, logind `SetBrightness`, MPRIS, and a mako or dunst progress pop-up); Noctalia and COSMIC (cosmic-settings-daemon, cosmic-osd) handle the keys themselves, except that COSMIC's playback keys call `hadron-media-key` because Hadron has no playerctl |
 | Hadron menu on Super+Escape | one menu for apps, Wi-Fi, Bluetooth, audio, capture, update, help and power. Planned, not in any variant yet |
-| Bluetooth menu | pair, connect, power. Known gap: sway and i3 open a raw `bluetoothctl` |
+| Bluetooth menu | pair, connect, disconnect, forget, power. `hadron-bluetooth-menu` (bluetoothctl through `hadron-pick`) on sway and i3, Super+Shift+B and the waybar module; the Noctalia control center and COSMIC's Bluetooth applet |
 | Saved-password store | gnome-keyring, so Electron and Chromium Flatpaks do not store secrets in plain text. Planned, not in any variant yet |
 
 ## Adding a variant
