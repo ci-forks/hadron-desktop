@@ -17,6 +17,14 @@ type Choice struct {
 	Password string
 	Github   string
 	Disk     string
+
+	// KeyboardLayout and KeyboardVariant are XKB names ("de", "nodeadkeys").
+	// ConsoleKeymap is the matching kbd keymap for the text console, or ""
+	// when there is none. Timezone is an IANA name ("Europe/Rome").
+	KeyboardLayout  string
+	KeyboardVariant string
+	ConsoleKeymap   string
+	Timezone        string
 }
 
 // desktopGroups are the supplemental groups a desktop user needs: seat/input for
@@ -63,6 +71,7 @@ func RenderCloudConfig(c Choice, hash string) string {
 	b.WriteString("          content: |\n")
 	fmt.Fprintf(&b, "            user = %s\n", c.Username)
 	b.WriteString("            session_index = 2\n")
+	writeLocaleStage(&b, c)
 	// The display name again, in case a kairos-agent stops passing gecos
 	// through. /etc is rebuilt from cloud-config at every boot, so it is set
 	// again each boot, after the users step above (yip runs the users of a
@@ -72,6 +81,65 @@ func RenderCloudConfig(c Choice, hash string) string {
 	b.WriteString("      commands:\n")
 	fmt.Fprintf(&b, "        - usermod -c %s %s\n", c.Username, c.Username)
 	return b.String()
+}
+
+// keyboardFile is the one place the installed system keeps the keyboard
+// layout. /etc/profile.d/hadron-keyboard.sh exports it as XKB_DEFAULT_LAYOUT
+// and XKB_DEFAULT_VARIANT, which sway, niri and cosmic-comp give to
+// libxkbcommon when their own configuration names no layout. Hadron has no
+// systemd-localed, so nothing else would tell them.
+const keyboardFile = "/etc/hadron-desktop/keyboard"
+
+// writeLocaleStage renders the keyboard layout and timezone as an initramfs
+// stage. /etc is rebuilt from the image at every boot, so the files are
+// written again each boot. initramfs is early enough for
+// systemd-vconsole-setup (the console keymap) and for the X server and the
+// desktop session, which start much later.
+//
+// The renderer returns no error, so a value that fails validation (the input
+// steps already refuse those) is replaced by its default rather than
+// written: nothing here may break out of the YAML or the shell commands.
+func writeLocaleStage(b *strings.Builder, c Choice) {
+	layout, variant := c.KeyboardLayout, c.KeyboardVariant
+	if validateKeyboard(layout, variant) != nil {
+		layout, variant = defaultLayout, ""
+	}
+	tz := c.Timezone
+	if validateTimezone(tz) != nil {
+		tz = defaultTimezone
+	}
+	b.WriteString("    - name: \"Hadron keyboard layout and timezone\"\n")
+	b.WriteString("      files:\n")
+	fmt.Fprintf(b, "        - path: %s\n", keyboardFile)
+	b.WriteString("          permissions: 0644\n")
+	b.WriteString("          content: |\n")
+	fmt.Fprintf(b, "            XKB_LAYOUT=%s\n", layout)
+	fmt.Fprintf(b, "            XKB_VARIANT=%s\n", variant)
+	// The i3 variant runs an X server (XLibre), which reads its layout from
+	// xorg.conf.d, not from the environment. The Wayland variants have no X
+	// server that reads it; Xwayland takes the compositor's keymap.
+	b.WriteString("        - path: /etc/X11/xorg.conf.d/00-keyboard.conf\n")
+	b.WriteString("          permissions: 0644\n")
+	b.WriteString("          content: |\n")
+	b.WriteString("            # Written by the Hadron Desktop installer.\n")
+	b.WriteString("            Section \"InputClass\"\n")
+	b.WriteString("                Identifier \"hadron-keyboard\"\n")
+	b.WriteString("                MatchIsKeyboard \"on\"\n")
+	fmt.Fprintf(b, "                Option \"XkbLayout\" \"%s\"\n", layout)
+	if variant != "" {
+		fmt.Fprintf(b, "                Option \"XkbVariant\" \"%s\"\n", variant)
+	}
+	b.WriteString("            EndSection\n")
+	b.WriteString("      commands:\n")
+	// musl reads /etc/localtime. timedatectl makes the same link, but it
+	// needs D-Bus, which the initramfs stage does not have.
+	fmt.Fprintf(b, "        - %q\n", "ln -sfn /usr/share/zoneinfo/"+tz+" /etc/localtime")
+	// The image's /etc/vconsole.conf sets the console FONT. Add the KEYMAP
+	// to it instead of replacing the file.
+	if km := c.ConsoleKeymap; km != "" && consoleKeymapName.MatchString(km) {
+		fmt.Fprintf(b, "        - %q\n",
+			"touch /etc/vconsole.conf && sed -i '/^KEYMAP=/d' /etc/vconsole.conf && echo 'KEYMAP="+km+"' >> /etc/vconsole.conf")
+	}
 }
 
 // topLevelKey matches a `users:` or `install:` key at the start of a line,

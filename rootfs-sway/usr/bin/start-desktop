@@ -8,6 +8,11 @@
 # dbus-run-session unless something upstream already provided one.
 [ -f /etc/sway-desktop/env ] && . /etc/sway-desktop/env
 [ -f /etc/sway-desktop/env.local ] && . /etc/sway-desktop/env.local
+# The keyboard layout chosen in the installer, as XKB_DEFAULT_LAYOUT and
+# XKB_DEFAULT_VARIANT. ly sources /etc/profile only for sh and bash users, so
+# read it here too. The config's `input type:keyboard` block names no layout,
+# so sway uses these.
+[ -f /etc/profile.d/hadron-keyboard.sh ] && . /etc/profile.d/hadron-keyboard.sh
 
 if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && command -v dbus-run-session >/dev/null 2>&1; then
     exec dbus-run-session -- sway
