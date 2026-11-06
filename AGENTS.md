@@ -18,15 +18,15 @@ The baseline:
 | Boot splash and branded login | `kairos-splash`; ly, or cosmic-greeter for COSMIC. `make check-boot-ux` asserts the subtitle per variant |
 | Session identity | `/etc/hadron-desktop/session`, `/etc/issue`, `/etc/motd` in `rootfs-<variant>/`; `/etc/hadron-desktop/release` written in the Dockerfile `kairos` stage |
 | Notifications server | mako (sway), dunst (i3), cosmic-notifications, Noctalia |
-| Update tray icon (hadron-update) | the tray updater, `docs/superpowers/specs/2026-11-05-tray-updater-design.md`. Until it lands: `hadron-update notify` at session start. Not on agent |
-| Upgrades only by `admin`, through polkit | polkit with the `admin` rule (sway and i3 gain it with the tray updater) |
-| System tray that hosts StatusNotifierItem icons | waybar `tray`, i3bar + snixembed, COSMIC status area, Noctalia `tray` |
+| Update tray icon (hadron-update) | `hadron-update tray` at session start, talking to the root `hadron-updated` daemon over D-Bus; see `docs/superpowers/specs/2026-11-05-tray-updater-design.md`. Not on agent, which keeps `hadron-update upgrade` through sudo |
+| Upgrades only by `admin`, through polkit | polkit with the `admin` rule (`50-hadron-update.rules`) on all four variants. Agent removes the update service and its polkit files |
+| System tray that hosts StatusNotifierItem icons | waybar `tray`, i3bar + snixembed (started from `config.d/30-update-tray.conf`), COSMIC status area, Noctalia `tray` |
 | First-login welcome | `hadron-welcome`; COSMIC uses cosmic-initial-setup |
 | Keyboard habits (tiling variants) | Super+Enter terminal, Super+D launcher, Super+Shift+Q close, Super+Shift+E power menu, Super+F1 shortcut sheet (`hadron-help`) |
 | Network, audio, power menus | `hadron-wifi-menu`, `hadron-audio-menu`, `hadron-power-menu`, or the shell's own panels |
 | Audio | PipeWire and WirePlumber started with the session, media keys work |
-| Screenshots and screen lock | a key binding for each. Known gaps: sway and i3 have no screen locker, i3 has no screenshot key |
-| Flatpak apps with working file dialogs and dark mode | flatpak, xdg-desktop-portal and a backend reporting `color-scheme`. Known gap: sway and i3 have no portal yet |
+| Screenshots and screen lock | a key binding for each. Lockers: swaylock (sway, niri), i3lock (i3), COSMIC's own; sway (swayidle) and i3 (xss-lock) also lock on idle and before suspend. i3 takes screenshots with `hadron-screenshot`. The agent overlay starts no locker |
+| Flatpak apps with working file dialogs and dark mode | flatpak, xdg-desktop-portal and a backend reporting `color-scheme`: the GTK backend with its Settings interface (plus xdg-desktop-portal-wlr on sway) on sway, i3 and niri, reading the `prefer-dark` override in gsettings-desktop-schemas; COSMIC's own portal |
 | Hardware keys | volume, mute, brightness, play/pause/next, with an on-screen level. Known gap: sway and i3 lack brightness and media keys |
 | Hadron menu on Super+Escape | one menu for apps, Wi-Fi, Bluetooth, audio, capture, update, help and power. Planned, not in any variant yet |
 | Bluetooth menu | pair, connect, power. Known gap: sway and i3 open a raw `bluetoothctl` |

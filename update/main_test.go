@@ -2,6 +2,10 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,15 +16,29 @@ import (
 	"testing"
 )
 
-// fakeGitHub serves /repos/<repo>/releases/latest with the given tag.
+// fakeGitHub serves /repos/<repo>/releases/latest with the given tag, and an
+// empty /releases list.
 func fakeGitHub(t *testing.T, tag string) {
 	t.Helper()
+	fakeGitHubReleases(t, tag, `[]`)
+}
+
+// fakeGitHubReleases is fakeGitHub with a chosen /releases list body.
+func fakeGitHubReleases(t *testing.T, tag, releases string) {
+	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/repos/kairos-community/hadron-desktop/releases/latest" {
+		switch r.URL.Path {
+		case "/repos/kairos-community/hadron-desktop/releases/latest":
+			fmt.Fprintf(w, `{"tag_name":%q,"html_url":"https://example.invalid/%s"}`, tag, tag)
+		case "/repos/kairos-community/hadron-desktop/releases":
+			if r.URL.Query().Get("per_page") != "100" {
+				http.Error(w, "want per_page=100", http.StatusBadRequest)
+				return
+			}
+			fmt.Fprint(w, releases)
+		default:
 			http.NotFound(w, r)
-			return
 		}
-		fmt.Fprintf(w, `{"tag_name":%q,"html_url":"https://example.invalid/%s"}`, tag, tag)
 	}))
 	t.Cleanup(srv.Close)
 	t.Setenv("HADRON_UPDATE_API", srv.URL)
@@ -46,6 +64,29 @@ func fakeTool(t *testing.T, code int) (path, argvFile string) {
 // package nobody made public.
 func fakeRegistry(t *testing.T, private bool, published ...string) {
 	t.Helper()
+	newFakeRegistry(t, private, published...)
+}
+
+// fakeDoc is a manifest or blob a fakeReg serves.
+type fakeDoc struct {
+	body        []byte
+	contentType string
+}
+
+// fakeReg is fakeRegistry's server plus the images fakeImage published on it.
+// docs is keyed by "<name>/manifests/<tag or digest>" or "<name>/blobs/<digest>".
+type fakeReg struct {
+	docs map[string]fakeDoc
+	// omitDigest drops Docker-Content-Digest, as some registries do.
+	omitDigest bool
+	// headerDigest, when set, is sent as Docker-Content-Digest instead of the
+	// real one.
+	headerDigest string
+}
+
+func newFakeRegistry(t *testing.T, private bool, published ...string) *fakeReg {
+	t.Helper()
+	reg := &fakeReg{docs: map[string]fakeDoc{}}
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -55,14 +96,27 @@ func fakeRegistry(t *testing.T, private bool, published ...string) {
 				return
 			}
 			fmt.Fprint(w, `{"token":"anon"}`)
-		case strings.HasPrefix(r.URL.Path, "/v2/kairos-community/hadron-desktop/manifests/"):
+		case strings.HasPrefix(r.URL.Path, "/v2/kairos-community/hadron-desktop/"):
 			if r.Header.Get("Authorization") != "Bearer anon" {
 				w.Header().Set("WWW-Authenticate", fmt.Sprintf(
 					`Bearer realm="%s/token",service="ghcr.io",scope="repository:kairos-community/hadron-desktop:pull"`, srv.URL))
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
-			tag := strings.TrimPrefix(r.URL.Path, "/v2/kairos-community/hadron-desktop/manifests/")
+			key := strings.TrimPrefix(r.URL.Path, "/v2/kairos-community/")
+			if d, ok := reg.docs[key]; ok {
+				w.Header().Set("Content-Type", d.contentType)
+				if !reg.omitDigest {
+					h := digestOf(d.body)
+					if reg.headerDigest != "" {
+						h = reg.headerDigest
+					}
+					w.Header().Set("Docker-Content-Digest", h)
+				}
+				w.Write(d.body)
+				return
+			}
+			tag := strings.TrimPrefix(key, "hadron-desktop/manifests/")
 			for _, p := range published {
 				if p == tag {
 					return
@@ -75,20 +129,84 @@ func fakeRegistry(t *testing.T, private bool, published ...string) {
 	}))
 	t.Cleanup(srv.Close)
 	t.Setenv("HADRON_UPDATE_REGISTRY", srv.URL)
+	return reg
 }
 
-func setup(t *testing.T, installed, latest string) {
+func digestOf(b []byte) string {
+	sum := sha256.Sum256(b)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// image publishes name:tag. arch is a comma-separated list: one entry makes a
+// single manifest, several (or index) make an index. labels go on the amd64
+// config only; every other architecture gets {"wrong-arch": "yes"}, so a test
+// can tell which config Resolve read. It returns the digest of what the tag
+// points at.
+func (r *fakeReg) image(t *testing.T, name, tag, arch string, labels map[string]string, index bool) string {
 	t.Helper()
-	fakeRegistry(t, false, "sway-v0.1.0", "sway-v0.2.0")
-	t.Setenv("HADRON_UPDATE_RELEASE_FILE",
-		writeRelease(t, strings.Replace(goodRelease, `"v0.1.0"`, installed, 1)))
+	const oci = "application/vnd.oci.image.manifest.v1+json"
+	var entries []map[string]any
+	var single []byte
+	for _, a := range strings.Split(arch, ",") {
+		l := map[string]string{"wrong-arch": "yes"}
+		if a == "amd64" {
+			l = labels
+		}
+		cfg, _ := json.Marshal(map[string]any{
+			"os": "linux", "architecture": a, "config": map[string]any{"Labels": l},
+		})
+		r.docs[name+"/blobs/"+digestOf(cfg)] = fakeDoc{cfg, "application/vnd.oci.image.config.v1+json"}
+		m, _ := json.Marshal(map[string]any{
+			"schemaVersion": 2, "mediaType": oci,
+			"config": map[string]any{"mediaType": "application/vnd.oci.image.config.v1+json", "digest": digestOf(cfg), "size": len(cfg)},
+		})
+		r.docs[name+"/manifests/"+digestOf(m)] = fakeDoc{m, oci}
+		entries = append(entries, map[string]any{
+			"mediaType": oci, "digest": digestOf(m), "size": len(m),
+			"platform": map[string]string{"os": "linux", "architecture": a},
+		})
+		single = m
+	}
+	if !index && len(entries) == 1 {
+		r.docs[name+"/manifests/"+tag] = fakeDoc{single, oci}
+		return digestOf(single)
+	}
+	idx, _ := json.Marshal(map[string]any{
+		"schemaVersion": 2, "mediaType": "application/vnd.oci.image.index.v1+json", "manifests": entries,
+	})
+	r.docs[name+"/manifests/"+tag] = fakeDoc{idx, "application/vnd.oci.image.index.v1+json"}
+	r.docs[name+"/manifests/"+digestOf(idx)] = r.docs[name+"/manifests/"+tag]
+	return digestOf(idx)
+}
+
+// fakeImage starts a public fake registry holding one image; see fakeReg.image.
+func fakeImage(t *testing.T, name, tag, arch string, labels map[string]string, index bool) string {
+	t.Helper()
+	return newFakeRegistry(t, false).image(t, name, tag, arch, labels, index)
+}
+
+func setup(t *testing.T, installed, latest string) { setupFlavor(t, "sway", installed, latest) }
+
+// setupAgent is setup for the agent flavor, the only one that still installs
+// directly (sudo + kairos-agent) instead of through the daemon.
+func setupAgent(t *testing.T, installed, latest string) { setupFlavor(t, "agent", installed, latest) }
+
+func setupFlavor(t *testing.T, flavor, installed, latest string) {
+	t.Helper()
+	fakeRegistry(t, false, "sway-v0.1.0", "sway-v0.2.0", "agent-v0.1.0", "agent-v0.2.0")
+	rf := strings.Replace(goodRelease, `"v0.1.0"`, installed, 1)
+	rf = strings.Replace(rf, "FLAVOR=sway", "FLAVOR="+flavor, 1)
+	t.Setenv("HADRON_UPDATE_RELEASE_FILE", writeRelease(t, rf))
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	fakeGitHub(t, latest)
 	oldRoot, oldReboot := needRoot, rebootCommand
 	needRoot = func() bool { return false }
 	// Never let a test reach the real `systemctl reboot`.
 	rebootCommand = func() *exec.Cmd { return exec.Command("false") }
-	t.Cleanup(func() { needRoot, rebootCommand = oldRoot, oldReboot })
+	// No test may open the real system bus; tests that want a daemon use useDaemon.
+	oldDial := dialDaemon
+	dialDaemon = func() (daemonClient, error) { return nil, errors.New("no daemon in this test") }
+	t.Cleanup(func() { needRoot, rebootCommand, dialDaemon = oldRoot, oldReboot, oldDial })
 }
 
 func runCLI(stdin string, args ...string) (int, string, string) {
@@ -115,7 +233,7 @@ func TestCheckExitCodes(t *testing.T) {
 }
 
 func TestUpgradeRunsKairosAgentWithTheFlavorImage(t *testing.T) {
-	setup(t, "v0.1.0", "v0.2.0")
+	setupAgent(t, "v0.1.0", "v0.2.0")
 	agent, argv := fakeTool(t, 0)
 	t.Setenv("HADRON_UPDATE_AGENT", agent)
 
@@ -130,7 +248,7 @@ func TestUpgradeRunsKairosAgentWithTheFlavorImage(t *testing.T) {
 		t.Fatalf("code %d, stderr %q", code, errOut)
 	}
 	got, _ := os.ReadFile(argv)
-	want := "upgrade\n--source\noci:ghcr.io/kairos-community/hadron-desktop:sway-v0.2.0\n"
+	want := "upgrade\n--source\noci:ghcr.io/kairos-community/hadron-desktop:agent-v0.2.0\n"
 	if string(got) != want {
 		t.Fatalf("kairos-agent argv = %q, want %q", got, want)
 	}
@@ -143,7 +261,7 @@ func TestUpgradeRunsKairosAgentWithTheFlavorImage(t *testing.T) {
 }
 
 func TestUpgradeCancelledTouchesNothing(t *testing.T) {
-	setup(t, "v0.1.0", "v0.2.0")
+	setupAgent(t, "v0.1.0", "v0.2.0")
 	agent, argv := fakeTool(t, 0)
 	t.Setenv("HADRON_UPDATE_AGENT", agent)
 
@@ -156,7 +274,7 @@ func TestUpgradeCancelledTouchesNothing(t *testing.T) {
 }
 
 func TestUpgradeUpToDateIsANoop(t *testing.T) {
-	setup(t, "v0.2.0", "v0.2.0")
+	setupAgent(t, "v0.2.0", "v0.2.0")
 	agent, argv := fakeTool(t, 0)
 	t.Setenv("HADRON_UPDATE_AGENT", agent)
 
@@ -169,7 +287,7 @@ func TestUpgradeUpToDateIsANoop(t *testing.T) {
 }
 
 func TestUpgradePinnedVersionAndFailure(t *testing.T) {
-	setup(t, "v0.2.0", "v0.2.0")
+	setupAgent(t, "v0.2.0", "v0.2.0")
 	agent, argv := fakeTool(t, 3)
 	t.Setenv("HADRON_UPDATE_AGENT", agent)
 
@@ -180,7 +298,7 @@ func TestUpgradePinnedVersionAndFailure(t *testing.T) {
 		t.Fatalf("code %d, stderr %q", code, errOut)
 	}
 	got, _ := os.ReadFile(argv)
-	if !strings.Contains(string(got), "hadron-desktop:sway-v0.1.0") {
+	if !strings.Contains(string(got), "hadron-desktop:agent-v0.1.0") {
 		t.Fatalf("kairos-agent argv = %q", got)
 	}
 
@@ -189,10 +307,19 @@ func TestUpgradePinnedVersionAndFailure(t *testing.T) {
 	}
 }
 
+// notifyDaemon is a daemon that has checked and found status.
+func notifyDaemon(t *testing.T, st Status) *fakeDaemon {
+	f := okDaemon()
+	f.status = st
+	useDaemon(t, f)
+	return f
+}
+
 func TestNotifyOnceNotifiesOncePerRelease(t *testing.T) {
 	setup(t, "v0.1.0", "v0.2.0")
 	busctl, argv := fakeTool(t, 0)
 	t.Setenv("HADRON_UPDATE_BUSCTL", busctl)
+	f := notifyDaemon(t, Status{State: StateUpdateAvailable, Installed: "v0.1.0", Latest: "v0.2.0"})
 
 	if code, _, errOut := runCLI("", "notify", "--once"); code != exitOK {
 		t.Fatalf("code %d, stderr %q", code, errOut)
@@ -201,6 +328,9 @@ func TestNotifyOnceNotifiesOncePerRelease(t *testing.T) {
 	if !strings.Contains(string(got), "Hadron Desktop v0.2.0 is available") ||
 		!strings.Contains(string(got), "org.freedesktop.Notifications") {
 		t.Fatalf("busctl argv = %q", got)
+	}
+	if !f.called("Check") || !f.called("Inspect") {
+		t.Fatalf("calls %v: notify must have the daemon check and inspect the image", f.calls)
 	}
 
 	os.Remove(argv)
@@ -216,12 +346,35 @@ func TestNotifyOnceSilentWhenUpToDate(t *testing.T) {
 	setup(t, "v0.2.0", "v0.2.0")
 	busctl, argv := fakeTool(t, 0)
 	t.Setenv("HADRON_UPDATE_BUSCTL", busctl)
+	notifyDaemon(t, Status{State: StateUpToDate, Installed: "v0.2.0", Latest: "v0.2.0"})
 
 	if code, _, _ := runCLI("", "notify", "--once"); code != exitOK {
 		t.Fatal("notify failed")
 	}
 	if _, err := os.Stat(argv); !os.IsNotExist(err) {
 		t.Fatal("notified on an up-to-date system")
+	}
+}
+
+// A pinned system reports up-to-date even with a newer release out.
+func TestNotifyOnceSilentWhilePinned(t *testing.T) {
+	setup(t, "v0.1.0", "v0.2.0")
+	busctl, argv := fakeTool(t, 0)
+	t.Setenv("HADRON_UPDATE_BUSCTL", busctl)
+	notifyDaemon(t, Status{State: StateUpToDate, Installed: "v0.1.0", Latest: "v0.2.0", Pin: "ghcr.io/x/y:z"})
+
+	if code, _, _ := runCLI("", "notify", "--once"); code != exitOK {
+		t.Fatal("notify failed")
+	}
+	if _, err := os.Stat(argv); !os.IsNotExist(err) {
+		t.Fatal("notified while pinned")
+	}
+}
+
+func TestNotifyOnceWithoutTheService(t *testing.T) {
+	setup(t, "v0.1.0", "v0.2.0")
+	if code, _, errOut := runCLI("", "notify", "--once"); code != exitError || !strings.Contains(errOut, "not available") {
+		t.Fatalf("code %d, stderr %q", code, errOut)
 	}
 }
 
@@ -259,12 +412,12 @@ func TestNotifyArgsEndOptionParsing(t *testing.T) {
 }
 
 func TestUpgradeRefusesAnImageThatIsNotThere(t *testing.T) {
-	setup(t, "v0.1.0", "v0.3.0") // v0.3.0 has a release but no image
+	setupAgent(t, "v0.1.0", "v0.3.0") // v0.3.0 has a release but no image
 	agent, argv := fakeTool(t, 0)
 	t.Setenv("HADRON_UPDATE_AGENT", agent)
 
 	code, _, errOut := runCLI("", "upgrade", "--yes")
-	if code != exitError || !strings.Contains(errOut, "sway-v0.3.0 does not exist") {
+	if code != exitError || !strings.Contains(errOut, "agent-v0.3.0 does not exist") {
 		t.Fatalf("code %d, stderr %q", code, errOut)
 	}
 	if _, err := os.Stat(argv); !os.IsNotExist(err) {
@@ -273,8 +426,8 @@ func TestUpgradeRefusesAnImageThatIsNotThere(t *testing.T) {
 }
 
 func TestUpgradeExplainsAPrivatePackage(t *testing.T) {
-	setup(t, "v0.1.0", "v0.2.0")
-	fakeRegistry(t, true, "sway-v0.2.0")
+	setupAgent(t, "v0.1.0", "v0.2.0")
+	fakeRegistry(t, true, "agent-v0.2.0")
 	agent, argv := fakeTool(t, 0)
 	t.Setenv("HADRON_UPDATE_AGENT", agent)
 
@@ -290,7 +443,7 @@ func TestUpgradeExplainsAPrivatePackage(t *testing.T) {
 // The sudo child must not repeat the plan or the question the user already
 // answered, and must not need the registry: the parent checked it.
 func TestRootChildOnlyRunsTheAgent(t *testing.T) {
-	setup(t, "v0.1.0", "v0.2.0")
+	setupAgent(t, "v0.1.0", "v0.2.0")
 	t.Setenv("HADRON_UPDATE_REGISTRY", "http://127.0.0.1:1") // unreachable
 	agent, argv := fakeTool(t, 0)
 	t.Setenv("HADRON_UPDATE_AGENT", agent)
@@ -311,6 +464,8 @@ func TestNotifyOnceStaysQuietWithoutAnImage(t *testing.T) {
 	setup(t, "v0.1.0", "v0.3.0") // released, but no sway-v0.3.0 image
 	busctl, argv := fakeTool(t, 0)
 	t.Setenv("HADRON_UPDATE_BUSCTL", busctl)
+	f := notifyDaemon(t, Status{State: StateUpdateAvailable, Installed: "v0.1.0", Latest: "v0.3.0"})
+	f.inspectEr = []error{errors.New("manifest unknown")}
 
 	if code, _, _ := runCLI("", "notify", "--once"); code != exitError {
 		t.Fatalf("code %d, want an error naming the missing image", code)

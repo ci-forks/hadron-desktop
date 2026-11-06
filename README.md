@@ -104,18 +104,38 @@ kept under `build/sway-desktop/` and `build/i3-desktop/`.
   and before suspend.
 - **Apps:** `flatpak install flathub <app>`; `distrobox` for a mutable Linux to
   tinker in.
-- **Updates:** a desktop notification appears when a new Hadron Desktop
-  release is out. In a terminal:
+- **Updates:** a tray icon shows the installed release and tells you when a
+  new Hadron Desktop release is out; its menu checks, installs, reboots and
+  pins. Everything the icon does is also in the terminal:
 
   ```sh
-  hadron-update                 # installed vs latest release
+  hadron-update                 # installed vs latest release (same as `status`)
   hadron-update upgrade         # install the latest; asks, then offers a reboot
   hadron-update upgrade --version v0.1.2   # a specific release (also rolls back)
+  hadron-update switch <flavor> # move to another flavor's image line
+  hadron-update reboot          # reboot into the installed upgrade
+  hadron-update rollback        # boot the previous system once (no download)
   ```
+
+  Installing and rebooting go through a root service, `hadron-updated`, and
+  polkit allows them for members of the `admin` group only; other users get a
+  refusal, not a password prompt. The terminal and the tray use the same
+  service, so a job started in one shows in the other.
 
   Upgrades are A/B: `kairos-agent upgrade` writes the new image next to the
   running one, which stays untouched until the reboot, and the previous system
   is kept as the fallback boot entry.
+
+  Advanced mode is on by default: it lets you install any OCI image, not only
+  a Hadron Desktop release (`hadron-update upgrade --image REF`, or "Install
+  an image..." in the tray menu). To allow releases only, put `advanced=false`
+  in `/etc/hadron-desktop/update.conf`. An image you install on purpose is
+  pinned (`/var/lib/hadron-update/pin`): the tray shows it as pinned and stops
+  offering "updates" over it until you pick the latest release again.
+  Upgrade images are signed with cosign (keyless) and carry the labels
+  `io.kairos.hadron-desktop.{flavor,version,hadron-version}`, which the
+  updater uses to recognise a Hadron Desktop image. The agent flavor has no
+  tray and no service; its CLI keeps the direct `sudo` path.
 
 ## Boot splash
 
@@ -168,7 +188,9 @@ git push origin v1.0.0
 Every release also pushes one upgrade image per flavor,
 `ghcr.io/kairos-community/hadron-desktop:<flavor>-<tag>` (the agent image only
 after all five gates pass). `hadron-update` installs those; it only considers
-tags GitHub reports as the latest *published* release.
+tags GitHub reports as the latest *published* release. Each pushed image is
+signed with cosign (keyless, by digest) and labelled with its flavor and
+release tag; `scripts/release-manifest.sh` fails the release if they disagree.
 
 Each release carries twenty files — five ISOs, and for every ISO a checksum,
 an SPDX SBOM, and a build manifest:

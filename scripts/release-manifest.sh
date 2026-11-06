@@ -24,6 +24,28 @@ set -euo pipefail
 
 die() { echo "release-manifest: $*" >&2; exit 1; }
 
+# hadron-update decides an image is a Hadron Desktop one from these labels (the
+# keys equal the constants in update/policy.go), so an image whose labels
+# disagree with where it is published would make every installed system
+# mis-detect it. Fail the release instead.
+label_flavor=io.kairos.hadron-desktop.flavor
+label_version=io.kairos.hadron-desktop.version
+
+check_image_labels() {
+  local img="$1" want_flavor="$2" want_version="$3" got_flavor got_version
+  got_flavor="$(docker image inspect --format "{{index .Config.Labels \"$label_flavor\"}}" "$img")" \
+    || die "could not inspect the labels of $img"
+  got_version="$(docker image inspect --format "{{index .Config.Labels \"$label_version\"}}" "$img")" \
+    || die "could not inspect the labels of $img"
+  [ "$got_flavor" = "$want_flavor" ] \
+    || die "image $img has label $label_flavor='$got_flavor' but is being released as flavor '$want_flavor'"
+  [ "$got_version" = "$want_version" ] \
+    || die "image $img has label $label_version='$got_version' but is being released as tag '$want_version'"
+}
+
+# Sourced (by the label test): define the functions and stop.
+[[ "${BASH_SOURCE[0]}" != "$0" ]] && return 0
+
 [ "$#" -eq 5 ] || die "usage: $0 <flavor> <release-tag> <image> <iso-asset-path> <out.json>"
 flavor="$1" release_tag="$2" image="$3" iso_path="$4" out="$5"
 
@@ -57,6 +79,7 @@ base_digest="$(printf '%s\n' "$base_inspect" | head -n1 | cut -d@ -f2)"
 
 image_id="$(docker image inspect --format '{{.Id}}' "$image")" \
   || die "could not inspect the built image $image"
+check_image_labels "$image" "$flavor" "$release_tag"
 iso_sha256="$(cut -d' ' -f1 < "$iso_path.sha256")"
 [ -n "$iso_sha256" ] || die "empty checksum in $iso_path.sha256"
 

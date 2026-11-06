@@ -1,0 +1,22 @@
+[Unit]
+Description=Hadron Desktop update service
+Documentation=https://github.com/kairos-io/hadron-desktop
+# A stop during an upgrade would kill kairos-agent mid-write through the
+# cgroup. The service exits by itself when idle; shutdown still stops it, and
+# the daemon holds a logind inhibitor while it writes.
+RefuseManualStop=yes
+
+# Started by D-Bus activation (io.kairos.HadronUpdate1.service), so there is no
+# [Install] section. It exits on its own after some idle minutes with no job.
+[Service]
+Type=dbus
+BusName=io.kairos.HadronUpdate1
+ExecStart=/usr/bin/hadron-update daemon
+# /var/lib/hadron-update holds the pin.
+StateDirectory=hadron-update
+# /run/hadron-update holds the reboot-pending marker. It must outlive the
+# idle exit: systemd removes a RuntimeDirectory when the unit stops, and a
+# restarted daemon without the marker would accept a second install over the
+# never-booted slot. /run is a tmpfs, so the reboot still clears it.
+RuntimeDirectory=hadron-update
+RuntimeDirectoryPreserve=yes

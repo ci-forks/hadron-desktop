@@ -53,6 +53,7 @@
         "GNOME/gdk-pixbuf",
         "GNOME/json-glib",
         "GNOME/at-spi2-core",
+        "GNOME/vala",
         "NetworkManager/NetworkManager",
         "gstreamer/gstreamer",
         "pipewire/pipewire",

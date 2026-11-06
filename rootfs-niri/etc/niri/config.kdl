@@ -284,9 +284,10 @@ layout {
 // Noctalia is the shell: bar, dock, launcher, notifications, lock screen.
 // hadron-noctalia starts it with Hadron's defaults (the polkit prompt).
 spawn-at-startup "hadron-noctalia"
-// First-login welcome, and the release check that notifies about updates.
+// First-login welcome, and the update icon in Noctalia's tray, which shows
+// when a new Hadron Desktop is out and installs it.
 spawn-at-startup "hadron-welcome"
-spawn-at-startup "hadron-update" "notify"
+spawn-at-startup "hadron-update" "tray"
 
 // Apps that read these only from the environment.
 environment {

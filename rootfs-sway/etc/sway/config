@@ -72,11 +72,11 @@ exec mako
 # `loginctl lock-session`. swaylock's colours are in /etc/swaylock/config.
 exec swayidle -w timeout 300 'swaylock -f' timeout 600 'swaymsg "output * dpms off"' resume 'swaymsg "output * dpms on"' before-sleep 'swaylock -f' lock 'swaylock -f'
 exec $term
-# First-login welcome (once per user) and the release checker, which shows a
-# notification when a new Hadron Desktop is out. Both talk to mako over the
+# First-login welcome (once per user), and the update icon in waybar's tray,
+# which shows when a new Hadron Desktop is out and installs it. Both use the
 # session bus start-desktop opened.
 exec hadron-welcome
-exec hadron-update notify
+exec hadron-update tray
 
 ### Key bindings ##########################################################
 floating_modifier $mod normal
