@@ -10,6 +10,9 @@
 #   1. menuentry titles "Kairos*" -> "hadron-desktop*"
 #   2. the Tokyo Night gfxterm theme loaded from the ISO
 #   3. the quiet cmdline added to the normal boot paths (recovery/debug kept verbose)
+#   4. $hadron_vt_palette on every entry: the console's 16 colours set to the
+#      Hadron palette, as the installed menu does (rootfs/etc/kairos/branding/
+#      grubmenu.cfg); generated from theme/palette.toml by tools/gen-theme.py
 # Keep `CDLABEL=COS_LIVE`, the ($root)/boot/kernel + initrd paths, and the
 # {{NOMODESET}}/{{EXTEND_CMDLINE}} placeholders intact. AuroraBoot does NOT expand
 # those placeholders for an overlaid file (it only substitutes its own default), so
@@ -42,6 +45,8 @@ if [ -f ($root)/boot/grub2/themes/hadron/theme.txt ]; then
     set theme=($root)/boot/grub2/themes/hadron/theme.txt
 fi
 
+set hadron_vt_palette="vt.default_red=0x1a,0xf7,0x9e,0xe0,0x7a,0xbb,0x7d,0xa9,0x73,0xf7,0x9e,0xe0,0x7a,0xbb,0x7d,0xc0 vt.default_grn=0x1b,0x76,0xce,0xaf,0xa2,0x9a,0xcf,0xb1,0x7a,0x76,0xce,0xaf,0xa2,0x9a,0xcf,0xca vt.default_blu=0x26,0x8e,0x6a,0x68,0xf7,0xf7,0xff,0xd6,0xa2,0x8e,0x6a,0x68,0xf7,0xf7,0xff,0xf5"
+
 # Get model
 smbios --type 4 --get-string 5 --set model
 # For Thor we need to set the ignored clk and pd, otherwise devices will die during boot
@@ -54,42 +59,42 @@ fi
 # Template placeholders: {{NOMODESET}} and {{EXTEND_CMDLINE}} are replaced at build time.
 menuentry "hadron-desktop" --class os --unrestricted {
     echo Loading kernel...
-    linux ($root)/boot/kernel cdroot root=live:CDLABEL=COS_LIVE rd.live.dir=/ rd.live.squashimg=rootfs.squashfs net.ifnames=1 console=ttyS0 console=tty1 rd.cos.disable vga=795{{NOMODESET}} install-mode selinux=0 $thor_options rd.live.overlay.overlayfs quiet splash loglevel=3 udev.log_level=3 systemd.show_status=false rd.systemd.show_status=false{{EXTEND_CMDLINE}}
+    linux ($root)/boot/kernel cdroot root=live:CDLABEL=COS_LIVE rd.live.dir=/ rd.live.squashimg=rootfs.squashfs net.ifnames=1 console=ttyS0 console=tty1 rd.cos.disable vga=795{{NOMODESET}} install-mode selinux=0 $thor_options rd.live.overlay.overlayfs quiet splash loglevel=3 udev.log_level=3 systemd.show_status=false rd.systemd.show_status=false $hadron_vt_palette{{EXTEND_CMDLINE}}
     echo Loading initrd...
     initrd ($root)/boot/initrd
 }
 
 menuentry "hadron-desktop (manual)" --class os --unrestricted {
     echo Loading kernel...
-    linux ($root)/boot/kernel cdroot root=live:CDLABEL=COS_LIVE rd.live.dir=/ rd.live.squashimg=rootfs.squashfs net.ifnames=1 console=ttyS0 console=tty1 rd.cos.disable vga=795{{NOMODESET}} selinux=0 $thor_options rd.live.overlay.overlayfs quiet splash loglevel=3 udev.log_level=3 systemd.show_status=false rd.systemd.show_status=false{{EXTEND_CMDLINE}}
+    linux ($root)/boot/kernel cdroot root=live:CDLABEL=COS_LIVE rd.live.dir=/ rd.live.squashimg=rootfs.squashfs net.ifnames=1 console=ttyS0 console=tty1 rd.cos.disable vga=795{{NOMODESET}} selinux=0 $thor_options rd.live.overlay.overlayfs quiet splash loglevel=3 udev.log_level=3 systemd.show_status=false rd.systemd.show_status=false $hadron_vt_palette{{EXTEND_CMDLINE}}
     echo Loading initrd...
     initrd ($root)/boot/initrd
 }
 
 menuentry "hadron-desktop (interactive install)" --class os --unrestricted {
     echo Loading kernel...
-    linux ($root)/boot/kernel cdroot root=live:CDLABEL=COS_LIVE rd.live.dir=/ rd.live.squashimg=rootfs.squashfs net.ifnames=1 console=ttyS0 console=tty1 rd.cos.disable vga=795{{NOMODESET}} install-mode-interactive selinux=0 $thor_options rd.live.overlay.overlayfs quiet splash loglevel=3 udev.log_level=3 systemd.show_status=false rd.systemd.show_status=false{{EXTEND_CMDLINE}}
+    linux ($root)/boot/kernel cdroot root=live:CDLABEL=COS_LIVE rd.live.dir=/ rd.live.squashimg=rootfs.squashfs net.ifnames=1 console=ttyS0 console=tty1 rd.cos.disable vga=795{{NOMODESET}} install-mode-interactive selinux=0 $thor_options rd.live.overlay.overlayfs quiet splash loglevel=3 udev.log_level=3 systemd.show_status=false rd.systemd.show_status=false $hadron_vt_palette{{EXTEND_CMDLINE}}
     echo Loading initrd...
     initrd ($root)/boot/initrd
 }
 
 menuentry "hadron-desktop (remote recovery mode)" --class os --unrestricted {
     echo Loading kernel...
-    linux ($root)/boot/kernel cdroot root=live:CDLABEL=COS_LIVE rd.live.dir=/ rd.live.squashimg=rootfs.squashfs net.ifnames=1 console=ttyS0 console=tty1 rd.cos.disable vga=795{{NOMODESET}} kairos.remote_recovery_mode selinux=0 $thor_options rd.live.overlay.overlayfs{{EXTEND_CMDLINE}}
+    linux ($root)/boot/kernel cdroot root=live:CDLABEL=COS_LIVE rd.live.dir=/ rd.live.squashimg=rootfs.squashfs net.ifnames=1 console=ttyS0 console=tty1 rd.cos.disable vga=795{{NOMODESET}} kairos.remote_recovery_mode selinux=0 $thor_options rd.live.overlay.overlayfs $hadron_vt_palette{{EXTEND_CMDLINE}}
     echo Loading initrd...
     initrd ($root)/boot/initrd
 }
 
 menuentry "hadron-desktop (boot local node from livecd)" --class os --unrestricted {
     echo Loading kernel...
-    linux ($root)/boot/kernel cdroot root=live:CDLABEL=COS_LIVE rd.live.dir=/ rd.live.squashimg=rootfs.squashfs net.ifnames=1 console=ttyS0 console=tty1 kairos.boot_live_mode vga=795{{NOMODESET}} selinux=0 $thor_options rd.live.overlay.overlayfs quiet splash loglevel=3 udev.log_level=3 systemd.show_status=false rd.systemd.show_status=false{{EXTEND_CMDLINE}}
+    linux ($root)/boot/kernel cdroot root=live:CDLABEL=COS_LIVE rd.live.dir=/ rd.live.squashimg=rootfs.squashfs net.ifnames=1 console=ttyS0 console=tty1 kairos.boot_live_mode vga=795{{NOMODESET}} selinux=0 $thor_options rd.live.overlay.overlayfs quiet splash loglevel=3 udev.log_level=3 systemd.show_status=false rd.systemd.show_status=false $hadron_vt_palette{{EXTEND_CMDLINE}}
     echo Loading initrd...
     initrd ($root)/boot/initrd
 }
 
 menuentry "hadron-desktop (debug)" --class os --unrestricted {
     echo Loading kernel...
-    linux ($root)/boot/kernel cdroot root=live:CDLABEL=COS_LIVE rd.live.dir=/ rd.live.squashimg=rootfs.squashfs net.ifnames=1 console=tty0 rd.debug rd.shell rd.cos.disable rd.immucore.debug vga=795{{NOMODESET}} selinux=0 $thor_options rd.live.overlay.overlayfs{{EXTEND_CMDLINE}}
+    linux ($root)/boot/kernel cdroot root=live:CDLABEL=COS_LIVE rd.live.dir=/ rd.live.squashimg=rootfs.squashfs net.ifnames=1 console=tty0 rd.debug rd.shell rd.cos.disable rd.immucore.debug vga=795{{NOMODESET}} selinux=0 $thor_options rd.live.overlay.overlayfs $hadron_vt_palette{{EXTEND_CMDLINE}}
     echo Loading initrd...
     initrd ($root)/boot/initrd
 }

@@ -1,24 +1,36 @@
 #!/usr/bin/env python3
-"""Generate the Tokyo Night GRUB background image.
+"""Generate the Hadron GRUB background image.
 
 Emits an uncompressed 24-bit TGA — GRUB's most reliably decoded image format.
 (GRUB's png.mod rejects perfectly valid PNGs with "unsupported format", which
 cascades to gfxmenu discarding the whole theme; tga.mod decodes cleanly.) Output
-is a dark Tokyo Night backdrop (vertical #1a1b26 -> #16161e gradient with a faint
-blue glow up top), chosen to sit well behind the light menu text. Stdlib only, so
-no Pillow/ImageMagick in the build. Regenerate with:
+is the plain Hadron background (vertical base -> crust gradient with a faint
+accent glow up top, colours from theme/palette.toml), chosen to sit well behind
+the light menu text; tools/gen-wallpaper.py draws the desktop wallpapers on the
+same recipe. Stdlib only, so no Pillow/ImageMagick in the build. Regenerate
+after a palette edit with:
 
     python3 tools/gen-grub-bg.py rootfs/etc/kairos/branding/hadron-theme/background.tga
 """
 import struct
 import sys
+import tomllib
+from pathlib import Path
 
 W, H = 1280, 800
 
-# Tokyo Night anchors.
-TOP = (0x1A, 0x1B, 0x26)      # bg
-BOT = (0x16, 0x16, 0x1E)      # bg_dark
-GLOW = (0x7A, 0xA2, 0xF7)     # blue accent for the top glow
+with open(Path(__file__).resolve().parent.parent / "theme" / "palette.toml", "rb") as _f:
+    _NIGHT = tomllib.load(_f)["night"]
+
+
+def _rgb(role):
+    h = _NIGHT[role]
+    return tuple(int(h[i:i + 2], 16) for i in (1, 3, 5))
+
+
+TOP = _rgb("base")       # gradient top
+BOT = _rgb("crust")      # gradient bottom
+GLOW = _rgb("accent")    # the faint glow at the top
 
 
 def lerp(a, b, t):

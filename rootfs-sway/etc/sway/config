@@ -43,8 +43,12 @@ client.focused_inactive $border  $bg      $dim   $border   $border
 client.unfocused        $border  $bg      $dim   $border   $bg
 client.urgent           $red     $red     $fg    $red      $red
 
-# Wallpaper (swaybg renders a solid Tokyo Night background)
+# Wallpaper: the Hadron orbits, scaled to fill each output. The solid line
+# first, because sway rejects an `output bg` whose file is missing (and swaybg
+# paints the fallback colour only if a file it found will not load), so either
+# way the desktop stays $bg rather than sway's grey.
 output * bg $bg solid_color
+output * bg /usr/share/backgrounds/hadron/hadron-orbits-night-3840x2160.png fill $bg
 
 ### Input #################################################################
 input type:touchpad {

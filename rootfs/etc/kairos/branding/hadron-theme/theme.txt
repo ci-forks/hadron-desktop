@@ -67,10 +67,10 @@ terminal-font: "Unifont Regular 16"
     height       = 16
     show_text    = true
     font         = "Unifont Regular 16"
-    text_color   = "#565f89"
+    text_color   = "#737aa2"
     fg_color     = "#7aa2f7"
     bg_color     = "#1a1b26"
-    border_color = "#3b4261"
+    border_color = "#414868"
     text         = "@TIMEOUT_NOTIFICATION_MIDDLE@"
 }
 
@@ -80,7 +80,7 @@ terminal-font: "Unifont Regular 16"
     left  = 0
     width = 100%
     align = "center"
-    color = "#565f89"
+    color = "#737aa2"
     font  = "Unifont Regular 16"
     text  = "up/down select   enter boot   e edit   c console"
 }

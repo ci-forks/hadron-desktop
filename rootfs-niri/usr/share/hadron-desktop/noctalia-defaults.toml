@@ -27,3 +27,15 @@ enabled = true
 [theme]
 source = "custom"
 custom_palette = "Hadron"
+
+# The Hadron wallpaper on every output, and the Hadron images in the wallpaper
+# picker. Noctalia reads wallpaper.default.path from these files (docs/user/
+# desktop/wallpaper.mdx, v5.4); picking a wallpaper in Noctalia writes the same
+# key to settings.toml, which overrides this one. Noctalia does not change the
+# wallpaper when it switches to light mode, so the day orbits are a choice in
+# the picker, next to the night ones.
+[wallpaper]
+directory = "/usr/share/backgrounds/hadron"
+
+[wallpaper.default]
+path = "/usr/share/backgrounds/hadron/hadron-orbits-night-3840x2160.png"

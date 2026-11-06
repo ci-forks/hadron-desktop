@@ -44,6 +44,20 @@ jobs:
       - name: Configs match the Hadron palette
         run: python3 tools/gen-theme.py --check
 
+      # The image build draws the wallpapers; a non-deterministic generator
+      # would make every build ship different bytes. The committed GRUB
+      # background must still be what the palette draws.
+      - name: Wallpapers are deterministic, GRUB background matches the palette
+        run: |
+          set -euo pipefail
+          for d in a b; do
+            python3 tools/gen-wallpaper.py "$RUNNER_TEMP/$d" hadron-orbits-night-480x270 hadron-plain-day-480x270
+          done
+          cmp "$RUNNER_TEMP/a/hadron-orbits-night-480x270.png" "$RUNNER_TEMP/b/hadron-orbits-night-480x270.png"
+          cmp "$RUNNER_TEMP/a/hadron-plain-day-480x270.png" "$RUNNER_TEMP/b/hadron-plain-day-480x270.png"
+          python3 tools/gen-grub-bg.py "$RUNNER_TEMP/background.tga"
+          cmp "$RUNNER_TEMP/background.tga" rootfs/etc/kairos/branding/hadron-theme/background.tga
+
       - name: Session scripts and configs parse
         shell: bash
         run: |

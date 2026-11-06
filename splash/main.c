@@ -317,7 +317,7 @@ static int text_run(double duration) {
 #define C_BODY     0x7aa2f7
 #define C_CYAN     0x7dcfff
 #define C_HOT      0xc0caf5
-#define C_SHADOW   0x3b4261
+#define C_SHADOW   0x414868
 #define C_DIM      0x565f89
 #define C_TEXT     0xa9b1d6
 

@@ -51,6 +51,8 @@ check "default entry carries install-mode" \
     "entry 'hadron-desktop' | grep -q ' install-mode '"
 check "quiet cmdline on the default entry" \
     "entry 'hadron-desktop' | grep -qF '$QUIET'"
+check "console palette on the default entry" \
+    "grep -q '^set hadron_vt_palette=\"vt.default_red=' '$CFG' && entry 'hadron-desktop' | grep -qF ' \$hadron_vt_palette'"
 check "nomodeset rendered on the default entry" \
     "entry 'hadron-desktop' | grep -q 'vga=795 nomodeset'"
 check "debug entry left verbose" \

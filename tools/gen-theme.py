@@ -3,7 +3,8 @@
 
 theme/palette.toml names each colour by its role (base, text, accent, dim...).
 The configs the programs read (sway, i3, waybar, foot, fuzzel, mako, dunst,
-dmenu, niri, st, Noctalia) stay plain files in the tree; this script only
+dmenu, niri, st, Noctalia, the GRUB theme, the boot splash, the console palette
+on the kernel command line) stay plain files in the tree; this script only
 rewrites the colour values in them, so they never drift from the palette and a
 review sees ordinary config diffs. Stdlib only. Run from anywhere:
 
@@ -15,9 +16,11 @@ How a colour is found: RULES below lists, per file, a line pattern with one
 list for one role per matching line in file order, a tuple for one role per
 slot of a line. A pattern that matches nothing, or a list whose length is not
 the number of matching lines, is an error,
-so a renamed key cannot silently stop being themed. In files marked strict, a
-colour that no rule claims is an error too: add a rule for it (or use a role
-name, as waybar's @define-color does) instead of a literal hex.
+so a renamed key cannot silently stop being themed. The VT_PALETTE files hold
+a generated value instead: the kernel's vt.default_red/grn/blu lists, which
+must be present. In files marked strict, a colour that no rule claims is an
+error too: add a rule for it (or use a role name, as waybar's @define-color
+does) instead of a literal hex.
 
 --check also enforces the contrast floors in CONTRAST, so a palette edit cannot
 make text unreadable.
@@ -72,7 +75,7 @@ RULES = {
     "rootfs-sway/etc/sway/config": ("hash", "hash", WM_VARS),
     "rootfs-i3/etc/i3/config": ("hash", "hash", WM_VARS + [
         DMENU,
-        (r"^exec --no-startup-id hadron-xroot '#{hex}'$", "base"),
+        (r"^exec_always --no-startup-id hadron-xroot '#{hex}' /usr/share/backgrounds/hadron/[\w.-]+\.png$", "base"),
         (r"^set \$lock i3lock .*--color={hex}$", "base"),
     ]),
     "rootfs-i3/usr/bin/hadron-screenshot": ("hash", "hash", [
@@ -126,6 +129,29 @@ RULES = {
         (r"^\s+inactive-color \"#{hex}\"$", "border"),
         (r"^\s+urgent-color \"#{hex}\"$", "error"),
     ]),
+    # GRUB menu theme (live and installed). The footer and countdown are text
+    # to read, so dim; the subtitle under the wordmark is decoration, so muted.
+    "rootfs/etc/kairos/branding/hadron-theme/theme.txt": ("hash", "hash", [
+        (r'^\s+color\s+= "#{hex}"$', ["accent", "muted", "dim"]),  # wordmark, subtitle, footer
+        (r'^\s+item_color\s+= "#{hex}"$', "subtext"),
+        (r'^\s+selected_item_color\s+= "#{hex}"$', "glow"),
+        (r'^\s+text_color\s+= "#{hex}"$', "dim"),
+        (r'^\s+fg_color\s+= "#{hex}"$', "accent"),
+        (r'^\s+bg_color\s+= "#{hex}"$', "base"),
+        (r'^\s+border_color\s+= "#{hex}"$', "border"),
+    ]),
+    # The boot splash's framebuffer colours (its text-mode fallback uses the
+    # console palette below by index).
+    "splash/main.c": (None, "hash", [
+        (r"^#define C_BG_TOP\s+0x{hex}$", "base"),
+        (r"^#define C_BG_BOT\s+0x{hex}$", "crust"),
+        (r"^#define C_(?:GLOW|BODY)\s+0x{hex}$", "accent"),
+        (r"^#define C_CYAN\s+0x{hex}$", "glow"),
+        (r"^#define C_HOT\s+0x{hex}$", "text"),
+        (r"^#define C_SHADOW\s+0x{hex}$", "border"),
+        (r"^#define C_DIM\s+0x{hex}$", "muted"),
+        (r"^#define C_TEXT\s+0x{hex}$", "subtext"),
+    ]),
     # st: the sed that sets its default colours (the rest of the Dockerfile
     # is full of digests, so it is not strict).
     "Dockerfile": (None, "hash", [
@@ -135,6 +161,17 @@ RULES = {
 }
 
 NOCTALIA = "rootfs-niri/usr/share/hadron-desktop/noctalia-palettes/Hadron.json"
+
+# The Linux console's 16 colours, set from the kernel command line so the boot
+# messages, ly and the installer sit on the desktop's navy instead of black.
+# It is the terminal palette (FOOT above) with two changes for the console:
+# colour 0 is also the console's background, so it is base, not crust; and
+# colour 8 is the installer's and systemd's grey text, so it is dim, not the
+# border grey (2:1 on base).
+VT_ROLES = (["base", "error", "success", "warning", "accent", "violet", "glow", "subtext"]
+            + ["dim", "error", "success", "warning", "accent", "violet", "glow", "text"])
+VT_PARAMS = re.compile(r"vt\.default_red=\S+ vt\.default_grn=\S+ vt\.default_blu=[0-9a-fx,]+")
+VT_PALETTE = ["rootfs/etc/kairos/branding/grubmenu.cfg", "auroraboot/live-grub.cfg.tmpl"]
 
 # (foreground roles, background roles, minimum ratio), checked in both modes.
 # dim is for inactive labels: below text contrast on purpose, but at least the
@@ -209,6 +246,19 @@ def theme_file(rel, text, night):
     return "\n".join(lines), errors
 
 
+def vt_params(night):
+    """vt.default_red=... grn ... blu, one comma list of 16 per channel."""
+    chans = [[night[r][i:i + 2] for r in VT_ROLES] for i in (1, 3, 5)]
+    return " ".join(f"vt.default_{name}=" + ",".join(f"0x{v}" for v in vals)
+                    for name, vals in zip(("red", "grn", "blu"), chans))
+
+
+def vt_file(rel, text, night):
+    if not VT_PARAMS.search(text):
+        return text, [f"{rel}: no vt.default_red/grn/blu parameters to set"]
+    return VT_PARAMS.sub(vt_params(night), text), []
+
+
 def noctalia_palette(pal):
     """Noctalia's custom palette JSON (docs/user/theming/palette.mdx, v5)."""
     out = {}
@@ -267,6 +317,11 @@ def main():
     for rel in RULES:
         text = (ROOT / rel).read_text()
         new, errs = theme_file(rel, text, pal["night"])
+        errors += errs
+        outputs[rel] = (text, new)
+    for rel in VT_PALETTE:
+        text = (ROOT / rel).read_text()
+        new, errs = vt_file(rel, text, pal["night"])
         errors += errs
         outputs[rel] = (text, new)
     path = ROOT / NOCTALIA

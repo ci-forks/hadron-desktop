@@ -1387,6 +1387,24 @@ RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://github.com/rsm
     install -Dm0644 -t $l/jetbrains-mono jbm/OFL.txt && \
     rm -rf inter.zip jbm.zip inter jbm
 
+# The Hadron wallpapers, drawn at build time from theme/palette.toml by
+# tools/gen-wallpaper.py (stdlib Python, fixed dither seed, no network), so a
+# palette edit reaches them and the repository carries no multi-megabyte PNGs.
+# Every variant gets the night orbits (the desktop) and the plain night image
+# (swaylock); niri and COSMIC, whose shells have a light mode, also get the day
+# orbits. The 4K images are scaled down to fit smaller screens.
+FROM toolchain AS hadron-wallpapers
+COPY theme/palette.toml /build/theme/palette.toml
+COPY tools/gen-wallpaper.py /build/tools/gen-wallpaper.py
+RUN python3 /build/tools/gen-wallpaper.py /hadron-wallpapers/usr/share/backgrounds/hadron \
+      hadron-orbits-night-3840x2160 hadron-plain-night-1920x1080
+
+FROM toolchain AS hadron-wallpapers-day
+COPY theme/palette.toml /build/theme/palette.toml
+COPY tools/gen-wallpaper.py /build/tools/gen-wallpaper.py
+RUN python3 /build/tools/gen-wallpaper.py /hadron-wallpapers-day/usr/share/backgrounds/hadron \
+      hadron-orbits-day-3840x2160
+
 # --- docker (static bundle) — rootful OCI containers ------------------------
 # Docker's daemon + CLI + containerd + runc ship as fully-static Go binaries in
 # the official static bundle (a musl-friendly, no-libc-dependency pattern).
@@ -2538,8 +2556,8 @@ RUN DESTDIR=/i3 ninja -C buildDir install
 
 
 # Native X11 desktop tools: xauth for Ly's X session cookie, st terminal, dmenu
-# launcher, xsel clipboard, and a tiny root-window color helper. These replace
-# foot/fuzzel/wl-clipboard/swaybg.
+# launcher and xsel clipboard. These replace foot/fuzzel/wl-clipboard; the
+# hadron-xroot stage below replaces swaybg.
 FROM toolchain AS x11-desktop-tools
 COPY --from=xorgproto /xorgproto /
 COPY --from=xcbproto /xcbproto /
@@ -2548,7 +2566,6 @@ COPY --from=libxcb /libxcb /
 COPY --from=x11-libs /x11-libs /
 COPY --from=freetype /freetype /
 COPY --from=fontconfig /fontconfig /
-COPY tools/hadron-xroot.c /build/hadron-xroot.c
 RUN mkdir -p /x11-desktop-tools/usr/bin
 WORKDIR /build
 # renovate: datasource=gitlab-tags depName=xorg/app/xauth registryUrl=https://gitlab.freedesktop.org extractVersion=^xauth-(?<version>\d+(\.\d+)*)$
@@ -2610,7 +2627,24 @@ RUN curl --retry-all-errors -fL --retry 5 https://github.com/astrand/xclip/archi
     autoreconf -fi && ./configure ${COMMON_CONFIGURE_ARGS} && \
     make -j"$(nproc)" && install -m0755 xclip /x11-desktop-tools/usr/bin/xclip
 
-RUN cc -O2 -Wall -Wextra /build/hadron-xroot.c $(pkg-config --cflags --libs x11) -o /x11-desktop-tools/usr/bin/hadron-xroot
+
+# hadron-xroot: the i3 wallpaper. Paints a PNG scaled to fill each monitor on
+# the X root window, with cairo (already in the i3 image for i3 and dunst).
+FROM toolchain AS hadron-xroot
+COPY --from=xorgproto /xorgproto /
+COPY --from=xcbproto /xcbproto /
+COPY --from=libxau /libxau /
+COPY --from=libxcb /libxcb /
+COPY --from=x11-libs /x11-libs /
+COPY --from=pixman /pixman /
+COPY --from=freetype /freetype /
+COPY --from=fontconfig /fontconfig /
+COPY --from=libpng /libpng /
+COPY --from=cairo-x11 /cairo-x11 /
+COPY tools/hadron-xroot.c /build/hadron-xroot.c
+RUN mkdir -p /hadron-xroot/usr/bin && \
+    cc -O2 -Wall -Wextra -Werror /build/hadron-xroot.c $(pkg-config --cflags --libs cairo-xlib cairo-png xrandr x11) -lm \
+      -o /hadron-xroot/usr/bin/hadron-xroot
 
 
 # X11 notification daemon replacing mako.
@@ -2737,10 +2771,7 @@ COPY --from=libxcb /libxcb /
 COPY --from=libxau /libxau /
 COPY --from=xorgproto /xorgproto /
 ARG ZIG_VERSION=0.16.0
-# ly 1.4.x has the dur_file animation (durdraw .dur playback) used for the login
-# background AND dur_offset_alignment for centering a movie wider than the
-# console (1.3.x's offset is unsigned, so it can't shift left to centre). Needs
-# Zig 0.16.x.
+# ly 1.4.x needs Zig 0.16.x.
 # renovate: datasource=github-tags depName=fairyglade/ly extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG LY_VERSION=1.4.1
 RUN mkdir -p /ly
@@ -2751,9 +2782,6 @@ RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://github.com/fair
 WORKDIR /build/ly-src
 RUN zig build
 RUN zig build installexe -Dinit_system=systemd -Ddest_directory=/ly
-# The "Black Hole" durdraw animation shown in ly's own README (256-colour .dur),
-# used as the login background via `animation = dur_file`.
-RUN curl -fL --retry 5 --retry-delay 3 --retry-all-errors "https://codeberg.org/attachments/f336d6ac-8331-4323-91fc-0e4619803401" -o /ly/etc/ly/blackhole-smooth.dur
 
 
 # ===========================================================================
@@ -3845,6 +3873,7 @@ COPY --from=libdbusmenu /libdbusmenu /
 COPY --from=waybar /waybar /
 COPY --from=nerdfont /nerdfont /
 COPY --from=hadron-fonts /hadron-fonts /
+COPY --from=hadron-wallpapers /hadron-wallpapers /
 # Fallback icon theme and the Adwaita cursors (system default via
 # /usr/share/icons/default), as on niri.
 COPY --from=hicolor-icon-theme /hicolor-icon-theme /
@@ -3896,6 +3925,7 @@ COPY --from=xlibre /xlibre /
 COPY --from=xlibre-input-libinput /xlibre-input-libinput /
 COPY --from=i3 /i3 /
 COPY --from=x11-desktop-tools /x11-desktop-tools /
+COPY --from=hadron-xroot /hadron-xroot /
 COPY --from=dunst /dunst /
 COPY --from=i3lock /i3lock /
 COPY --from=xss-lock /xss-lock /
@@ -3919,6 +3949,7 @@ COPY --from=bluez /bluez /
 # Shared visual assets + login manager.
 COPY --from=nerdfont /nerdfont /
 COPY --from=hadron-fonts /hadron-fonts /
+COPY --from=hadron-wallpapers /hadron-wallpapers /
 COPY --from=hicolor-icon-theme /hicolor-icon-theme /
 COPY --from=adwaita-cursors /adwaita-cursors /
 COPY --from=ly /ly /
@@ -3998,6 +4029,8 @@ COPY --from=hicolor-icon-theme /hicolor-icon-theme /
 COPY --from=musl-locales /musl-locales /
 COPY --from=nerdfont /nerdfont /
 COPY --from=hadron-fonts /hadron-fonts /
+COPY --from=hadron-wallpapers /hadron-wallpapers /
+COPY --from=hadron-wallpapers-day /hadron-wallpapers-day /
 
 
 FROM scratch AS niri-rootfs
@@ -4085,6 +4118,8 @@ COPY --from=wl-clipboard /wl-clipboard /
 COPY --from=cosmic-fonts /cosmic-fonts /
 COPY --from=nerdfont /nerdfont /
 COPY --from=hadron-fonts /hadron-fonts /
+COPY --from=hadron-wallpapers /hadron-wallpapers /
+COPY --from=hadron-wallpapers-day /hadron-wallpapers-day /
 COPY --from=hicolor-icon-theme /hicolor-icon-theme /
 COPY --from=adwaita-cursors /adwaita-cursors /
 COPY --from=ly /ly /
@@ -4236,16 +4271,24 @@ RUN chmod 1777 /tmp; \
     # 1.3.x dropped the plain ly.service and the config `tty` option — the tty is
     # the systemd instance). It authenticates the cloud-config user and launches
     # the selected Sway or i3 session via its desktop entry.
-    # Tokyo Night theme for ly + the "Black Hole" .dur animation from ly's README
-    # as the login background (full_color must stay on for the 256-colour file).
+    # Hadron colours for ly, in eight-colour mode. The Linux console has 16
+    # colours: it maps ly's 24-bit values to the nearest of them by hue, so
+    # the accent came out cyan and the navy background black. Instead ly asks
+    # for the console's own colours, which the kernel command line sets to the
+    # Hadron palette (vt.default_* in grubmenu.cfg): the default background is
+    # colour 0 (base), bright white is 15 (text), bright blue is 12 (accent),
+    # red is 1 (error). The values are 0xSSRRGGBB: styling 0x40 is TB_BRIGHT,
+    # 0x01 is bold, and the low byte is a termbox colour (2 red, 5 blue,
+    # 8 white). No animation: decision 8 dropped the "Black Hole" one, whose
+    # licence is not stated.
     sed -i \
-      -e 's/^animation = .*/animation = dur_file/' \
-      -e 's|^dur_file_path = .*|dur_file_path = /etc/ly/blackhole-smooth.dur|' \
-      -e 's/^dur_offset_alignment = .*/dur_offset_alignment = center/' \
-      -e 's/^full_color = .*/full_color = true/' \
-      -e 's/^bg = .*/bg = 0x001a1b26/' \
-      -e 's/^fg = .*/fg = 0x00c0caf5/' \
-      -e 's/^border_fg = .*/border_fg = 0x007aa2f7/' \
+      -e 's/^animation = .*/animation = none/' \
+      -e 's/^full_color = .*/full_color = false/' \
+      -e 's/^bg = .*/bg = 0x00000000/' \
+      -e 's/^fg = .*/fg = 0x40000008/' \
+      -e 's/^border_fg = .*/border_fg = 0x40000005/' \
+      -e 's/^error_fg = .*/error_fg = 0x01000002/' \
+      -e 's/^error_bg = .*/error_bg = 0x00000000/' \
       -e 's/^box_title = .*/box_title = Hadron Desktop/' \
       -e 's/^clock = .*/clock = %H:%M/' \
       /etc/ly/config.ini 2>/dev/null || true; \
