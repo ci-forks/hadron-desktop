@@ -110,6 +110,10 @@ bindsym $mod+Escape        exec hadron-menu
 # help-section: System
 # help: Night light on and off
 bindsym $mod+Mod1+n        exec hadron-night-light toggle
+# The emoji picker: copies the chosen emoji to the clipboard.
+# help-section: Basics
+# help: Emoji picker: copies the chosen emoji
+bindsym $mod+semicolon     exec hadron-emoji
 
 # Focus
 # help-section: Windows

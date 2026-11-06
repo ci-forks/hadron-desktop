@@ -1,0 +1,44 @@
+#!/bin/sh
+# The emoji picker, on Super+; in every variant and in the Hadron menu. Lists
+# "<emoji> <name>" through hadron-pick (fuzzel on Wayland, dmenu on i3), so
+# typing part of a name finds the emoji, puts the chosen emoji on the
+# clipboard and shows a short notification.
+#
+# The list is /usr/share/hadron/emoji.txt, made at build time from Unicode's
+# emoji-test.txt (the Dockerfile emoji stage). The Noto Color Emoji font draws
+# the emoji in fuzzel, dmenu and the apps. dmenu draws a sequence (a skin
+# tone, a family, a flag) as its parts, because Xft does no text shaping; the
+# clipboard still gets the whole sequence.
+#
+# The clipboard tool is wl-copy on Wayland (sway, niri, COSMIC) and xsel on
+# X11 (i3). Both keep the text in the background after this script ends.
+#
+#   hadron-emoji
+#
+# HADRON_EMOJI_LIST names another list (the tests use it).
+list=${HADRON_EMOJI_LIST:-/usr/share/hadron/emoji.txt}
+
+notify() {
+    busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications \
+        org.freedesktop.Notifications Notify 'susssasa{sv}i' \
+        "Hadron Desktop" 0 "" "Emoji" "$1" 0 0 2500 >/dev/null 2>&1 || true
+}
+
+if [ ! -r "$list" ]; then
+    notify "No emoji list found at $list."
+    exit 1
+fi
+
+sel=$(hadron-pick Emoji 14 < "$list") || exit 0
+# fuzzel and dmenu print the typed text when it matches no line: copy only a
+# line of the list.
+grep -qxF -- "$sel" "$list" || exit 0
+# The emoji is the first field; the rest of the line is its name.
+emoji=${sel%% *}
+
+if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    printf '%s' "$emoji" | wl-copy || { notify "Could not copy $emoji to the clipboard."; exit 1; }
+else
+    printf '%s' "$emoji" | xsel --clipboard --input || { notify "Could not copy $emoji to the clipboard."; exit 1; }
+fi
+notify "Copied $sel to the clipboard."

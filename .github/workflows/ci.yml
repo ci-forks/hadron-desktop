@@ -73,6 +73,10 @@ jobs:
 
       - name: Notification keys and the welcome click
         run: test/notify/check-notify-keys.sh
+      # The emoji picker with a fake picker, clipboard and notifier, the
+      # list generator on a fixture, and the Super+; binding per variant.
+      - name: Emoji picker
+        run: test/emoji/check-emoji.sh
 
       - name: Session scripts and configs parse
         shell: bash

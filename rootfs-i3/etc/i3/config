@@ -83,6 +83,10 @@ bindsym $mod+Escape        exec --no-startup-id hadron-menu
 # help-section: System
 # help: Night light on and off
 bindsym $mod+Mod1+n        exec --no-startup-id hadron-night-light toggle
+# The emoji picker: copies the chosen emoji to the clipboard.
+# help-section: Basics
+# help: Emoji picker: copies the chosen emoji
+bindsym $mod+semicolon     exec --no-startup-id hadron-emoji
 
 # Screen lock. i3lock checks the password through /etc/pam.d/i3lock. xss-lock
 # runs the same command on idle and before suspend, from
