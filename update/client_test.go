@@ -353,6 +353,76 @@ func TestSwitchWarnsAndAsks(t *testing.T) {
 	}
 }
 
+// onLine rewrites the release file setup wrote to name an image line.
+func onLine(t *testing.T, line string) {
+	t.Helper()
+	p := os.Getenv("HADRON_UPDATE_RELEASE_FILE")
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, append(b, []byte("GPU="+line+"\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// switch --gpu moves to the other image line, of this flavor or another one,
+// after a warning; the running line is refused like the running flavor.
+func TestSwitchLine(t *testing.T) {
+	setup(t, "v0.1.0", "v0.2.0")
+	for _, args := range [][]string{{"--gpu", "full"}, {"--gpu", "nvidia"}, {"sway", "--gpu", "full"}} {
+		f := okDaemon()
+		useDaemon(t, f)
+		if code, _, _ := runCLI("", append([]string{"switch"}, append(args, "--yes")...)...); code != exitUsage || f.called("Apply") {
+			t.Errorf("switch %v: code %d, want 2 and no install", args, code)
+		}
+	}
+	for _, c := range []struct {
+		args       []string
+		ref, warns string
+	}{
+		{[]string{"--gpu", "vm"}, ":sway-vm-v0.2.0", "This is the virtual machine image"},
+		{[]string{"niri", "--gpu", "vm"}, ":niri-vm-v0.2.0", "This is the virtual machine image"},
+		{[]string{"niri"}, ":niri-v0.2.0", "Your per-user desktop settings"},
+	} {
+		f := okDaemon()
+		useDaemon(t, f)
+		code, out, e := runCLI("y\nn\n", append([]string{"switch"}, c.args...)...)
+		if code != exitOK || len(f.applied) == 0 || !strings.HasSuffix(f.applied[0], c.ref) || !strings.Contains(out, c.warns) {
+			t.Errorf("switch %v: code %d, applied %v, out %q, stderr %q", c.args, code, f.applied, out, e)
+		}
+	}
+}
+
+// A VM install upgrades along the vm line and can switch back to full.
+func TestVMLineUpgrades(t *testing.T) {
+	setup(t, "v0.1.0", "v0.2.0")
+	onLine(t, gpuVM)
+	f := okDaemon()
+	useDaemon(t, f)
+	if code, _, e := runCLI("", "upgrade", "--yes"); code != exitOK || len(f.applied) == 0 || !strings.HasSuffix(f.applied[0], ":sway-vm-v0.2.0") {
+		t.Fatalf("upgrade: code %d, applied %v, stderr %q", code, f.applied, e)
+	}
+	f = okDaemon()
+	useDaemon(t, f)
+	code, out, _ := runCLI("y\nn\n", "switch", "--gpu", "full")
+	if code != exitOK || len(f.applied) == 0 || !strings.HasSuffix(f.applied[0], ":sway-v0.2.0") || !strings.Contains(out, "This is the hardware image") {
+		t.Fatalf("switch --gpu full: code %d, applied %v, out %q", code, f.applied, out)
+	}
+}
+
+// An image of the other line installs, with a warning, like another flavor.
+func TestUpgradeWarnsAboutAnotherLine(t *testing.T) {
+	setup(t, "v0.1.0", "v0.2.0")
+	f := okDaemon()
+	f.info.GPU = gpuVM
+	useDaemon(t, f)
+	code, out, _ := runCLI("y\nn\n", "upgrade")
+	if code != exitOK || !f.called("Apply") || !strings.Contains(out, "Graphics: virtual machine") || !strings.Contains(out, "This is the virtual machine image") {
+		t.Fatalf("code %d, out %q", code, out)
+	}
+}
+
 func TestDaemonErrorMapping(t *testing.T) {
 	for name, want := range map[string]string{
 		"NotAuthorized": "Only members of the admin group can install updates or restart the system.",

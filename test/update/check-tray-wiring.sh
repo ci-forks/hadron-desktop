@@ -75,6 +75,18 @@ SYSTEM_FILES="
 /usr/share/polkit-1/actions/io.kairos.hadron-update.policy
 /usr/share/polkit-1/rules.d/50-hadron-update.rules"
 
+# The release file names the image line upgrades follow (GPU=full or vm), and
+# the image says the same in its label; the agent is always vm. Written by the
+# Dockerfile kairos stage, so only an image has it.
+if [ -n "$IMAGE" ]; then
+    gpu_label="$(docker image inspect --format '{{index .Config.Labels "io.kairos.hadron-desktop.gpu"}}' "$IMAGE" 2>/dev/null || true)"
+    if [ "$FLAVOR" = agent ]; then want_gpu='vm'; else want_gpu='(full|vm)'; fi
+    if [[ "$gpu_label" =~ ^${want_gpu}$ ]]; then echo "PASS: the image is labelled on the $gpu_label line"; else echo "FAIL: the image is labelled on the line '$gpu_label', want $want_gpu"; fail=1; fi
+    check "the release file names the same line" "grep -qx 'GPU=$gpu_label' /etc/hadron-desktop/release"
+else
+    echo "SKIP: the image line (needs an image)"
+fi
+
 if [ "$FLAVOR" = agent ]; then
     for f in $SYSTEM_FILES; do
         check "agent: no $f" "! test -e \$R$f"

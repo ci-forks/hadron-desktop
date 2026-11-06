@@ -13,6 +13,9 @@ const (
 	labelFlavor  = "io.kairos.hadron-desktop.flavor"
 	labelVersion = "io.kairos.hadron-desktop.version"
 	labelHadron  = "io.kairos.hadron-desktop.hadron-version"
+	// labelGPU is the image line, full or vm. Images up to v0.0.7 have
+	// none.
+	labelGPU = "io.kairos.hadron-desktop.gpu"
 )
 
 var (
@@ -38,8 +41,12 @@ var strictTag = regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9]
 // Verdict says what an image is and how far it is trusted.
 type Verdict struct {
 	Flavor, Version string
-	Trusted         bool // named like a release published in the release repo
-	Hadron          bool // trusted, or labelled as a desktop image
+	// GPU is the image line, gpuFull or gpuVM, or "" when a labelled image
+	// does not say. An image on the other line than the running system is
+	// installed like one of another flavor: allowed, and the CLI says so.
+	GPU     string
+	Trusted bool // named like a release published in the release repo
+	Hadron  bool // trusted, or labelled as a desktop image
 }
 
 // Classify decides whether info may be installed. The agent check runs first
@@ -55,16 +62,24 @@ func Classify(info ImageInfo, rel Release, published []Latest) (Verdict, error) 
 	// name. Both can still be labelled.
 	if rel.ImageRepo != "" && info.Ref.Digest == "" && info.Ref.Repo() == rel.ImageRepo {
 		flavor, tag, ok := strings.Cut(info.Ref.Tag, "-")
+		line := gpuFull
+		if rest, isVM := strings.CutPrefix(tag, gpuVM+"-"); isVM {
+			line, tag = gpuVM, rest
+		}
 		if ok && desktopFlavors[flavor] && strictTag.MatchString(tag) {
 			if isPublished(tag, published) {
-				return Verdict{Flavor: flavor, Version: tag, Trusted: true, Hadron: true}, nil
+				return Verdict{Flavor: flavor, Version: tag, GPU: line, Trusted: true, Hadron: true}, nil
 			}
 		}
 	}
 
 	flavor, version := info.Labels[labelFlavor], info.Labels[labelVersion]
 	if desktopFlavors[flavor] && strictTag.MatchString(version) {
-		return Verdict{Flavor: flavor, Version: version, Hadron: true}, nil
+		line := info.Labels[labelGPU]
+		if line != gpuFull && line != gpuVM {
+			line = ""
+		}
+		return Verdict{Flavor: flavor, Version: version, GPU: line, Hadron: true}, nil
 	}
 	return Verdict{}, ErrNotHadron
 }
@@ -78,12 +93,23 @@ func isPublished(tag string, published []Latest) bool {
 	return false
 }
 
-// ReleaseRef is the reference release.yml pushes for flavor and tag. It
-// returns an error, not a zero value, when the release has no image repo or the
-// parts do not form a valid reference.
+// ReleaseRef is the reference release.yml pushes for flavor and tag on the
+// running system's line. It returns an error, not a zero value, when the
+// release has no image repo or the parts do not form a valid reference.
 func ReleaseRef(rel Release, flavor, tag string) (ImageRef, error) {
+	return LineRef(rel, flavor, rel.Line(), tag)
+}
+
+// LineRef is ReleaseRef for a given line, which `switch --gpu` changes.
+func LineRef(rel Release, flavor, line, tag string) (ImageRef, error) {
 	if rel.ImageRepo == "" {
 		return ImageRef{}, errors.New("release has no image repository")
 	}
-	return ParseRef(rel.ImageRepo + ":" + flavor + "-" + tag)
+	return ParseRef(rel.ImageRepo + ":" + lineTag(flavor, line, tag))
+}
+
+// lineLabels are the words the CLI and the tray use for the lines.
+var lineLabels = map[string]string{
+	gpuFull: "hardware (Intel and AMD GPU drivers, firmware)",
+	gpuVM:   "virtual machine (no GPU drivers or firmware)",
 }

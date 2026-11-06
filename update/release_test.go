@@ -79,3 +79,46 @@ func TestLoadReleaseRejectsMissingKeys(t *testing.T) {
 		}
 	}
 }
+
+// The line decides the image an upgrade pulls. A release file without a GPU
+// key (v0.0.7 and earlier) follows the full line, the tag its own updater
+// already pulls; the agent has one line whatever the key says.
+func TestReleaseLines(t *testing.T) {
+	cases := []struct {
+		flavor, gpu, line, image string
+	}{
+		{"sway", "", gpuFull, "ghcr.io/kairos-community/hadron-desktop:sway-v0.2.0"},
+		{"sway", "full", gpuFull, "ghcr.io/kairos-community/hadron-desktop:sway-v0.2.0"},
+		{"sway", "vm", gpuVM, "ghcr.io/kairos-community/hadron-desktop:sway-vm-v0.2.0"},
+		{"cosmic", "vm", gpuVM, "ghcr.io/kairos-community/hadron-desktop:cosmic-vm-v0.2.0"},
+		{"agent", "vm", gpuVM, "ghcr.io/kairos-community/hadron-desktop:agent-v0.2.0"},
+		{"agent", "", gpuFull, "ghcr.io/kairos-community/hadron-desktop:agent-v0.2.0"},
+	}
+	for _, c := range cases {
+		body := strings.Replace(goodRelease, "FLAVOR=sway", "FLAVOR="+c.flavor, 1)
+		if c.gpu != "" {
+			body += "GPU=" + c.gpu + "\n"
+		}
+		r, err := LoadRelease(writeRelease(t, body))
+		if err != nil {
+			t.Fatalf("%s/%q: %v", c.flavor, c.gpu, err)
+		}
+		if r.Line() != c.line {
+			t.Errorf("%s/%q: Line = %q, want %q", c.flavor, c.gpu, r.Line(), c.line)
+		}
+		if got := r.ImageFor("v0.2.0"); got != c.image {
+			t.Errorf("%s/%q: ImageFor = %q, want %q", c.flavor, c.gpu, got, c.image)
+		}
+		ref, err := ReleaseRef(r, r.Flavor, "v0.2.0")
+		if err != nil || ref.String() != c.image {
+			t.Errorf("%s/%q: ReleaseRef = %v, %v; want %s", c.flavor, c.gpu, ref, err, c.image)
+		}
+	}
+}
+
+func TestLoadReleaseRejectsUnknownGPU(t *testing.T) {
+	_, err := LoadRelease(writeRelease(t, goodRelease+"GPU=nvidia\n"))
+	if err == nil || !strings.Contains(err.Error(), "GPU") {
+		t.Fatalf("err = %v, want one naming GPU", err)
+	}
+}

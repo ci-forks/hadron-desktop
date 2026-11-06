@@ -61,8 +61,10 @@ jobs:
       - name: Prebuilt stage keys
         run: |
           python3 tools/test_stage_key.py
-          make -s STAGE=cosmic-shell print-stage-key
-          make -s STAGE=cosmic-apps print-stage-key
+          for gpu in full vm; do
+            make -s GPU="$gpu" STAGE=cosmic-shell print-stage-key
+            make -s GPU="$gpu" STAGE=cosmic-apps print-stage-key
+          done
 
       - name: Session scripts and configs parse
         shell: bash

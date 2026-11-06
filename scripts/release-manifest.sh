@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Generate a deterministic build manifest for one release image.
 #
-# Usage: release-manifest.sh <flavor> <release-tag> <image> <iso-asset-path> <out.json>
+# Usage: release-manifest.sh <flavor> <gpu> <release-tag> <image> <iso-asset-path> <out.json>
 #
 #   flavor          sway | i3 | cosmic | niri | agent
+#   gpu             full | vm: the image line (agent: vm)
 #   release-tag     the release tag being published, e.g. v0.4.0
 #   image           the final OCI image, e.g. i3-desktop:dev
 #   iso-asset-path  path to the ISO; its sibling .sha256 must already exist
@@ -30,28 +31,47 @@ die() { echo "release-manifest: $*" >&2; exit 1; }
 # mis-detect it. Fail the release instead.
 label_flavor=io.kairos.hadron-desktop.flavor
 label_version=io.kairos.hadron-desktop.version
+label_gpu=io.kairos.hadron-desktop.gpu
+label_firmware=io.kairos.hadron-desktop.firmware
 
+image_label() { # image, key
+  docker image inspect --format "{{index .Config.Labels \"$2\"}}" "$1" \
+    || die "could not inspect the labels of $1"
+}
+
+# The line decides the tag the image is pushed as (<flavor>-<tag> or
+# <flavor>-vm-<tag>), and installed systems follow the line their image says.
+# A full image carries the firmware, a vm image does not.
 check_image_labels() {
-  local img="$1" want_flavor="$2" want_version="$3" got_flavor got_version
-  got_flavor="$(docker image inspect --format "{{index .Config.Labels \"$label_flavor\"}}" "$img")" \
-    || die "could not inspect the labels of $img"
-  got_version="$(docker image inspect --format "{{index .Config.Labels \"$label_version\"}}" "$img")" \
-    || die "could not inspect the labels of $img"
-  [ "$got_flavor" = "$want_flavor" ] \
-    || die "image $img has label $label_flavor='$got_flavor' but is being released as flavor '$want_flavor'"
-  [ "$got_version" = "$want_version" ] \
-    || die "image $img has label $label_version='$got_version' but is being released as tag '$want_version'"
+  local img="$1" want_flavor="$2" want_gpu="$3" want_version="$4" got want_firmware=false
+  got="$(image_label "$img" "$label_flavor")" || exit 1
+  [ "$got" = "$want_flavor" ] \
+    || die "image $img has label $label_flavor='$got' but is being released as flavor '$want_flavor'"
+  got="$(image_label "$img" "$label_version")" || exit 1
+  [ "$got" = "$want_version" ] \
+    || die "image $img has label $label_version='$got' but is being released as tag '$want_version'"
+  got="$(image_label "$img" "$label_gpu")" || exit 1
+  [ "$got" = "$want_gpu" ] \
+    || die "image $img has label $label_gpu='$got' but is being released on the '$want_gpu' line"
+  [ "$want_gpu" = full ] && want_firmware=true
+  got="$(image_label "$img" "$label_firmware")" || exit 1
+  [ "$got" = "$want_firmware" ] \
+    || die "image $img has label $label_firmware='$got' but the '$want_gpu' line ships firmware=$want_firmware"
 }
 
 # Sourced (by the label test): define the functions and stop.
 [[ "${BASH_SOURCE[0]}" != "$0" ]] && return 0
 
-[ "$#" -eq 5 ] || die "usage: $0 <flavor> <release-tag> <image> <iso-asset-path> <out.json>"
-flavor="$1" release_tag="$2" image="$3" iso_path="$4" out="$5"
+[ "$#" -eq 6 ] || die "usage: $0 <flavor> <gpu> <release-tag> <image> <iso-asset-path> <out.json>"
+flavor="$1" gpu="$2" release_tag="$3" image="$4" iso_path="$5" out="$6"
 
 case "$flavor" in
   sway|i3|cosmic|niri|agent) ;;
   *) die "unknown flavor: $flavor (want sway, i3, cosmic, niri, or agent)" ;;
+esac
+case "$flavor/$gpu" in
+  agent/vm | sway/full | sway/vm | i3/full | i3/vm | cosmic/full | cosmic/vm | niri/full | niri/vm) ;;
+  *) die "unknown line for $flavor: $gpu (want full or vm; agent is vm only)" ;;
 esac
 [ -f "$iso_path" ]           || die "no ISO at $iso_path"
 [ -f "$iso_path.sha256" ]    || die "no checksum at $iso_path.sha256"
@@ -79,7 +99,9 @@ base_digest="$(printf '%s\n' "$base_inspect" | head -n1 | cut -d@ -f2)"
 
 image_id="$(docker image inspect --format '{{.Id}}' "$image")" \
   || die "could not inspect the built image $image"
-check_image_labels "$image" "$flavor" "$release_tag"
+check_image_labels "$image" "$flavor" "$gpu" "$release_tag"
+firmware=false
+[ "$gpu" = full ] && firmware=true
 iso_sha256="$(cut -d' ' -f1 < "$iso_path.sha256")"
 [ -n "$iso_sha256" ] || die "empty checksum in $iso_path.sha256"
 
@@ -122,6 +144,8 @@ jq -n \
   --arg iso "$iso_name" \
   --arg iso_sha256 "$iso_sha256" \
   --arg desktop_flavor "$flavor" \
+  --arg gpu "$gpu" \
+  --argjson firmware "$firmware" \
   --argjson xlibre_version "$xlibre_version" \
   --argjson cua_revision "$cua_revision" \
   --argjson atspi_version "$atspi_version" \
@@ -134,6 +158,8 @@ jq -n \
      iso: $iso,
      iso_sha256: $iso_sha256,
      desktop_flavor: $desktop_flavor,
+     gpu: $gpu,
+     firmware: $firmware,
      xlibre_version: $xlibre_version,
      cua_revision: $cua_revision,
      atspi_version: $atspi_version

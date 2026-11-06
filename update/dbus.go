@@ -565,6 +565,7 @@ func (a busAPI) Inspect(ref string, advanced bool) (map[string]dbus.Variant, *db
 		"arch":        dbus.MakeVariant(info.Arch),
 		"flavor":      dbus.MakeVariant(v.Flavor),
 		"version":     dbus.MakeVariant(v.Version),
+		"gpu":         dbus.MakeVariant(v.GPU),
 		"trusted":     dbus.MakeVariant(v.Trusted),
 		"hadron":      dbus.MakeVariant(v.Hadron),
 		"refusal":     dbus.MakeVariant(refusal),

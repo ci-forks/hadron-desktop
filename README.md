@@ -71,10 +71,12 @@ kairos-init from the Kairos monorepo (`ghcr.io/kairos-io/kairos/kairos-init:mast
   portal's Settings interface. On Sway, i3 and niri the GTK portal reads it
   from a GSettings vendor override (`color-scheme='prefer-dark'`, GTK3 theme
   `Adwaita-dark`); on COSMIC the COSMIC portal reports COSMIC's own theme.
-- **Real-hardware firmware:** optional curated `linux-firmware` subset
-  (`--build-arg FIRMWARE=true`).
-- **GL:** Mesa `llvmpipe` and `virgl` in every image; optional hardware
-  `iris`/`radeonsi` (`--build-arg GPU=full`).
+- **Two images per desktop:** the standard one, for desktops and laptops, has
+  Mesa's Intel (`iris`) and AMD (`radeonsi`) drivers and a curated
+  `linux-firmware` subset (`GPU=full FIRMWARE=true`). The VM one has only
+  `llvmpipe`, `virgl` and the other virtual drivers, and no firmware
+  (`GPU=vm`, the default of a local build). Both run in a VM; the VM one is
+  smaller. See [Releases](#releases).
 
 ## Build
 
@@ -121,6 +123,7 @@ kept under `build/sway-desktop/` and `build/i3-desktop/`.
   hadron-update upgrade         # install the latest; asks, then offers a reboot
   hadron-update upgrade --version v0.1.2   # a specific release (also rolls back)
   hadron-update switch <flavor> # move to another flavor's image line
+  hadron-update switch --gpu vm # move to the VM image (--gpu full: back)
   hadron-update reboot          # reboot into the installed upgrade
   hadron-update rollback        # boot the previous system once (no download)
   ```
@@ -141,7 +144,7 @@ kept under `build/sway-desktop/` and `build/i3-desktop/`.
   pinned (`/var/lib/hadron-update/pin`): the tray shows it as pinned and stops
   offering "updates" over it until you pick the latest release again.
   Upgrade images are signed with cosign (keyless) and carry the labels
-  `io.kairos.hadron-desktop.{flavor,version,hadron-version}`, which the
+  `io.kairos.hadron-desktop.{flavor,version,hadron-version,gpu,firmware}`, which the
   updater uses to recognise a Hadron Desktop image. The agent flavor has no
   tray and no service; its CLI keeps the direct `sudo` path.
 
@@ -193,19 +196,35 @@ git tag -a v1.0.0 -m "Hadron Desktop v1.0.0"
 git push origin v1.0.0
 ```
 
-Every release also pushes one upgrade image per flavor,
-`ghcr.io/kairos-community/hadron-desktop:<flavor>-<tag>` (the agent image only
-after all five gates pass). `hadron-update` installs those; it only considers
-tags GitHub reports as the latest *published* release. Each pushed image is
-signed with cosign (keyless, by digest) and labelled with its flavor and
-release tag; `scripts/release-manifest.sh` fails the release if they disagree.
+Every desktop flavor is released in two lines:
 
-Each release carries twenty files — five ISOs, and for every ISO a checksum,
-an SPDX SBOM, and a build manifest:
+| Line | Build | ISO and upgrade image | For |
+| --- | --- | --- | --- |
+| full | `GPU=full FIRMWARE=true` | `hadron-desktop-<flavor>-<tag>-amd64.iso`, `:<flavor>-<tag>` | desktops and laptops: Intel and AMD GPU drivers, Wi-Fi, Bluetooth and GPU firmware. Also runs in a VM (llvmpipe, virgl) |
+| vm | `GPU=vm` | `hadron-desktop-<flavor>-vm-<tag>-amd64.iso`, `:<flavor>-vm-<tag>` | virtual machines: about 0.5 GB smaller, no hardware GPU drivers, no firmware |
+
+The agent is a VM appliance and has one line, built with `GPU=vm`:
+`hadron-desktop-agent-<tag>-amd64.iso` and `:agent-<tag>`.
+
+Every release also pushes the upgrade images above to
+`ghcr.io/kairos-community/hadron-desktop` (the agent image only after all five
+gates pass). `hadron-update` installs those; it only considers tags GitHub
+reports as the latest *published* release. An installed system stays on its
+line: `/etc/hadron-desktop/release` records `GPU=full` or `GPU=vm`, and upgrades
+pull the image of that line. Systems installed from v0.0.7 or earlier have no
+`GPU` key and follow the full line (their own updater already pulls
+`<flavor>-<tag>`). `hadron-update switch --gpu vm|full` or the tray menu moves a
+system to the other line. Each pushed image is signed with cosign (keyless, by
+digest) and labelled with its flavor, line and release tag;
+`scripts/release-manifest.sh` fails the release if they disagree.
+
+Each release carries thirty-six files — nine ISOs (four flavors in two lines,
+and the agent), and for every ISO a checksum, an SPDX SBOM, and a build
+manifest:
 
 | Asset | Contents |
 | --- | --- |
-| `hadron-desktop-<flavor>-<tag>-amd64.iso` | the bootable installer |
+| `hadron-desktop-<flavor>[-vm]-<tag>-amd64.iso` | the bootable installer |
 | `….iso.sha256` | its SHA-256, in `sha256sum --check` format |
 | `….iso.spdx.json` | SPDX JSON SBOM of the OCI image the ISO wraps, produced by `anchore/syft:v1.29.0` |
 | `….iso.build.json` | the build manifest described below |
@@ -223,18 +242,23 @@ went into the image, so a downloaded ISO can be traced back to its sources:
   "iso": "hadron-desktop-agent-v1.0.0-amd64.iso",
   "iso_sha256": "…",
   "desktop_flavor": "agent",
+  "gpu": "vm",
+  "firmware": false,
   "xlibre_version": "25.2.0",
   "cua_revision": "…",
   "atspi_version": "2.54.0"
 }
 ```
 
-All eleven keys are present in every manifest. `xlibre_version` is set only for i3
+All thirteen keys are present in every manifest. `gpu` is the line (`full` or
+`vm`, always `vm` for agent), and `firmware` is `true` exactly on the full line.
+`xlibre_version` is set only for i3
 and agent, the two flavors that run the XLibre X server, and
 `cua_revision`/`atspi_version` are `null` for every flavor except agent.
 
-The publishing job refuses to upload unless it finds exactly five ISOs, five
-checksums, five SBOMs, and five manifests, every checksum verifies, every SBOM
+The publishing job refuses to upload unless it finds exactly nine ISOs, nine
+checksums, nine SBOMs, and nine manifests, one for each flavor and line, every
+checksum verifies, every SBOM
 parses as SPDX with a non-empty package list, and every manifest carries valid
 values that match the ISO shipped beside it. The agent job uploads nothing at
 all — not even its ISO — until the compatibility, contract, install, recovery,
@@ -432,7 +456,7 @@ other display (virtio-gpu or QXL without 3D, `-vga std`, or real hardware with
 with LLVM. `softpipe` is only a fallback that `GALLIUM_DRIVER=softpipe`
 selects: it is 60-190 times slower than `llvmpipe` (a key press in the COSMIC
 greeter took about 6 s to reach the screen). For accelerated GL on real
-Intel/AMD laptops, build with `GPU=full`:
+Intel/AMD laptops, build with `GPU=full`, as the release builds the full line:
 
 ```sh
 docker build --build-arg GPU=full --build-arg FIRMWARE=true \

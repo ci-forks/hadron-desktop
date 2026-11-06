@@ -23,7 +23,9 @@ env:
   # is never floated to a moving tag such as `latest`.
   SYFT_IMAGE: anchore/syft:v1.29.0
   # Upgradable images. hadron-update on an installed system pulls
-  # $IMAGE_REPO:<flavor>-<tag> (see /etc/hadron-desktop/release), and only for a
+  # $IMAGE_REPO:<flavor>-<tag> (GPU=full, the standard images for real
+  # machines) or $IMAGE_REPO:<flavor>-vm-<tag> (GPU=vm, for virtual machines),
+  # by the GPU line in /etc/hadron-desktop/release, and only for a
   # tag GitHub reports as the latest *published* release, so an image pushed
   # here is invisible to users until the release job below has verified and
   # published every asset.
@@ -34,8 +36,8 @@ env:
   # ISO build and the gates on the exact same tag.
   AGENT_IMAGE: agent-desktop:dev
   # Registry build cache (see CACHE_REF in the Makefile). Each image reads and
-  # writes $CACHE_REF-<flavor>, so the next release only rebuilds the stages
-  # that changed. Pull requests read the same refs (agent-gates.yml).
+  # writes $CACHE_REF-<flavor> (vm line) or $CACHE_REF-<flavor>-full, so the
+  # next release only rebuilds the stages that changed. Pull requests read the same refs (agent-gates.yml).
   CACHE_REF: ghcr.io/${{ github.repository }}:buildcache
   CACHE_PUSH: "true"
 
@@ -121,14 +123,17 @@ jobs:
   # cosmic-apps stages) build here in parallel, each pushed as an image tagged
   # by a hash of everything it is built from (`make print-stage-key`), so a
   # release rebuilds a half only when its inputs changed. The cosmic build job
-  # then uses them in place of compiling COSMIC.
+  # then uses them in place of compiling COSMIC. COSMIC links Mesa, which
+  # differs per GPU line, so each half is built once per line: four jobs,
+  # each with its own key.
   cosmic:
-    name: Prebuild COSMIC ${{ matrix.part }}
+    name: Prebuild COSMIC ${{ matrix.part }} (${{ matrix.gpu }})
     needs: llvm
     if: ${{ !cancelled() }}
-    # One run per half at a time, as for LLVM above.
+    # One run per half and line at a time, as for LLVM above. The two lines
+    # have different keys, so they need not wait for each other.
     concurrency:
-      group: prebuild-cosmic-${{ matrix.part }}
+      group: prebuild-cosmic-${{ matrix.part }}-${{ matrix.gpu }}
       cancel-in-progress: false
     runs-on: ubuntu-24.04
     timeout-minutes: 330
@@ -141,9 +146,13 @@ jobs:
         part:
           - shell
           - apps
+        gpu:
+          - full
+          - vm
     env:
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
       STAGE: cosmic-${{ matrix.part }}
+      GPU: ${{ matrix.gpu }}
       LLVM_IMAGE: ${{ needs.llvm.result == 'success' && needs.llvm.outputs.image || '' }}
 
     steps:
@@ -164,7 +173,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          image="${IMAGE_REPO}:$(make -s DESKTOP=cosmic print-stage-key)"
+          image="${IMAGE_REPO}:$(make -s DESKTOP=cosmic GPU="$GPU" print-stage-key)"
           echo "image=$image" >> "$GITHUB_OUTPUT"
           if docker buildx imagetools inspect "$image" >/dev/null 2>&1; then
             echo "Reusing $image"
@@ -195,11 +204,15 @@ jobs:
           STAGE_OUT: ${{ steps.ref.outputs.image }}
         run: |
           set -euo pipefail
-          make DESKTOP=cosmic stage-image
+          make DESKTOP=cosmic GPU="$GPU" stage-image
           docker push "$STAGE_OUT"
 
+  # Every flavor in two lines. full (GPU=full FIRMWARE=true) is the standard
+  # one: Mesa's iris and radeonsi drivers and linux-firmware for real Intel and
+  # AMD machines, with llvmpipe for VMs too. vm (GPU=vm) has only the virtual
+  # and software drivers and no firmware: smaller, for VMs.
   build:
-    name: Build ${{ matrix.desktop }} ISO
+    name: Build ${{ matrix.desktop }} ISO (${{ matrix.gpu }})
     needs: [llvm, cosmic]
     # A failed LLVM or COSMIC prebuild does not stop the release: the variants
     # that need it then build it themselves, as before.
@@ -219,8 +232,16 @@ jobs:
           - i3
           - cosmic
           - niri
+        gpu:
+          - full
+          - vm
     env:
       DESKTOP: ${{ matrix.desktop }}
+      GPU: ${{ matrix.gpu }}
+      FIRMWARE: ${{ matrix.gpu == 'full' && 'true' || 'false' }}
+      # The name of the line in asset names and image tags: <flavor>-<tag>
+      # for full, <flavor>-vm-<tag> for vm.
+      LINE: ${{ matrix.desktop }}${{ matrix.gpu == 'vm' && '-vm' || '' }}
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
       LLVM_IMAGE: ${{ needs.llvm.result == 'success' && needs.llvm.outputs.image || '' }}
 
@@ -288,7 +309,7 @@ jobs:
         run: |
           set -euo pipefail
           for part in shell apps; do
-            image="${IMAGE_REPO}:$(make -s STAGE="cosmic-$part" print-stage-key)"
+            image="${IMAGE_REPO}:$(make -s GPU="$GPU" STAGE="cosmic-$part" print-stage-key)"
             if docker buildx imagetools inspect "$image" >/dev/null 2>&1; then
               echo "Using $image"
               echo "COSMIC_${part^^}_IMAGE=$image" >> "$GITHUB_ENV"
@@ -301,7 +322,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          make DESKTOP="$DESKTOP" VERSION="$RELEASE_TAG" iso
+          make DESKTOP="$DESKTOP" GPU="$GPU" FIRMWARE="$FIRMWARE" VERSION="$RELEASE_TAG" iso
 
       - name: Prepare release assets
         shell: bash
@@ -316,7 +337,7 @@ jobs:
           fi
 
           mkdir -p dist
-          asset="hadron-desktop-${DESKTOP}-${RELEASE_TAG}-amd64.iso"
+          asset="hadron-desktop-${LINE}-${RELEASE_TAG}-amd64.iso"
           cp "${isos[0]}" "dist/$asset"
           cd dist
           sha256sum "$asset" > "$asset.sha256"
@@ -331,7 +352,7 @@ jobs:
 
           # Makefile: `IMAGE ?= $(DESKTOP)-desktop:dev`.
           image="${DESKTOP}-desktop:dev"
-          asset="hadron-desktop-${DESKTOP}-${RELEASE_TAG}-amd64.iso"
+          asset="hadron-desktop-${LINE}-${RELEASE_TAG}-amd64.iso"
 
           docker run --rm \
             --volume /var/run/docker.sock:/var/run/docker.sock \
@@ -344,18 +365,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          asset="hadron-desktop-${DESKTOP}-${RELEASE_TAG}-amd64.iso"
-          ./scripts/release-manifest.sh "$DESKTOP" "$RELEASE_TAG" "${DESKTOP}-desktop:dev" \
+          asset="hadron-desktop-${LINE}-${RELEASE_TAG}-amd64.iso"
+          ./scripts/release-manifest.sh "$DESKTOP" "$GPU" "$RELEASE_TAG" "${DESKTOP}-desktop:dev" \
             "dist/$asset" "dist/$asset.build.json"
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v4.1.3
 
-      - name: Push the ${{ matrix.desktop }} upgrade image
+      - name: Push the ${{ matrix.desktop }} (${{ matrix.gpu }}) upgrade image
         shell: bash
         run: |
           set -euo pipefail
-          target="${IMAGE_REPO}:${DESKTOP}-${RELEASE_TAG}"
+          target="${IMAGE_REPO}:${LINE}-${RELEASE_TAG}"
           docker tag "${DESKTOP}-desktop:dev" "$target"
           docker push "$target"
           # Sign the digest the registry holds, never the tag: a tag can move
@@ -364,10 +385,10 @@ jobs:
           [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "could not resolve the pushed digest of $target" >&2; exit 1; }
           cosign sign --yes "${IMAGE_REPO}@${digest}"
 
-      - name: Upload ${{ matrix.desktop }} workflow artifact
+      - name: Upload ${{ matrix.desktop }} (${{ matrix.gpu }}) workflow artifact
         uses: actions/upload-artifact@v7
         with:
-          name: release-${{ matrix.desktop }}
+          name: release-${{ matrix.desktop }}-${{ matrix.gpu }}
           path: dist/*
           if-no-files-found: error
           compression-level: 0
@@ -585,7 +606,7 @@ jobs:
         run: |
           set -euo pipefail
           asset="hadron-desktop-agent-${RELEASE_TAG}-amd64.iso"
-          ./scripts/release-manifest.sh agent "$RELEASE_TAG" "$AGENT_IMAGE" \
+          ./scripts/release-manifest.sh agent vm "$RELEASE_TAG" "$AGENT_IMAGE" \
             "dist/$asset" "dist/$asset.build.json"
 
       - name: Install cosign
@@ -648,11 +669,12 @@ jobs:
           sboms=(release/*.spdx.json)
           manifests=(release/*.build.json)
 
-          if (( ${#isos[@]} != 5 \
-             || ${#checksums[@]} != 5 \
-             || ${#sboms[@]} != 5 \
-             || ${#manifests[@]} != 5 )); then
-            echo "Expected five ISOs, five checksums, five SBOMs, and five build manifests" >&2
+          # Four flavors in two lines each, and the agent.
+          if (( ${#isos[@]} != 9 \
+             || ${#checksums[@]} != 9 \
+             || ${#sboms[@]} != 9 \
+             || ${#manifests[@]} != 9 )); then
+            echo "Expected nine ISOs, nine checksums, nine SBOMs, and nine build manifests" >&2
             echo "Found ${#isos[@]} ISOs, ${#checksums[@]} checksums, ${#sboms[@]} SBOMs, ${#manifests[@]} manifests" >&2
             find release -maxdepth 1 -type f -print >&2
             exit 1
@@ -673,7 +695,7 @@ jobs:
             jq -e '
               . as $m
               | ["release_tag","git_commit","hadron_base_reference","hadron_base_digest",
-                 "image_id","iso","iso_sha256","desktop_flavor","xlibre_version",
+                 "image_id","iso","iso_sha256","desktop_flavor","gpu","firmware","xlibre_version",
                  "cua_revision","atspi_version"]
                 | all(. as $k | $m | has($k))
             ' "$manifest" >/dev/null \
@@ -687,6 +709,10 @@ jobs:
               and (.image_id | test("^sha256:[0-9a-f]{64}$"))
               and (.iso_sha256 | test("^[0-9a-f]{64}$"))
               and (.desktop_flavor as $flavor | ["sway","i3","cosmic","niri","agent"] | index($flavor) != null)
+              and (.gpu == "full" or .gpu == "vm")
+              and (.firmware == (.gpu == "full"))
+              and (if .desktop_flavor == "agent" then .gpu == "vm" else true end)
+              and (.iso == "hadron-desktop-\(.desktop_flavor)\(if .gpu == "vm" and .desktop_flavor != "agent" then "-vm" else "" end)-\(.release_tag)-amd64.iso")
               and (if .desktop_flavor == "i3" or .desktop_flavor == "agent"
                    then (.xlibre_version | type == "string" and length > 0)
                    else .xlibre_version == null end)
@@ -707,11 +733,11 @@ jobs:
             fi
           done
 
-          # Exactly one manifest per flavor, so a duplicated build cannot pass
-          # the count check while a flavor is missing.
-          flavors="$(jq -r '.desktop_flavor' ./*.build.json | sort | tr '\n' ' ')"
-          if [[ "$flavors" != "agent cosmic i3 niri sway " ]]; then
-            echo "Expected one manifest each for sway, i3, cosmic, niri, and agent; got: $flavors" >&2
+          # Exactly one manifest per flavor and line, so a duplicated build
+          # cannot pass the count check while one is missing.
+          lines="$(jq -r '"\(.desktop_flavor)/\(.gpu)"' ./*.build.json | sort | tr '\n' ' ')"
+          if [[ "$lines" != "agent/vm cosmic/full cosmic/vm i3/full i3/vm niri/full niri/vm sway/full sway/vm " ]]; then
+            echo "Expected one manifest each for sway, i3, cosmic and niri in the full and vm lines, and agent; got: $lines" >&2
             exit 1
           fi
 
@@ -730,12 +756,12 @@ jobs:
             echo "https://github.com/orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/${name#*/}/settings" >&2
             exit 1
           fi
-          for flavor in sway i3 cosmic niri agent; do
-            ref="${IMAGE_REPO}:${flavor}-${RELEASE_TAG}"
+          for line in sway i3 cosmic niri sway-vm i3-vm cosmic-vm niri-vm agent; do
+            ref="${IMAGE_REPO}:${line}-${RELEASE_TAG}"
             code="$(curl -sS -o /dev/null -w '%{http_code}' --head \
               -H "Authorization: Bearer $token" \
               -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json' \
-              "https://ghcr.io/v2/${name}/manifests/${flavor}-${RELEASE_TAG}")"
+              "https://ghcr.io/v2/${name}/manifests/${line}-${RELEASE_TAG}")"
             [[ "$code" == 200 ]] || { echo "$ref is not pullable without a login (HTTP $code)" >&2; exit 1; }
             echo "$ref: public"
           done

@@ -41,9 +41,12 @@ released, never upgraded or never checked:
 - `Makefile`: `VALID_DESKTOPS`, the help header, `check-boot-ux`.
 - `Dockerfile`: its stages, the `DESKTOP` switch, the `kairos` stage.
 - `rootfs-<variant>/` for its configuration.
-- `.github/workflows/release.yml`: the build matrix, the allowed flavors and
-  the expected asset counts, and the public-image check.
-- `scripts/release-manifest.sh` and `update/release.go` (the flavor list).
+- `.github/workflows/release.yml`: the build matrix (every variant is built
+  in both GPU lines, full and vm), the allowed flavors and the expected asset
+  counts (two ISOs per variant), the manifest's flavor/line pairs, and the
+  public-image check (`<variant>-<tag>` and `<variant>-vm-<tag>`).
+- `scripts/release-manifest.sh` (the flavor/line pairs) and `update/release.go`
+  (the flavor list).
 - The tray updater's "Switch desktop" list.
 - `README.md`: the variant list and the releases section.
 - A design note in `docs/superpowers/specs/`.

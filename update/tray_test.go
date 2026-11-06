@@ -383,13 +383,14 @@ func TestTrayClicks(t *testing.T) {
 	f := &trayFake{st: Status{State: StateRebootPending, Installed: "v0.1.0"}}
 	h := startTray(t, dialFake(f), time.Hour, time.Hour)
 	h.ui.waitView(t, "reboot", func(v trayView) bool { return v.Icon == "reboot" })
-	for _, id := range []string{"install-latest", "releases/v0.2.0", "switch/i3", "advanced", "cancel"} {
+	for _, id := range []string{"install-latest", "releases/v0.2.0", "switch/i3", "gpu/vm", "advanced", "cancel"} {
 		h.app.clicks <- id
 	}
 	want := [][]string{
 		{"upgrade", "--pause-on-error"},
 		{"upgrade", "--pause-on-error", "--version", "v0.2.0"},
 		{"switch", "i3", "--pause-on-error"},
+		{"switch", "--gpu", "vm", "--pause-on-error"},
 		{"upgrade", "--pause-on-error", "--image", "-"},
 	}
 	deadline := time.Now().Add(5 * time.Second)

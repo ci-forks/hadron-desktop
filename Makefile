@@ -16,6 +16,9 @@
 #
 # Knobs (override on the command line):
 #   make DESKTOP=i3 GPU=full FIRMWARE=true # XLibre/i3 + hardware support
+#                                          (what a release publishes as
+#                                          <flavor>-<tag>; GPU=vm, the default
+#                                          here, is <flavor>-vm-<tag>)
 #   make IMAGE=sway-desktop:hw             # change the image tag
 #   make BASE_IMAGE=ghcr.io/...:vX        # pin a different Hadron base
 #   make VERSION=v1.2.3                   # stamp a Kairos version
@@ -70,6 +73,11 @@ comma := ,
 cache_from = --cache-from type=registry$(comma)ref=$(CACHE_REF)-$(1)
 cache_to   = --cache-to type=registry$(comma)ref=$(CACHE_REF)-$(1)$(comma)mode=max$(comma)ignore-error=true
 cache_args = $(if $(CACHE_REF),$(call cache_from,$(1)) $(if $(filter true,$(CACHE_PUSH)),$(call cache_to,$(1))))
+# The two image lines build a different Mesa (and every stage built on it), so
+# each keeps its own cache: sharing one, each release's second writer would
+# replace the first one's stages. GPU=vm keeps the plain name it has always
+# had, which pull requests (agent-gates.yml) read.
+CACHE_NAME = $(DESKTOP)$(if $(filter full,$(GPU)),-full)
 
 # Prebuilt LLVM, for CI. Every build uses the llvm stage (Mesa's llvmpipe links
 # libLLVM, and COSMIC and niri also need libclang), and it compiles LLVM and
@@ -119,14 +127,16 @@ all: iso
 # anyway, silently shipping a stale initramfs. Busting it keeps the initramfs
 # honest; it is the cheap stage at the very end.
 image:
-	docker build $(BUILD_ARGS) $(call cache_args,$(DESKTOP)) --no-cache-filter kairos -t $(IMAGE) .
+	docker build $(BUILD_ARGS) $(call cache_args,$(CACHE_NAME)) --no-cache-filter kairos -t $(IMAGE) .
 
 images:
 	$(MAKE) DESKTOP=sway image
 	$(MAKE) DESKTOP=i3 image
 
+# The agent is a VM appliance: always the vm line (no hardware GPU drivers, no
+# firmware), whatever GPU or FIRMWARE the command line sets.
 agent-image:
-	$(MAKE) DESKTOP=i3 IMAGE=$(AGENT_BASE_IMAGE) $(if $(VERSION),VERSION=$(VERSION),) image
+	$(MAKE) DESKTOP=i3 GPU=vm FIRMWARE=false IMAGE=$(AGENT_BASE_IMAGE) $(if $(VERSION),VERSION=$(VERSION),) image
 	docker build -f Dockerfile.agent --target agent $(call cache_args,agent) \
 	  --build-arg BASE_IMAGE=$(AGENT_BASE_IMAGE) \
 	  --build-arg HADRON_VERSION=$(HADRON_VERSION) \

@@ -14,6 +14,8 @@ import (
 // really names, and whether the daemon will install it.
 type InspectInfo struct {
 	Ref, Digest, OS, Arch, Flavor, Version string
+	// GPU is the image line, full or vm, or "" when the image does not say.
+	GPU string
 	// Trusted: a published release; Hadron: trusted, or labelled as a
 	// Hadron Desktop image by its publisher.
 	Trusted, Hadron bool
@@ -152,7 +154,7 @@ func (c *client) Inspect(ref string, advanced bool) (InspectInfo, error) {
 	}
 	return InspectInfo{
 		Ref: str(m, "ref"), Digest: str(m, "digest"), OS: str(m, "os"), Arch: str(m, "arch"),
-		Flavor: str(m, "flavor"), Version: str(m, "version"), Hadron: boolean(m, "hadron"),
+		Flavor: str(m, "flavor"), Version: str(m, "version"), GPU: str(m, "gpu"), Hadron: boolean(m, "hadron"),
 		Trusted: boolean(m, "trusted"), Refusal: str(m, "refusal"), Overridable: boolean(m, "overridable"),
 	}, nil
 }

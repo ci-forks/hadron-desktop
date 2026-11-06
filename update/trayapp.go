@@ -232,7 +232,7 @@ func (a *trayApp) render() {
 	if a.line != "" {
 		tip = a.line
 	}
-	a.ui.Show(trayView{Icon: iconFor(a.st.State), Tooltip: tip, Menu: BuildMenu(a.st, a.releases, a.rel.Flavor)})
+	a.ui.Show(trayView{Icon: iconFor(a.st.State), Tooltip: tip, Menu: BuildMenu(a.st, a.releases, a.rel.Flavor, a.rel.Line())})
 }
 
 // click acts on a menu item. Anything that needs details or an answer opens
@@ -248,6 +248,8 @@ func (a *trayApp) click(c daemonClient, id string) {
 		err = a.launch("upgrade", "--pause-on-error", "--version", strings.TrimPrefix(id, "releases/"))
 	case strings.HasPrefix(id, "switch/"):
 		err = a.launch("switch", strings.TrimPrefix(id, "switch/"), "--pause-on-error")
+	case strings.HasPrefix(id, "gpu/"):
+		err = a.launch("switch", "--gpu", strings.TrimPrefix(id, "gpu/"), "--pause-on-error")
 	case id == "advanced":
 		err = a.launch("upgrade", "--pause-on-error", "--image", "-")
 	case c == nil && (id == "cancel" || id == "restart" || id == "rollback"):
