@@ -41,9 +41,8 @@ apps() {
         Sway)   exec fuzzel ;;
         niri)   exec noctalia msg panel-open launcher ;;
         COSMIC) exec cosmic-launcher ;;
-        # What dmenu_run does, through the same picker.
-        *)      cmd=$(dmenu_path | pick Run 12) || exit 0
-                printf '%s\n' "$cmd" | exec "${SHELL:-/bin/sh}" ;;
+        # i3 (and the agent image): the installed apps by name, as on Super+D.
+        *)      exec hadron-apps ;;
     esac
 }
 

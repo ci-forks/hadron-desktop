@@ -1,5 +1,8 @@
 # Environment sourced by /usr/bin/start-desktop before launching i3.
 export XDG_CURRENT_DESKTOP=i3
+# Flatpak's export directories, so hadron-apps and the portals see installed
+# apps even when the login shell did not source Flatpak's profile script.
+export XDG_DATA_DIRS="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}:$HOME/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share"
 export XDG_SESSION_DESKTOP=i3
 export XDG_SESSION_TYPE=x11
 export GDK_BACKEND=x11
