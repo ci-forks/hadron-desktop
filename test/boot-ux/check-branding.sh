@@ -40,6 +40,27 @@ check "grubmenu.cfg preserves any pre-existing extra_cmdline" \
 check "grubmenu.cfg sets the console palette (navy, not black)" \
     "grep -q '^set hadron_vt_palette=\"vt.default_red=0x1a,' $G && grep -q 'extra_cmdline}.*\${hadron_vt_palette}' $G"
 
+# The installed EFI GRUB's $prefix is (COS_STATE)/grub2. A command.lst in
+# $prefix/<platform> makes rmmod a real command, and /etc/cos/grub.cfg's
+# `rmmod tpm` then prints "no such module" on every boot. hadron-grub-theme must
+# put the theme modules elsewhere, without a command.lst (GRUB also reads it
+# when grubmenu.cfg sets $prefix), and remove the tree older releases left at
+# $prefix, keeping the modules kairos-agent put there.
+S=/tmp/hadron-grub-state
+P="\$(cd /usr/lib/grub && ls -d *-efi | head -1)"
+check "hadron-grub-theme keeps its modules out of the EFI \$prefix" \
+    "p=$P && mkdir -p $S/grub2/\$p && touch $S/grub2/\$p/command.lst $S/grub2/\$p/gfxmenu.mod $S/grub2/\$p/loopback.mod && \
+     ! /usr/libexec/hadron-grub-theme --check $S && /usr/libexec/hadron-grub-theme $S && \
+     /usr/libexec/hadron-grub-theme --check $S && \
+     test ! -e $S/grub2/\$p/command.lst -a ! -e $S/grub2/\$p/gfxmenu.mod -a -e $S/grub2/\$p/loopback.mod && \
+     test -f $S/hadron/grub2/\$p/tga.mod -a -f $S/hadron/grub2/\$p/moddep.lst -a -f $S/themes/hadron/theme.txt && \
+     test ! -e $S/hadron/grub2/\$p/command.lst && \
+     [ \"\$(md5sum < $G)\" = \"\$(md5sum < $S/grubmenu)\" ]"
+check "grubmenu.cfg loads the theme modules from \$prefix first" \
+    "grep -q 'if \[ -f \"\${prefix}/\${grub_cpu}-\${grub_platform}/tga.mod\" \]' $G && \
+     grep -q 'set prefix=\"(\${menu_blk})/hadron/grub2\"' $G && ! grep -q 'set prefix=(\${menu_blk})/grub2' $G"
+check "grubmenu.cfg leaves the font to loadfont unicode" "! grep -q '^ *loadfont' $G"
+
 # The Hadron wallpapers are drawn at build time; every variant points at these.
 WP=/usr/share/backgrounds/hadron
 for w in hadron-orbits-night-3840x2160 hadron-plain-night-1920x1080; do

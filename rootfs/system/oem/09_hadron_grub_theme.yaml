@@ -3,14 +3,21 @@
 # The installed system's GRUB reads its menu from the COS_STATE partition:
 # /etc/cos/grub.cfg sources (${menu_blk})/grubmenu, and our grubmenu.cfg
 # (rootfs/etc/kairos/branding/grubmenu.cfg) switches the menu to gfxterm and
-# `set theme=(${menu_blk})/themes/hadron/theme.txt`. That theme dir only exists
-# on STATE if we put it there — which is what this stage does.
+# `set theme=(${menu_blk})/themes/hadron/theme.txt`. The theme, its font and
+# the GRUB modules it needs only exist on STATE if we put them there, which
+# /usr/libexec/hadron-grub-theme does (its header lists the files).
 #
-# We mirror the kairos 08_grub stage: mount COS_STATE, drop the theme dir in,
+# We mirror the kairos 08_grub stage: mount COS_STATE, write the files,
 # unmount; and re-run on every event that 08_grub re-injects grubmenu
 # (install/upgrade/reset) so the theme never drifts out of sync with the menu
 # that references it. Ordering: the filename sorts after 08_grub.yaml, and
 # 08_grub unmounts STATE at the end of each hook, so we mount our own fresh copy.
+#
+# The boot stage covers upgrades from an older release. after-upgrade runs the
+# stages of the system that runs the upgrade, not of the new image, so an
+# upgrade from Hadron v0.0.7 or older writes the old files. On the first boot
+# of the new image the script finds them and corrects STATE.
+#
 # Everything is guarded on the theme file existing and gated off UKI boots
 # (matching 08_grub), so it can never block install.
 name: "Hadron GRUB theme"
@@ -29,21 +36,7 @@ stages:
       name: "Install Hadron Tokyo Night GRUB theme + font + modules to STATE"
       if: '[ -e "/etc/kairos/branding/hadron-theme/theme.txt" ] && grep -vq "rd.immucore.uki" /proc/cmdline'
       commands:
-      - |
-          BR=/etc/kairos/branding/hadron-theme
-          ST=/tmp/mnt/HADRONSTATE
-          mkdir -p $ST/themes/hadron $ST/grub2/fonts $ST/grub2/x86_64-efi
-          # theme.txt + background.tga next to each other (desktop-image is relative).
-          cp -fv $BR/theme.txt $BR/background.tga $ST/themes/hadron/
-          # grubmenu.cfg loadfont's this by explicit path; the installed EFI GRUB
-          # ships no unicode.pf2, so without it gfxterm can't render and the menu
-          # stays text-mode. Registered name is "Unifont Regular 16" (see theme.txt).
-          cp -fv $BR/unicode.pf2 $ST/grub2/fonts/unicode.pf2
-          # The installed EFI GRUB lacks gfxmenu/tga (and their deps) at its $prefix,
-          # so grubmenu.cfg points $prefix at STATE and insmods them. Ship the whole
-          # module tree + moddep.lst (the image's own, ABI-matched to the grub core)
-          # so the dependency closures resolve. cp -a preserves it verbatim.
-          cp -a /usr/lib/grub/x86_64-efi/. $ST/grub2/x86_64-efi/ || true
+      - /usr/libexec/hadron-grub-theme /tmp/mnt/HADRONSTATE
     - &stateumount
       name: "umount state"
       if: '[ -e "/etc/kairos/branding/hadron-theme/theme.txt" ] && grep -vq "rd.immucore.uki" /proc/cmdline'
@@ -59,3 +52,20 @@ stages:
     - <<: *statemount
     - <<: *themeinstall
     - <<: *stateumount
+
+    # Only from the active image, as 08_grub's "Remove GRUB sentinels" does:
+    # the passive image can be an older release, and the two would undo each
+    # other's files. STATE is mounted read-only; it is made writable only when
+    # something must change, so a normal boot writes nothing.
+    boot:
+    - name: "Update the Hadron GRUB theme on STATE"
+      if: |
+          [ -e "/etc/kairos/branding/hadron-theme/theme.txt" ] && grep -q "active.img" /proc/cmdline && grep -vq "rd.immucore.uki" /proc/cmdline && [ ! -f /run/cos/write_protected ] && [ -d /run/initramfs/cos-state ]
+      commands:
+      - |
+          ST=/run/initramfs/cos-state
+          if ! /usr/libexec/hadron-grub-theme --check $ST; then
+              mount -o rw,remount $ST
+              /usr/libexec/hadron-grub-theme $ST || true
+              mount -o ro,remount $ST
+          fi

@@ -59,6 +59,13 @@ check "debug entry left verbose" \
     "entry 'hadron-desktop (debug)' | grep -q 'rd.debug' && ! entry 'hadron-desktop (debug)' | grep -q 'quiet'"
 check "recovery entry left verbose" \
     "entry 'hadron-desktop (remote recovery mode)' | grep -q 'kairos.remote_recovery_mode' && ! entry 'hadron-desktop (remote recovery mode)' | grep -q 'quiet'"
+# GRUB has no hiddenentry command: on EFI it printed "can't find command".
+check "no hiddenentry"                  "test -f '$CFG' && ! grep -q hiddenentry '$CFG'"
+# Each echo opens a text box over the theme.
+check "no echo in the menu entries"     "test -f '$CFG' && ! grep -q '^[^#]*echo Loading' '$CFG'"
+# Unquoted, an empty model makes the Thor test true on every machine.
+check "Thor test is quoted"             "grep -qF 'if [ \"\${model}\" = \"Thor\" ]' '$CFG'"
+check "smbios runs only on arm64"       "grep -B1 '^ *smbios ' '$CFG' | grep -qF '\${grub_cpu}\" = \"arm64\"'"
 check "theme load is guarded"           "grep -q 'if \[ -f (\$root)/boot/grub2/themes/hadron/theme.txt \]' '$CFG'"
 # The ISO's GRUB core has no gfxmenu built in: without these the live menu prints
 # "file `/boot/grub2/x86_64-efi/gfxmenu.mod' not found" and drops to text mode.
