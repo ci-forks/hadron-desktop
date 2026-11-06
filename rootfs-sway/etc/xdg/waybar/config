@@ -33,7 +33,7 @@
         "format-disabled": "",
         "tooltip-format": "{controller_alias}\t{status}",
         "tooltip-format-connected": "{controller_alias}\t{status}\n{device_enumerate}",
-        "on-click": "foot --app-id=floatterm -T bluetooth bluetoothctl"
+        "on-click": "hadron-bluetooth-menu"
     },
     "wireplumber": {
         "format": "  {volume}%",

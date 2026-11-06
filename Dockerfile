@@ -4484,6 +4484,13 @@ RUN chmod 1777 /tmp; \
       # cosmic-osd (the password prompt) execs the polkit helper at Debian's
       # path, compiled in; exec follows the link to the setuid target.
       mkdir -p /usr/libexec && ln -sf /usr/lib/polkit-1/polkit-agent-helper-1 /usr/libexec/polkit-agent-helper-1; \
+      # COSMIC's play/pause, next and previous keys run playerctl, which Hadron
+      # does not ship; hadron-media-key does the same over MPRIS with busctl.
+      # The build fails if upstream renames these actions, so the keys cannot
+      # silently stop working.
+      f=/usr/share/cosmic/com.system76.CosmicSettings.Shortcuts/v1/system_actions; \
+      sed -i -E 's/"playerctl (play-pause|next|previous)"/"hadron-media-key \1"/' "$f" || exit 1; \
+      grep -q '"hadron-media-key play-pause"' "$f" && ! grep -q playerctl "$f" || exit 1; \
       mkdir -p /etc/systemd/system/multi-user.target.wants; \
       for u in cosmic-greeter cosmic-greeter-daemon accounts-daemon; do \
         ln -sf /usr/lib/systemd/system/$u.service /etc/systemd/system/multi-user.target.wants/$u.service; \

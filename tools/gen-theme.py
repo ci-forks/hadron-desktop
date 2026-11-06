@@ -87,6 +87,7 @@ RULES = {
         (r"^\s+Lock\)\s+i3lock .*--color={hex} ;;$", "base"),
     ]),
     "rootfs-i3/usr/bin/hadron-wifi-menu": ("hash", "hash", [DMENU]),
+    "rootfs/usr/bin/hadron-pick": ("hash", "hash", [DMENU]),
     "rootfs-sway/etc/xdg/waybar/style.css": ("hash", "css", [
         (r"^@define-color (?P<role>\w+)\s+#{hex};$", None),  # role = the name
     ]),
