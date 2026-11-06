@@ -227,6 +227,36 @@ _agent_screenshot() {
   python3 -c "from PIL import Image; Image.open('$ppm').save('${ppm%.ppm}.png')" 2>/dev/null || true
 }
 
+# _agent_guest_diag <smoke> <descriptor> <admin_token> <art> -- best-effort
+# dump of the guest state a failed gate needs to be diagnosed: the system and
+# agent user journals, Ly's own log, and the display units' status. The serial
+# console stops at multi-user.target and the QMP screendump only shows that the
+# desktop is missing, so without this a gate that fails on a missing session
+# leaves nothing that says why. Runs through the public terminal tool with the
+# admin bearer, so it needs only a ready gateway. Never fails the caller.
+_agent_guest_diag() {
+  local smoke="$1" descriptor="$2" admin_token="$3" art="$4"
+  local -a exec_args=(--descriptor "$descriptor" --admin-bearer-file "$admin_token"
+    --mode exec --call-timeout 1m)
+  "$smoke" "${exec_args[@]}" --exec-admin \
+    --command 'journalctl -b --no-pager -o short-precise 2>&1 | tail -n 5000' \
+    >"$art/guest-system-journal.log" 2>/dev/null || true
+  "$smoke" "${exec_args[@]}" \
+    --command 'journalctl --user -b --no-pager -o short-precise 2>&1 | tail -n 2000' \
+    >"$art/guest-user-journal.log" 2>/dev/null || true
+  "$smoke" "${exec_args[@]}" --exec-admin --command '
+    for f in /var/log/ly.log /home/agent/.local/state/ly-session.log; do
+      echo "===== $f"; tail -n 300 "$f" 2>&1
+    done
+    echo "===== systemctl status"
+    systemctl status --no-pager --full ly@tty1.service hadron-agent-display-watchdog.service kairos-splash.service 2>&1
+    echo "===== systemctl list-jobs"; systemctl list-jobs --no-pager 2>&1
+    echo "===== loginctl"; loginctl list-sessions --no-pager 2>&1
+    echo "===== active VT"; cat /sys/class/tty/tty0/active 2>&1
+    echo "===== ly config"; grep -E "^(auto_login|x_cmd|setup_cmd)" /etc/ly/config.ini 2>&1' \
+    >"$art/guest-display.log" 2>/dev/null || true
+}
+
 # _agent_tofu <host> <port> <ca_out> <fp_out> <deadline_epoch> -- capture the
 # self-signed leaf (TOFU) into <ca_out> (PEM, 0600) and its DER SHA-256 into
 # <fp_out>, retrying until SECONDS reaches <deadline_epoch>. Fail on timeout.
@@ -435,6 +465,7 @@ cmd_contract() {
   local rc=0
   "$smoke" --descriptor "$descriptor" --admin-bearer-file "$admin_token" || rc=$?
   _agent_screenshot "$qmp" "$art/contract-done.ppm"
+  [ "$rc" -eq 0 ] || _agent_guest_diag "$smoke" "$descriptor" "$admin_token" "$art"
 
   # 8. graceful powerdown, then a belt-and-suspenders final hash check.
   [ -S "$qmp" ] && qmp_system_powerdown "$qmp" 2>/dev/null || true
@@ -557,7 +588,9 @@ cmd_install() {
   "$smoke" --descriptor "$descriptor" --admin-bearer-file "$admin_token" || rc=$?
   if [ "$rc" -ne 0 ]; then
     err "RESULT: FAIL - mcp-smoke contract exited $rc on the installed appliance"
-    _agent_screenshot "$qmp" "$art/fail.ppm"; return "$rc"
+    _agent_screenshot "$qmp" "$art/fail.ppm"
+    _agent_guest_diag "$smoke" "$descriptor" "$admin_token" "$art"
+    return "$rc"
   fi
 
   # 7. persistence round-trip. persist-write writes /home/agent/e2e/
