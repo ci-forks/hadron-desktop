@@ -59,6 +59,9 @@ kairos-init from the Kairos monorepo (`ghcr.io/kairos-io/kairos/kairos-init:mast
 - **Hadron menu:** Super+Escape on every variant opens one menu for apps,
   Wi-Fi, Bluetooth, audio, screenshots, updates, the shortcut sheet and the
   power actions.
+- **Night light:** on Sway, i3 and niri, Super+Alt+N (or "Night light" in
+  the Hadron menu) turns on a warmer screen from 20:00 to 07:00, and the
+  setting is kept across logins. COSMIC has no night light yet.
 - **Hardware keys:** volume, mute, screen brightness and play/pause/next/previous
   work on every variant and show the new level on screen.
 - **Containers:** rootful docker + distrobox (mutable dev-env containers).

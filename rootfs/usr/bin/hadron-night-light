@@ -1,0 +1,162 @@
+#!/bin/sh
+# Night light: a warmer screen colour in the evening, on Super+Alt+N and in
+# the Hadron menu. "on" turns on the schedule, not the warm colour: the screen
+# is warm (4500 K) from 20:00 to 07:00 and normal in the day. Hadron has no
+# location service, so the times are fixed.
+#
+#   hadron-night-light on|off|toggle   change the setting and apply it now
+#   hadron-night-light restore         apply the saved setting (session start)
+#   hadron-night-light status          print on or off
+#
+# The setting is kept per user in $XDG_STATE_HOME/hadron-desktop/night-light,
+# so it survives a log out and an image upgrade. Each variant applies it with
+# its own tool:
+#   Sway   wlsunset (wlr-gamma-control), with the times above.
+#   niri   Noctalia's night light, which has the same times and temperature
+#          in noctalia-defaults.toml; this script only enables it.
+#   i3     xsct (X RandR gamma), from a small loop that this script runs,
+#          because xsct sets the colour once and exits.
+#   COSMIC no night light: cosmic-comp has no gamma control protocol and
+#          COSMIC Settings has its night light page disabled.
+set -u
+
+NIGHT_K=4500
+SUNSET=20:00
+SUNRISE=07:00
+
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/hadron-desktop"
+state_file="$state_dir/night-light"
+pid_file="${XDG_RUNTIME_DIR:-/tmp}/hadron-night-light.pid"
+
+DESKTOP_NAME=""
+# shellcheck disable=SC1091
+[ -r /etc/hadron-desktop/session ] && . /etc/hadron-desktop/session
+
+usage() {
+    echo "usage: hadron-night-light on|off|toggle|restore|status" >&2
+    exit 2
+}
+
+saved() {
+    s=$(cat "$state_file" 2>/dev/null) || s=""
+    [ "$s" = on ] && echo on || echo off
+}
+
+save() {
+    mkdir -p "$state_dir" && printf '%s\n' "$1" > "$state_file"
+}
+
+# notify TEXT: a short pop-up through the session's notification server.
+notify() {
+    busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications \
+        org.freedesktop.Notifications Notify 'susssasa{sv}i' \
+        "Night light" 0 "" "Night light" "$1" 0 0 4000 >/dev/null 2>&1 || :
+}
+
+# running: is the helper this script started (wlsunset or the xsct loop) alive?
+running() {
+    pid=$(cat "$pid_file" 2>/dev/null) || return 1
+    [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+stop_helper() {
+    if running; then
+        kill "$pid" 2>/dev/null
+    fi
+    rm -f "$pid_file"
+}
+
+# is_night: is the clock between SUNSET and SUNRISE? The window crosses
+# midnight. Times compare as HHMM numbers, without leading zeros.
+is_night() {
+    now=$(date +%H%M)
+    now=${now#0}; now=${now#0}; now=${now#0}
+    set_at=$(echo "$SUNSET" | tr -d :); rise_at=$(echo "$SUNRISE" | tr -d :)
+    set_at=${set_at#0}; rise_at=${rise_at#0}
+    [ "${now:-0}" -ge "$set_at" ] || [ "${now:-0}" -lt "$rise_at" ]
+}
+
+# The i3 helper: set the colour for the current time, then check again every
+# minute. Applying each minute also covers a monitor plugged in at night, which
+# starts with a normal gamma ramp.
+xsct_loop() {
+    nap=""
+    trap 'kill $nap 2>/dev/null; xsct 0 >/dev/null 2>&1; exit 0' TERM INT
+    last=""
+    while :; do
+        if is_night; then
+            xsct "$NIGHT_K" >/dev/null 2>&1
+            last=night
+        elif [ "$last" != day ]; then
+            xsct 0 >/dev/null 2>&1
+            last=day
+        fi
+        # sleep in the background, so the TERM trap runs at once.
+        sleep 60 & nap=$!
+        wait "$nap"
+    done
+}
+
+# apply on|off: make the running session match the setting.
+apply() {
+    case "$DESKTOP_NAME" in
+        Sway)
+            stop_helper
+            if [ "$1" = on ]; then
+                wlsunset -t "$NIGHT_K" -T 6500 -S "$SUNRISE" -s "$SUNSET" >/dev/null 2>&1 &
+                echo $! > "$pid_file"
+            fi ;;
+        i3)
+            stop_helper
+            if [ "$1" = on ]; then
+                "$0" __xsct-loop >/dev/null 2>&1 &
+                echo $! > "$pid_file"
+            fi ;;
+        niri)
+            if [ "$1" = on ]; then cmd=nightlight-enable; else cmd=nightlight-disable; fi
+            # At session start Noctalia can take several seconds to answer.
+            tries=0
+            until noctalia msg "$cmd" >/dev/null 2>&1; do
+                tries=$((tries + 1))
+                [ "$tries" -ge "${2:-1}" ] && return 1
+                sleep 2
+            done ;;
+        *)
+            return 1 ;;
+    esac
+}
+
+# set_to on|off: save, apply, and say what happened. Noctalia shows its own
+# on-screen message for night light, so niri gets no pop-up from here.
+set_to() {
+    case "$DESKTOP_NAME" in
+        Sway|i3|niri) ;;
+        *)
+            notify "Night light is not available on ${DESKTOP_NAME:-this desktop}."
+            echo "hadron-night-light: not available on ${DESKTOP_NAME:-this desktop}" >&2
+            exit 1 ;;
+    esac
+    save "$1"
+    apply "$1" || { echo "hadron-night-light: could not apply the setting" >&2; exit 1; }
+    [ "$DESKTOP_NAME" = niri ] && return 0
+    if [ "$1" = on ]; then
+        notify "On: warmer screen from $SUNSET to $SUNRISE."
+    else
+        notify "Off."
+    fi
+}
+
+case "${1:-}" in
+    on|off)  set_to "$1" ;;
+    toggle)  if [ "$(saved)" = on ]; then set_to off; else set_to on; fi ;;
+    status)  saved ;;
+    restore)
+        # Nothing to undo at session start: the colour starts normal.
+        [ "$(saved)" = on ] || exit 0
+        case "$DESKTOP_NAME" in
+            niri)    apply on 15 ;;
+            Sway|i3) running || apply on ;;
+        esac ;;
+    __xsct-loop) xsct_loop ;;
+    *) usage ;;
+esac

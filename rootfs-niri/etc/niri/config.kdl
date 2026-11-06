@@ -291,6 +291,9 @@ spawn-at-startup "hadron-update" "tray"
 // First-run app picker (a browser and essentials from Flathub), once per
 // user, after the network is up.
 spawn-at-startup "hadron-first-run-apps" "--login"
+// Turn Noctalia's night light back on if the user had it on in an earlier
+// session; Noctalia itself starts with it off (noctalia-defaults.toml).
+spawn-at-startup "hadron-night-light" "restore"
 
 // Apps that read these only from the environment.
 environment {
@@ -442,6 +445,8 @@ binds {
     // help-section: System
     // help: Lock the screen
     Super+Alt+L hotkey-overlay-title="Lock the Screen" { spawn-sh "noctalia msg session lock"; }
+    // help: Night light on and off
+    Super+Alt+N hotkey-overlay-title="Night Light On/Off" { spawn "hadron-night-light" "toggle"; }
 
     // Use spawn-sh to run a shell command. Do this if you need pipes, multiple commands, etc.
     // Note: the entire command goes as a single argument. It's passed verbatim to `sh -c`.

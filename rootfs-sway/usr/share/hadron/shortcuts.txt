@@ -16,6 +16,7 @@ Windows	Super + drag	Move a floating window with the mouse
 Workspaces	Super + 1 ... 0	Switch to the numbered workspace
 Workspaces	Super + Shift + 1 ... 0	Send the window to the numbered workspace
 System	Super + Alt + L	Lock the screen
+System	Super + Alt + N	Night light on and off
 System	Print	Screenshot to the clipboard
 System	Super + Print	Screenshot of an area
 System	Super + N	Wi-Fi

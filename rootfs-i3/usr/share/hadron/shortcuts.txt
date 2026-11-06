@@ -16,6 +16,7 @@ Windows	Super + R	Resize mode (arrows or H J K L, then Enter)
 Windows	Super + drag	Move a floating window with the mouse
 Workspaces	Super + 1 ... 0	Switch to the numbered workspace
 Workspaces	Super + Shift + 1 ... 0	Send the window to the numbered workspace
+System	Super + Alt + N	Night light on and off
 System	Super + Alt + L	Lock the screen
 System	Print	Screenshot to the clipboard and ~/Pictures
 System	Super + Print	Screenshot of an area or a window

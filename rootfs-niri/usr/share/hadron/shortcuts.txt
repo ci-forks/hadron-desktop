@@ -23,5 +23,6 @@ System	Super + Shift + /	Niri's own shortcut overview
 System	Super + S	Control center: Wi-Fi, Bluetooth, sound
 System	Super + Shift + ,	Shell settings: bar, dock, wallpaper, theme
 System	Super + Alt + L	Lock the screen
+System	Super + Alt + N	Night light on and off
 System	Print	Screenshot (pick an area, then Enter)
 System	Super + Shift + Escape	Toggle the shortcut inhibit

@@ -1,7 +1,7 @@
 #!/bin/sh
 # The Hadron menu, on Super+Escape in every variant: one place to reach the
-# apps, the first-run app picker, Wi-Fi, Bluetooth, audio, screenshots,
-# updates, the shortcut sheet and the power actions. The picker is
+# apps, the first-run app picker, Wi-Fi, Bluetooth, audio, screenshots, the
+# night light, updates, the shortcut sheet and the power actions. The picker is
 # hadron-pick (fuzzel on Wayland, dmenu on i3). Each entry opens what the
 # variant already uses for it: the hadron-* menus on sway and i3, Noctalia's
 # panels on niri, COSMIC Settings and cosmic-osd on COSMIC.
@@ -126,7 +126,11 @@ entries="$entries
 Wi-Fi${tab}󰖩
 Bluetooth${tab}󰂯
 Audio${tab}󰕾
-Capture${tab}󰄀
+Capture${tab}󰄀"
+# COSMIC has no night light (see hadron-night-light), so no entry there.
+[ "$DESKTOP_NAME" = COSMIC ] || entries="$entries
+Night light${tab}󰖔"
+entries="$entries
 Update${tab}󰚰
 Help${tab}󰌌
 Power${tab}󰐥"
@@ -139,6 +143,7 @@ case "$sel" in
     Bluetooth) panel bluetooth ;;
     Audio)     panel audio ;;
     Capture)   capture ;;
+    "Night light") exec hadron-night-light toggle ;;
     Update)    update ;;
     Help)      help_sheet ;;
     Power)     power ;;

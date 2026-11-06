@@ -80,6 +80,8 @@ exec hadron-update tray
 # First-run app picker (a browser and essentials from Flathub), once per user,
 # after the network is up; it runs in the background.
 exec hadron-first-run-apps --login
+# Night light (wlsunset), if the user turned it on in an earlier session.
+exec hadron-night-light restore
 
 ### Key bindings ##########################################################
 # help-row: Windows | Super + drag | Move a floating window with the mouse
@@ -104,6 +106,10 @@ bindsym $mod+F1            exec foot --app-id=floatterm -T "Keyboard shortcuts" 
 # The Hadron menu: apps, Wi-Fi, Bluetooth, audio, capture, update, help, power.
 # help: Hadron menu: apps, Wi-Fi, Bluetooth, updates, power
 bindsym $mod+Escape        exec hadron-menu
+# Night light on and off: a warmer screen from 20:00 to 07:00.
+# help-section: System
+# help: Night light on and off
+bindsym $mod+Mod1+n        exec hadron-night-light toggle
 
 # Focus
 # help-section: Windows
