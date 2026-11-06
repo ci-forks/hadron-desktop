@@ -191,6 +191,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
+      # The agent image is built on i3, whose Mesa links libLLVM (llvmpipe).
+      # Use the LLVM image release.yml publishes for this tree's llvm stage
+      # (`make print-llvm-tag`). Without one, the build compiles LLVM itself,
+      # which takes about three hours.
+      - name: Use the prebuilt LLVM
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${{ github.repository }}:$(make -s print-llvm-tag)"
+          if docker buildx imagetools inspect "$image" >/dev/null 2>&1; then
+            echo "Using $image"
+            echo "LLVM_IMAGE=$image" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No $image; compiling LLVM in this job"
+          fi
+
       - name: Build agent ISO
         shell: bash
         run: |

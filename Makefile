@@ -71,12 +71,16 @@ cache_from = --cache-from type=registry$(comma)ref=$(CACHE_REF)-$(1)
 cache_to   = --cache-to type=registry$(comma)ref=$(CACHE_REF)-$(1)$(comma)mode=max$(comma)ignore-error=true
 cache_args = $(if $(CACHE_REF),$(call cache_from,$(1)) $(if $(filter true,$(CACHE_PUSH)),$(call cache_to,$(1))))
 
-# Prebuilt LLVM, for CI. The llvm stage (only COSMIC, niri and GPU=full use it)
-# compiles LLVM and clang for about three hours. LLVM_IMAGE names an image built
-# from the llvm-dist target (`make LLVM_OUT=<ref> llvm-image`), and the build
-# uses it in place of the llvm stage. The tag from `make print-llvm-tag` is a
-# hash of the Hadron release and the llvm stage text, so a stale image is
-# never used: any change to either gives a new tag.
+# Prebuilt LLVM, for CI. Every build uses the llvm stage (Mesa's llvmpipe links
+# libLLVM, and COSMIC and niri also need libclang), and it compiles LLVM and
+# clang for about three hours, so a local build without LLVM_IMAGE takes that
+# much longer the first time. LLVM_IMAGE names an image built from the
+# llvm-dist target (`make LLVM_OUT=<ref> llvm-image`), and the build uses it in
+# place of the llvm stage. The tag from `make print-llvm-tag` is a hash of the
+# Hadron release and the llvm stage text, so a stale image is never used: any
+# change to either gives a new tag. Release builds publish it as
+# ghcr.io/kairos-community/hadron-desktop:<print-llvm-tag>, which a local
+# build can use too.
 LLVM_IMAGE ?=
 ifdef LLVM_IMAGE
 BUILD_ARGS += --build-context llvm=docker-image://$(LLVM_IMAGE)
