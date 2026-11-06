@@ -20,17 +20,18 @@ install:
   auto: true
   reboot: true
 
-# The desktop user. Replace the password (or use a hashed `passwd`) and add your
-# SSH key. Membership in the listed groups gives access to GPU/input/audio/
-# bluetooth devices and sudo.
+# The desktop user. Replace the name and the password (or use a hashed
+# `passwd`) and add your SSH key. Do not name it `kairos`: Kairos creates that
+# user on the live ISO only (password "kairos"). Membership in the listed groups
+# gives access to GPU/input/audio/bluetooth devices and sudo.
 users:
-  - name: kairos
+  - name: hadron
     # The name graphical login screens (COSMIC's greeter) show. Not in Kairos'
     # users schema, but yip reads it; without it the name is "Created by
     # entities".
-    gecos: Kairos
+    gecos: Hadron
     # Plaintext for the example; prefer a hashed value from `openssl passwd -6`.
-    passwd: kairos
+    passwd: hadron
     groups:
       - admin            # sudo
       - audio
@@ -54,10 +55,10 @@ stages:
         - path: /etc/ly/save.ini
           permissions: 0644
           content: |
-            user = kairos
+            user = hadron
             session_index = 2
   boot:
     # The display name again, for a kairos-agent that drops gecos.
     - name: "Display name"
       commands:
-        - usermod -c Kairos kairos
+        - usermod -c Hadron hadron

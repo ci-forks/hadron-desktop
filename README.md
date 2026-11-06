@@ -309,7 +309,12 @@ SKIP_BUILD=1 bash test/agent/profile_isolation.sh   # reuse already-built images
 ### Users and login
 
 The image bakes in **no user**. The desktop user is created at install time and
-lives on the persistent `/home`. On boot the **`ly`** display manager (TUI, on
+lives on the persistent `/home`. Kairos' default `kairos` user (password
+`kairos`) exists only on the live ISO and in UKI install mode: the Dockerfile
+`kairos` stage limits kairos-init's `10_accounting.yaml` to those boots, so an
+installed system, and its login screen, shows only the users you created. An
+upgraded system loses the old locked `kairos` user on its first boot, because
+`/etc` is rebuilt at every boot; `/home/kairos`, if it exists, stays. On boot the **`ly`** display manager (TUI, on
 tty1) authenticates that user and launches the selected session through
 `/usr/bin/start-desktop`. In the Sway image this is the Wayland session; in the
 i3 image, `ly` starts XLibre and then launches i3.
