@@ -42,6 +42,12 @@ func RenderCloudConfig(c Choice, hash string) string {
 	fmt.Fprintf(&b, "hostname: %q\n", c.Hostname)
 	b.WriteString("users:\n")
 	fmt.Fprintf(&b, "  - name: %q\n", c.Username)
+	// The name graphical login screens (cosmic-greeter) show. Kairos' users
+	// schema has no gecos field, but it does not reject unknown keys, and
+	// kairos-agent copies the whole config to /oem. yip reads this file as
+	// cloud-init, whose users do have gecos, so the user is created with this
+	// name instead of mudler/entities' default "Created by entities".
+	fmt.Fprintf(&b, "    gecos: %q\n", c.Username)
 	fmt.Fprintf(&b, "    passwd: '%s'\n", hash)
 	fmt.Fprintf(&b, "    groups: %s\n", desktopGroups)
 	if c.Github != "" {
@@ -57,9 +63,10 @@ func RenderCloudConfig(c Choice, hash string) string {
 	b.WriteString("          content: |\n")
 	fmt.Fprintf(&b, "            user = %s\n", c.Username)
 	b.WriteString("            session_index = 2\n")
-	// The name graphical login screens (cosmic-greeter) show. Kairos' users
-	// block has no gecos field and fills in "Created by entities", and /etc is
-	// rebuilt from cloud-config at every boot, so it is set again each boot.
+	// The display name again, in case a kairos-agent stops passing gecos
+	// through. /etc is rebuilt from cloud-config at every boot, so it is set
+	// again each boot, after the users step above (yip runs the users of a
+	// cloud-init file first in its boot stage).
 	b.WriteString("  boot:\n")
 	b.WriteString("    - name: \"Hadron desktop display name\"\n")
 	b.WriteString("      commands:\n")

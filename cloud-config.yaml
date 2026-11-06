@@ -25,6 +25,10 @@ install:
 # bluetooth devices and sudo.
 users:
   - name: kairos
+    # The name graphical login screens (COSMIC's greeter) show. Not in Kairos'
+    # users schema, but yip reads it; without it the name is "Created by
+    # entities".
+    gecos: Kairos
     # Plaintext for the example; prefer a hashed value from `openssl passwd -6`.
     passwd: kairos
     groups:
@@ -53,8 +57,7 @@ stages:
             user = kairos
             session_index = 2
   boot:
-    # The name graphical login screens (COSMIC's greeter) show. Kairos' users
-    # block has no gecos field and fills in "Created by entities".
+    # The display name again, for a kairos-agent that drops gecos.
     - name: "Display name"
       commands:
         - usermod -c Kairos kairos
