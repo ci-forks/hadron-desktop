@@ -22,6 +22,7 @@ row "Super + Shift + Escape" "log out"
 else
 row "Super + Enter"          "open a terminal"
 row "Super + D"              "launch an application"
+[ "${XDG_CURRENT_DESKTOP:-}" = i3 ] && row "Super + Shift + D"      "run a command from \$PATH"
 row "Super + Shift + Q"      "close the focused window"
 row "Super + Shift + E"      "power menu: log out, suspend, reboot, power off"
 row "Super + F1"             "this help"

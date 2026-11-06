@@ -1,0 +1,114 @@
+#!/bin/sh
+# List the installed applications by name and launch the one you pick. This is
+# the launcher on Super+D in the i3 variant, where dmenu_run only knows the
+# programs on $PATH and so misses every Flatpak and every other .desktop app.
+# (sway, niri and COSMIC have fuzzel, Noctalia and cosmic-launcher for this.)
+#
+# It reads the .desktop files in $XDG_DATA_HOME/applications and in each
+# $XDG_DATA_DIRS/applications, plus the Flatpak export directories, which a
+# session that did not source Flatpak's profile script does not have on
+# XDG_DATA_DIRS. A file is the desktop-file ID of its path under
+# applications/ (a/b.desktop is a-b.desktop); the first directory that has an
+# ID wins, so a user's file overrides the system's. An entry is hidden when
+# NoDisplay or Hidden is true, or when OnlyShowIn / NotShowIn rule out the
+# current desktop. The pick runs through hadron-pick (dmenu on i3).
+#
+# The Exec line runs through sh with its field codes (%f %u %F %U %i %c %k and
+# the rest) removed, which is right for a launcher that passes no files or
+# URLs. Terminal=true apps run in the session's terminal, TERMINAL_EXEC.
+
+TERMINAL_EXEC=${TERMINAL_EXEC:-}
+# shellcheck disable=SC1091
+[ -r /etc/hadron-desktop/session ] && . /etc/hadron-desktop/session
+: "${TERMINAL_EXEC:=st -e}"
+
+dirs="${XDG_DATA_HOME:-${HOME:-}/.local/share}
+${HOME:-}/.local/share/flatpak/exports/share"
+old_ifs=$IFS
+IFS=:
+for d in ${XDG_DATA_DIRS:-/usr/local/share:/usr/share} /var/lib/flatpak/exports/share; do
+    dirs="$dirs
+$d"
+done
+IFS=$old_ifs
+
+tmp=$(mktemp "${TMPDIR:-/tmp}/hadron-apps.XXXXXX") || exit 1
+trap 'rm -f "$tmp"' EXIT HUP INT TERM
+
+# One "Name<TAB>Terminal<TAB>Exec" line per visible app, sorted by name.
+printf '%s\n' "$dirs" | while IFS= read -r d; do
+    [ -d "$d/applications" ] || continue
+    d=${d%/}
+    find -L "$d/applications" -type f -name '*.desktop' 2>/dev/null |
+        while IFS= read -r f; do
+            printf '%s\t%s\n' "$d/applications" "${f#"$d"/applications/}"
+        done
+done | DESK="${XDG_CURRENT_DESKTOP:-}" awk -F'\t' '
+function has(list, item,    n, a, i) {
+    n = split(list, a, ";")
+    for (i = 1; i <= n; i++) if (a[i] == item) return 1
+    return 0
+}
+function hasany(list,    n, c, i) {
+    n = split(ENVIRON["DESK"], c, ":")
+    for (i = 1; i <= n; i++) if (c[i] != "" && has(list, c[i])) return 1
+    return 0
+}
+{
+    id = $2; gsub("/", "-", id)
+    if (id in seen) next          # an earlier directory has this ID
+    seen[id] = 1                  # even a hidden file shadows the later ones
+    path = $1 "/" $2
+    name = ""; exec = ""; term = "false"; hide = 0; only = ""; notin = ""; type = ""
+    ing = 0
+    while ((getline line < path) > 0) {
+        if (line ~ /^\[/) { ing = (line == "[Desktop Entry]"); continue }
+        if (!ing) continue
+        k = line; sub(/=.*/, "", k)
+        v = line; sub(/^[^=]*=/, "", v)
+        if (k == "Name") name = v
+        else if (k == "Exec") exec = v
+        else if (k == "Terminal") term = v
+        else if (k == "Type") type = v
+        else if (k == "NoDisplay" || k == "Hidden") { if (v == "true") hide = 1 }
+        else if (k == "OnlyShowIn") only = v
+        else if (k == "NotShowIn") notin = v
+    }
+    close(path)
+    if (hide || name == "" || exec == "" || (type != "" && type != "Application")) next
+    if (only != "" && !hasany(only)) next
+    if (notin != "" && hasany(notin)) next
+    gsub(/%%/, "\001", exec)
+    gsub(/%[A-Za-z]/, "", exec)
+    gsub(/\001/, "%", exec)
+    sub(/[ \t]+$/, "", exec)
+    names[++n] = name; terms[n] = (term == "true" ? "true" : "false"); execs[n] = exec
+    count[name]++
+}
+END {
+    # Two apps with one name: tell them apart by the command they run.
+    for (i = 1; i <= n; i++) {
+        label = names[i]
+        if (count[label] > 1) label = label " (" execs[i] ")"
+        print label "\t" terms[i] "\t" execs[i]
+    }
+}' | sort -f -t "$(printf '\t')" -k1,1 >"$tmp"
+
+[ -s "$tmp" ] || { echo "hadron-apps: no applications found" >&2; exit 1; }
+
+lines=$(wc -l <"$tmp")
+[ "$lines" -gt 12 ] && lines=12
+sel=$(cut -f1 "$tmp" | hadron-pick Run "$lines") || exit 0
+[ -n "$sel" ] || exit 0
+
+# The selected line's terminal flag and command; the first match wins.
+row=$(SEL="$sel" awk -F'\t' '$1 == ENVIRON["SEL"] { print $2 "\t" $3; exit }' "$tmp")
+[ -n "$row" ] || exit 0
+term=${row%%	*}
+cmd=${row#*	}
+
+if [ "$term" = true ]; then
+    # shellcheck disable=SC2086 # TERMINAL_EXEC is split on spaces on purpose.
+    exec $TERMINAL_EXEC sh -c "$cmd"
+fi
+exec sh -c "$cmd"

@@ -22,7 +22,7 @@ The baseline:
 | Upgrades only by `admin`, through polkit | polkit with the `admin` rule (`50-hadron-update.rules`) on all four variants. Agent removes the update service and its polkit files |
 | System tray that hosts StatusNotifierItem icons | waybar `tray`, i3bar + snixembed (started from `config.d/30-update-tray.conf`), COSMIC status area, Noctalia `tray` |
 | First-login welcome | `hadron-welcome`; COSMIC uses cosmic-initial-setup |
-| Keyboard habits (tiling variants) | Super+Enter terminal, Super+D launcher, Super+Shift+Q close, Super+Shift+E power menu, Super+F1 shortcut sheet (`hadron-help`) |
+| Keyboard habits (tiling variants) | Super+Enter terminal, Super+D launcher (`hadron-apps` on i3, which lists .desktop and Flatpak apps; Super+Shift+D keeps `dmenu_run`), Super+Shift+Q close, Super+Shift+E power menu, Super+F1 shortcut sheet (`hadron-help`) |
 | Network, audio, power menus | `hadron-wifi-menu`, `hadron-audio-menu`, `hadron-power-menu`, or the shell's own panels |
 | Audio | PipeWire and WirePlumber started with the session, media keys work |
 | Screenshots and screen lock | a key binding for each. Lockers: swaylock (sway, niri), i3lock (i3), COSMIC's own; sway (swayidle) and i3 (xss-lock) also lock on idle and before suspend. i3 takes screenshots with `hadron-screenshot`. The agent overlay starts no locker |

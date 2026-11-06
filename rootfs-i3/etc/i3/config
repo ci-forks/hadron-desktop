@@ -2,7 +2,7 @@
 
 set $mod   Mod4
 set $term  st
-set $menu  dmenu_run -i -l 12 -p "Run" -fn "Inter Variable-11" -nb "#1a1b26" -nf "#c0caf5" -sb "#7aa2f7" -sf "#16161e"
+set $menu  hadron-apps
 set $left  h
 set $down  j
 set $up    k
@@ -56,6 +56,8 @@ floating_modifier $mod
 
 bindsym $mod+Return        exec --no-startup-id $term
 bindsym $mod+d             exec --no-startup-id $menu
+# The old PATH-only runner, for a command that has no .desktop file.
+bindsym $mod+Shift+d       exec --no-startup-id dmenu_run -i -l 12 -p "Run" -fn "Inter Variable-11" -nb "#1a1b26" -nf "#c0caf5" -sb "#7aa2f7" -sf "#16161e"
 bindsym $mod+Shift+q       kill
 bindsym $mod+Shift+c       reload
 bindsym $mod+Shift+e       exec --no-startup-id hadron-power-menu
