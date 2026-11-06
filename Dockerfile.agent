@@ -192,3 +192,15 @@ RUN rm -f /usr/share/dbus-1/system.d/io.kairos.HadronUpdate1.conf \
       /usr/share/polkit-1/actions/io.kairos.hadron-update.policy \
       /usr/share/polkit-1/rules.d/50-hadron-update.rules && \
     ! grep -rhsv '^[[:space:]]*#' /etc/i3 /etc/xdg/autostart | grep -q 'hadron-update'
+# No keyring: the appliance logs in automatically, so no password ever
+# unlocks it, and there is no dialog that could. Without the Secret Service,
+# apps use their own plain store, as before.
+RUN rm -f /etc/systemd/user/sockets.target.wants/gnome-keyring-daemon.socket \
+      /usr/lib/systemd/user/gnome-keyring-daemon.socket \
+      /usr/lib/systemd/user/gnome-keyring-daemon.service \
+      /usr/share/dbus-1/services/org.freedesktop.secrets.service \
+      /usr/share/dbus-1/services/org.freedesktop.impl.portal.Secret.service \
+      /usr/share/dbus-1/services/org.gnome.keyring.service \
+      /usr/share/xdg-desktop-portal/portals/gnome-keyring.portal \
+      /usr/lib/security/pam_gnome_keyring.so && \
+    ! ls /usr/share/dbus-1/services | grep -q -e secrets -e keyring
