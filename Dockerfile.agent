@@ -1,7 +1,7 @@
 ARG BASE_IMAGE=i3-desktop:dev
 # Must match the Hadron release the i3 base image was built on (see the
 # top-level Dockerfile); scripts/bump-hadron.sh keeps the two in step.
-ARG HADRON_VERSION=v0.6.3
+ARG HADRON_VERSION=v0.6.4
 FROM ${BASE_IMAGE} AS xlibre-desktop
 FROM rust:1.97.0-alpine3.22 AS rust-toolchain
 

@@ -18,7 +18,7 @@
 # value. scripts/bump-hadron.sh rewrites it here, in Dockerfile.agent and in the
 # Makefile; .github/workflows/follow-hadron.yml runs that when Hadron tags a
 # new release.
-ARG HADRON_VERSION=v0.6.3
+ARG HADRON_VERSION=v0.6.4
 ARG BASE_IMAGE=ghcr.io/kairos-io/hadron:${HADRON_VERSION}
 # Select the display server + window manager pair. Supported values: sway, i3.
 ARG DESKTOP=sway

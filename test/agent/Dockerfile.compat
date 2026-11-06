@@ -1,6 +1,6 @@
 ARG BASE_IMAGE=hadron-agent:compat
 # Same Hadron release as the image under test; scripts/bump-hadron.sh keeps it in step.
-ARG HADRON_VERSION=v0.6.3
+ARG HADRON_VERSION=v0.6.4
 FROM ${BASE_IMAGE} AS fixture-runtime
 
 FROM ghcr.io/kairos-io/hadron-toolchain:${HADRON_VERSION} AS fixture-build
