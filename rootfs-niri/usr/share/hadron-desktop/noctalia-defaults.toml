@@ -39,3 +39,18 @@ directory = "/usr/share/backgrounds/hadron"
 
 [wallpaper.default]
 path = "/usr/share/backgrounds/hadron/hadron-orbits-night-3840x2160.png"
+
+# Night light: the same as hadron-night-light on the other variants, 4500 K
+# from 20:00 to 07:00. It starts off; Super+Alt+N and the Hadron menu turn it
+# on and off through `noctalia msg nightlight-enable|disable`, and
+# hadron-night-light turns it back on at session start if the user left it on
+# (Noctalia does not keep that switch across restarts). Hadron has no location
+# service, so the schedule uses fixed times; a location set in Noctalia's
+# Settings window is used once the custom schedule there is turned off.
+[nightlight]
+temperature_night = 4500
+
+[location]
+custom_schedule = true
+sunset = "20:00"
+sunrise = "07:00"

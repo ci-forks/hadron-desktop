@@ -87,3 +87,7 @@ jobs:
       # The selection and stamp logic, against a fake flatpak in Alpine.
       - name: First-run app picker
         run: test/first-run/check-first-run-apps.sh
+
+      # Docker runs it in a throwaway Alpine container, with fake tools.
+      - name: hadron-night-light state and toggle
+        run: test/night-light/check-night-light.sh

@@ -54,6 +54,8 @@ exec --no-startup-id hadron-welcome
 # First-run app picker (a browser and essentials from Flathub), once per user,
 # after the network is up. The agent image deletes this line.
 exec --no-startup-id hadron-first-run-apps --login
+# Night light (xsct), if the user turned it on in an earlier session.
+exec --no-startup-id hadron-night-light restore
 
 # help-row: Windows | Super + drag | Move a floating window with the mouse
 floating_modifier $mod
@@ -77,6 +79,10 @@ bindsym $mod+F1            exec --no-startup-id st -c HadronFloat -t "Keyboard s
 # The Hadron menu: apps, Wi-Fi, Bluetooth, audio, capture, update, help, power.
 # help: Hadron menu: apps, Wi-Fi, Bluetooth, updates, power
 bindsym $mod+Escape        exec --no-startup-id hadron-menu
+# Night light on and off: a warmer screen from 20:00 to 07:00.
+# help-section: System
+# help: Night light on and off
+bindsym $mod+Mod1+n        exec --no-startup-id hadron-night-light toggle
 
 # Screen lock. i3lock checks the password through /etc/pam.d/i3lock. xss-lock
 # runs the same command on idle and before suspend, from

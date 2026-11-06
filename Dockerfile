@@ -2048,6 +2048,22 @@ RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dpam=enabled -Dgdk-pixbuf=disabl
 RUN DESTDIR=/swaylock ninja -C buildDir install
 
 
+# wlsunset — the sway night light, started by hadron-night-light. It warms the
+# screen through wlr-gamma-control, at fixed times (Hadron has no location).
+# niri does not need it: Noctalia has its own night light.
+FROM toolchain AS wlsunset
+COPY --from=wayland /wayland /
+# renovate: datasource=github-tags depName=kennylevinsen/wlsunset extractVersion=^(?<version>\d+(\.\d+)*)$
+ARG WLSUNSET_VERSION=0.4.0
+RUN mkdir -p /wlsunset
+WORKDIR /build
+RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://github.com/kennylevinsen/wlsunset/archive/refs/tags/${WLSUNSET_VERSION}.tar.gz -o wlsunset.tar.gz && tar -xzf wlsunset.tar.gz && rm wlsunset.tar.gz && mv wlsunset-* wlsunset-src
+WORKDIR /build/wlsunset-src
+RUN pip3 install meson ninja
+RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dman-pages=disabled
+RUN DESTDIR=/wlsunset ninja -C buildDir install
+
+
 # X protocol libs — ly links libxcb (X11 session support) even in a Wayland setup
 FROM toolchain AS xorgproto
 # renovate: datasource=gitlab-tags depName=xorg/proto/xorgproto registryUrl=https://gitlab.freedesktop.org extractVersion=^xorgproto-(?<version>\d+(\.\d+)*)$
@@ -2642,6 +2658,15 @@ RUN curl --retry-all-errors -fL --retry 5 https://github.com/astrand/xclip/archi
     sed -i 's|^#include <X11/Xmu/Atoms.h>$|#include <X11/Xresource.h>\n#include <string.h>\n#define XA_CLIPBOARD(d) XInternAtom((d), "CLIPBOARD", False)\n#define XA_UTF8_STRING(d) XInternAtom((d), "UTF8_STRING", False)|' xclip.c && \
     autoreconf -fi && ./configure ${COMMON_CONFIGURE_ARGS} && \
     make -j"$(nproc)" && install -m0755 xclip /x11-desktop-tools/usr/bin/xclip
+
+# xsct is the i3 night light: hadron-night-light runs it every minute, and it
+# sets the X RandR gamma once and exits. One C file against libX11 and
+# libXrandr, which the i3 image already has.
+# renovate: datasource=github-tags depName=faf0/sct extractVersion=^(?<version>\d+(\.\d+)*)$
+ARG XSCT_VERSION=2.3
+RUN curl --retry-all-errors -fL --retry 5 https://github.com/faf0/sct/archive/refs/tags/${XSCT_VERSION}.tar.gz -o sct.tar.gz && \
+    tar -xf sct.tar.gz && cd sct-${XSCT_VERSION} && \
+    make CC=cc LDFLAGS=-s && install -m0755 xsct /x11-desktop-tools/usr/bin/xsct
 
 
 # hadron-xroot: the i3 wallpaper. Paints a PNG scaled to fill each monitor on
@@ -4121,6 +4146,7 @@ COPY --from=wl-clipboard /wl-clipboard /
 COPY --from=slurp /slurp /
 COPY --from=swayidle /swayidle /
 COPY --from=swaylock /swaylock /
+COPY --from=wlsunset /wlsunset /
 # waybar — status bar + its GTK3/gtkmm/tray runtime stack and Nerd Font glyphs
 COPY --from=gtk3 /gtk3 /
 COPY --from=gdk-pixbuf /gdk-pixbuf /
