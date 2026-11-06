@@ -1,106 +1,69 @@
 #!/bin/sh
 # Keyboard shortcut cheat sheet, opened with Super+F1 (and mentioned in the
-# first-login welcome notification). Shared by the variants; the few lines
-# that differ key off XDG_CURRENT_DESKTOP, which each session's env file sets.
-b=$(printf '\033[1;34m') c=$(printf '\033[36m') d=$(printf '\033[2m') r=$(printf '\033[0m')
+# first-login welcome notification). Shared by the variants.
+#
+#   hadron-help            show the sheet in a pager
+#   hadron-help --search   pick a shortcut from a searchable list (hadron-pick)
+#   hadron-help --text     print the sheet to stdout, no colour, no pager
+#
+# The key rows are not written here. tools/gen-shortcuts.py builds
+# /usr/share/hadron/shortcuts.txt for the variant from its real config (sway,
+# i3, niri) or, for COSMIC, from a short hand-kept list, and CI fails when the
+# committed file is stale. Each row is: SECTION <tab> KEYS <tab> DESCRIPTION.
+# Keys are ASCII on purpose: awk pads by bytes, so a multi-byte character in
+# the key column would push its description out of line.
+sheet=${HADRON_SHORTCUTS:-/usr/share/hadron/shortcuts.txt}
 
-# Keys are ASCII on purpose: printf pads by bytes, so a multi-byte character
-# in the key column would push its description out of line.
-row() { printf "  ${c}%-34s${r} %s\n" "$1" "$2"; }
-section() { printf "\n${b}%s${r}\n" "$1"; }
+if [ ! -r "$sheet" ]; then
+    echo "hadron-help: no shortcut list at $sheet" >&2
+    exit 1
+fi
+
+# The rows that are commands, not keys, after the key sections.
+software() {
+    printf 'Software\t%s\t%s\n' \
+        "flatpak install flathub <app>" "install a desktop app" \
+        "distrobox create / enter" "a mutable Linux to tinker in" \
+        "hadron-update" "check for a new Hadron Desktop release" \
+        "hadron-update upgrade" "install it (applies on the next boot)"
+}
+
+rows() { { grep -v '^#' "$sheet"; software; }; }
+
+# render COLOUR: the sections of rows(), one heading per change of section.
+render() {
+    rows | awk -F '\t' -v colour="$1" '
+        BEGIN {
+            if (colour) { b = "\033[1;34m"; c = "\033[36m"; d = "\033[2m"; r = "\033[0m" }
+            w = 34
+        }
+        { sec[NR] = $1; key[NR] = $2; desc[NR] = $3; if (length($2) > w) w = length($2) }
+        END {
+            printf "%sHadron Desktop%s  %sSuper is the Windows / Command key%s\n", b, r, d, r
+            for (i = 1; i <= NR; i++) {
+                if (sec[i] != last) { printf "\n%s%s%s\n", b, sec[i], r; last = sec[i] }
+                printf "  %s%-" w "s%s %s\n", c, key[i], r, desc[i]
+            }
+        }'
+}
+
+case "${1:-}" in
+    --search)
+        # One line per shortcut, "keys  description", for the picker to filter.
+        # Choosing a line only closes the picker: there is nothing to run.
+        rows | awk -F '\t' '{ printf "%-34s  %s\n", $2, $3 }' |
+            hadron-pick "Shortcuts" 16 >/dev/null
+        exit 0 ;;
+    --text)
+        render 0
+        exit 0 ;;
+    "") ;;
+    *)
+        echo "usage: hadron-help [--search | --text]" >&2
+        exit 2 ;;
+esac
 
 {
-printf "${b}Hadron Desktop${r}  ${d}Super is the Windows / Command key${r}\n"
-
-section "Basics"
-row "Super + Escape"         "Hadron menu: apps, Wi-Fi, Bluetooth, updates, power"
-if [ "${XDG_CURRENT_DESKTOP:-}" = COSMIC ]; then
-row "Super"                  "launch an application"
-row "Super + T"              "open a terminal"
-row "Super + Q"              "close the focused window"
-row "Super + Shift + Escape" "log out"
-else
-row "Super + Enter"          "open a terminal"
-row "Super + D"              "launch an application"
-[ "${XDG_CURRENT_DESKTOP:-}" = i3 ] && row "Super + Shift + D"      "run a command from \$PATH"
-row "Super + Shift + Q"      "close the focused window"
-row "Super + Shift + E"      "power menu: log out, suspend, reboot, power off"
-row "Super + F1"             "this help"
-fi
-
-if [ "${XDG_CURRENT_DESKTOP:-}" = COSMIC ]; then
-section "Windows"
-row "Super + arrows / H J K L"          "move focus"
-row "Super + Shift + arrows / H J K L"  "move the window"
-row "Super + M"              "maximize"
-row "Super + Y"              "tile windows on and off"
-row "Super + G"              "float / tile the window"
-
-section "Workspaces"
-row "Super + W"              "workspaces overview"
-row "Super + A"              "app library"
-row "Super + 1 ... 9"        "switch to workspace 1 to 9"
-row "Super + Shift + 1 ... 9" "send the window to that workspace"
-
-section "System"
-row "Super + Alt + L"        "lock the screen"
-row "Print"                  "screenshot"
-elif [ "${XDG_CURRENT_DESKTOP:-}" = niri ]; then
-section "Windows"
-row "Super + Left / Right / H / L"   "focus the column to the left / right"
-row "Super + Up / Down / K / J"      "focus the window above / below"
-row "Super + Ctrl + arrows / H J K L"  "move the window or column"
-row "Super + R"              "cycle the column width"
-row "Super + F"              "maximize the column"
-row "Super + Shift + F"      "fullscreen"
-row "Super + V"              "float / tile the window"
-row "Super + [ / ]"          "pull a window into / out of the column"
-row "Super + O"              "overview of all workspaces"
-
-section "Workspaces"
-row "Super + U / I"          "workspace below / above"
-row "Super + 1 ... 9"        "switch to workspace 1 to 9"
-row "Super + Ctrl + 1 ... 9" "send the column to that workspace"
-
-section "System"
-row "Super + S"              "control center: Wi-Fi, Bluetooth, sound"
-row "Super + Shift + ,"      "shell settings: bar, dock, wallpaper, theme"
-row "Super + Alt + L"        "lock the screen"
-row "Print"                  "screenshot (pick an area, then Enter)"
-row "Super + Shift + /"      "niri's own shortcut overview"
-else
-section "Windows"
-row "Super + arrows / H J K L"          "move focus"
-row "Super + Shift + arrows / H J K L"  "move the window"
-row "Super + F"              "fullscreen"
-row "Super + Shift + Space"  "float / tile the window"
-row "Super + W / S / E"      "tabbed / stacked / split layout"
-row "Super + R"              "resize mode (arrows, then Enter)"
-row "Super + drag"           "move a floating window with the mouse"
-
-section "Workspaces"
-row "Super + 1 ... 0"          "switch to workspace 1 to 10"
-row "Super + Shift + 1 ... 0"  "send the window to that workspace"
-
-section "System"
-row "Super + N"              "Wi-Fi"
-row "Super + Shift + A"      "audio output"
-row "Super + Shift + B"      "Bluetooth"
-row "Super + Alt + L"        "lock the screen"
-if [ "${XDG_CURRENT_DESKTOP:-}" = i3 ]; then
-row "Print"                  "screenshot to the clipboard and ~/Pictures"
-row "Super + Print"          "screenshot of an area or a window"
-else
-row "Print"                  "screenshot to the clipboard"
-row "Super + Print"          "screenshot of an area"
-fi
-fi
-
-section "Software"
-row "flatpak install flathub <app>"  "install a desktop app"
-row "distrobox create / enter"       "a mutable Linux to tinker in"
-row "hadron-update"                  "check for a new Hadron Desktop release"
-row "hadron-update upgrade"          "install it (applies on the next boot)"
-
-printf "\n${d}Press q to close.${r}\n"
+render 1
+printf "\n\033[2mPress q to close. Search: hadron-help --search\033[0m\n"
 } | less -R

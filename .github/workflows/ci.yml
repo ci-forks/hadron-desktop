@@ -66,6 +66,11 @@ jobs:
             make -s GPU="$gpu" STAGE=cosmic-apps print-stage-key
           done
 
+      - name: Shortcut sheets match the configs
+        run: |
+          python3 tools/test_gen_shortcuts.py
+          python3 tools/gen-shortcuts.py --check
+
       - name: Session scripts and configs parse
         shell: bash
         run: |
