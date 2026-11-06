@@ -7,6 +7,7 @@
 # TEXT: use it for the keys the Dockerfile changes from COSMIC's defaults.
 
 Basics | Super + Escape | Hadron menu: apps, Wi-Fi, Bluetooth, updates, power @ (modifiers: [Super], key: "Escape"): Spawn("hadron-menu"),
+Basics | Super + ; | Emoji picker: copies the chosen emoji @ (modifiers: [Super], key: "semicolon"): Spawn("hadron-emoji"),
 Basics | Super | Launch an application
 Basics | Super + T | Open a terminal
 Basics | Super + Q | Close the focused window

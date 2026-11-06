@@ -397,8 +397,15 @@ RUN meson setup buildDir ${COMMON_MESON_FLAGS} \
 RUN DESTDIR=/glib2 ninja -C buildDir install
 
 
-# FreeType — built without harfbuzz (broken circular dep), png/brotli optional
+# FreeType — built without harfbuzz (broken circular dep) and brotli. With
+# libpng: Noto Color Emoji (the emoji stage) stores its glyphs as PNG images
+# (CBDT), and a FreeType without PNG support cannot load them, so every app
+# that draws text through FreeType (GTK, Pango, foot, fuzzel, dmenu, dunst)
+# would show nothing for an emoji. libfreetype then links libpng16, so every
+# stage that copies /freetype copies /libpng too (freetype2.pc names it), and
+# every image already ships libpng.
 FROM toolchain AS freetype
+COPY --from=libpng /libpng /
 RUN mkdir -p /freetype
 WORKDIR /build
 ARG FREETYPE_VERSION=2.13.3
@@ -419,13 +426,14 @@ RUN curl -fL --retry 5 --retry-delay 3 --retry-all-errors \
     echo "${FREETYPE_SHA256}  freetype.tar.xz" | sha256sum -c - && \
     tar -xf freetype.tar.xz && rm freetype.tar.xz && mv freetype-* freetype-src
 WORKDIR /build/freetype-src
-RUN ./configure ${COMMON_CONFIGURE_ARGS} --disable-dependency-tracking --with-harfbuzz=no --with-png=no --with-brotli=no --with-bzip2=no --with-zlib=yes
+RUN ./configure ${COMMON_CONFIGURE_ARGS} --disable-dependency-tracking --with-harfbuzz=no --with-png=yes --with-brotli=no --with-bzip2=no --with-zlib=yes
 RUN make -j$(nproc) && make install DESTDIR=/freetype
 
 
 # HarfBuzz — needs freetype + glib
 FROM toolchain AS harfbuzz
 COPY --from=freetype /freetype /
+COPY --from=libpng /libpng /
 COPY --from=glib2 /glib2 /
 COPY --from=pcre2 /pcre2 /
 # renovate: datasource=github-tags depName=harfbuzz/harfbuzz extractVersion=^(?<version>\d+(\.\d+)*)$
@@ -468,6 +476,7 @@ RUN make -j$(nproc) CFLAGS="-std=gnu17 -O2 -g" && make install DESTDIR=/gperf
 # Fontconfig (+ DejaVu fonts) — expat from toolchain, freetype built above
 FROM toolchain AS fontconfig
 COPY --from=freetype /freetype /
+COPY --from=libpng /libpng /
 COPY --from=gperf /gperf /
 # renovate: datasource=gitlab-tags depName=fontconfig/fontconfig registryUrl=https://gitlab.freedesktop.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG FONTCONFIG_VERSION=2.15.0
@@ -962,6 +971,7 @@ RUN DESTDIR=/tllist ninja -C buildDir install
 # fcft — font loading/glyph rasterization for foot (shaping disabled)
 FROM toolchain AS fcft
 COPY --from=freetype /freetype /
+COPY --from=libpng /libpng /
 COPY --from=fontconfig /fontconfig /
 COPY --from=pixman /pixman /
 COPY --from=harfbuzz /harfbuzz /
@@ -985,6 +995,7 @@ COPY --from=wayland /wayland /
 COPY --from=libxkb /libxkb /
 COPY --from=pixman /pixman /
 COPY --from=freetype /freetype /
+COPY --from=libpng /libpng /
 COPY --from=fontconfig /fontconfig /
 COPY --from=fcft /fcft /
 COPY --from=tllist /tllist /
@@ -1403,6 +1414,46 @@ RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://github.com/rsm
     install -Dm0644 -t $f/jetbrains-mono 'jbm/fonts/variable/JetBrainsMono[wght].ttf' 'jbm/fonts/variable/JetBrainsMono-Italic[wght].ttf' && \
     install -Dm0644 -t $l/jetbrains-mono jbm/OFL.txt && \
     rm -rf inter.zip jbm.zip inter jbm
+
+# Emoji, on every variant: the Noto Color Emoji font (SIL OFL 1.1) and the
+# list that hadron-emoji, the emoji picker, shows. Data only. 60-hadron.conf
+# adds the font as the last fallback of the generic families and as the
+# "emoji" family. The font's glyphs are PNG images (CBDT), which is why the
+# freetype stage is built with libpng.
+# noto-emoji publishes no font in its release assets, so the font and its
+# licence come from the tagged tree. The list is made from Unicode's
+# emoji-test.txt by tools/gen-emoji-list.sh: one "<emoji> <name>" line per
+# fully-qualified emoji, in /usr/share/hadron/emoji.txt. Nothing publishes
+# checksums, so all three files are checked against SHA256s computed when
+# pinned: a Renovate bump of NOTO_EMOJI_VERSION fails here until the PR
+# updates NOTO_EMOJI_SHA256 too. Unicode has no tags Renovate can read; bump
+# UNICODE_EMOJI_VERSION by hand with the font, once a year when Unicode
+# releases (the font must have glyphs for the emoji the list shows).
+FROM toolchain AS emoji
+# renovate: datasource=github-releases depName=googlefonts/noto-emoji extractVersion=^v(?<version>\d+\.\d+)$
+ARG NOTO_EMOJI_VERSION=2.051
+ARG NOTO_EMOJI_SHA256=72a635cb3d2f3524c51620cdde406b217204e8a6a06c6a096ff8ed4b5fd6e27b
+ARG NOTO_EMOJI_LICENSE_SHA256=6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2
+ARG UNICODE_EMOJI_VERSION=17.0.0
+ARG UNICODE_EMOJI_SHA256=1d8a944f88d7952f7ef7c5167fef3c67995bcae24543949710231b03a201acda
+COPY tools/gen-emoji-list.sh /build/gen-emoji-list.sh
+WORKDIR /tmp
+RUN n=https://raw.githubusercontent.com/googlefonts/noto-emoji/v${NOTO_EMOJI_VERSION} && \
+    curl --retry 5 --retry-delay 3 --retry-all-errors -fL $n/fonts/NotoColorEmoji.ttf -o NotoColorEmoji.ttf && \
+    echo "${NOTO_EMOJI_SHA256}  NotoColorEmoji.ttf" | sha256sum -c - && \
+    curl --retry 5 --retry-delay 3 --retry-all-errors -fL $n/fonts/LICENSE -o OFL.txt && \
+    echo "${NOTO_EMOJI_LICENSE_SHA256}  OFL.txt" | sha256sum -c - && \
+    curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://www.unicode.org/Public/${UNICODE_EMOJI_VERSION}/emoji/emoji-test.txt -o emoji-test.txt && \
+    echo "${UNICODE_EMOJI_SHA256}  emoji-test.txt" | sha256sum -c - && \
+    install -Dm0644 -t /emoji/usr/share/fonts/noto-emoji NotoColorEmoji.ttf && \
+    install -Dm0644 -t /emoji/usr/share/licenses/noto-emoji OFL.txt && \
+    mkdir -p /emoji/usr/share/hadron && \
+    sh /build/gen-emoji-list.sh emoji-test.txt > /emoji/usr/share/hadron/emoji.txt && \
+    # A format change in emoji-test.txt must fail here, not ship an empty
+    # picker: Unicode 17 has 3944 fully-qualified emoji.
+    [ "$(wc -l < /emoji/usr/share/hadron/emoji.txt)" -gt 3000 ] && \
+    grep -qx '😀 grinning face' /emoji/usr/share/hadron/emoji.txt && \
+    rm -f NotoColorEmoji.ttf OFL.txt emoji-test.txt
 
 # The Hadron wallpapers, drawn at build time from theme/palette.toml by
 # tools/gen-wallpaper.py (stdlib Python, fixed dither seed, no network), so a
@@ -2137,6 +2188,7 @@ COPY --from=xcbproto /xcbproto /
 COPY --from=libxau /libxau /
 COPY --from=libxcb /libxcb /
 COPY --from=freetype /freetype /
+COPY --from=libpng /libpng /
 COPY --from=fontconfig /fontconfig /
 RUN mkdir -p /x11-libs
 WORKDIR /build
@@ -2507,6 +2559,7 @@ COPY --from=xcbproto /xcbproto /
 COPY --from=libxau /libxau /
 COPY --from=libxcb /libxcb /
 COPY --from=freetype /freetype /
+COPY --from=libpng /libpng /
 COPY --from=libucontext /libucontext /
 COPY --from=x11-libs /x11-libs /
 COPY --from=xkeyboard-config /xkeyboard-config /
@@ -2544,6 +2597,7 @@ COPY --from=libinput /libinput /
 COPY --from=libucontext /libucontext /
 COPY --from=pixman /pixman /
 COPY --from=freetype /freetype /
+COPY --from=libpng /libpng /
 COPY --from=x11-libs /x11-libs /
 COPY --from=xlibre /xlibre /
 # renovate: datasource=github-tags depName=X11Libre/xf86-input-libinput extractVersion=^xlibre-xf86-input-libinput-(?<version>\d+(\.\d+)*)$
@@ -2597,6 +2651,7 @@ COPY --from=libxau /libxau /
 COPY --from=libxcb /libxcb /
 COPY --from=x11-libs /x11-libs /
 COPY --from=freetype /freetype /
+COPY --from=libpng /libpng /
 COPY --from=fontconfig /fontconfig /
 RUN mkdir -p /x11-desktop-tools/usr/bin
 WORKDIR /build
@@ -4167,6 +4222,7 @@ COPY --from=libdbusmenu /libdbusmenu /
 COPY --from=waybar /waybar /
 COPY --from=nerdfont /nerdfont /
 COPY --from=hadron-fonts /hadron-fonts /
+COPY --from=emoji /emoji /
 COPY --from=hadron-wallpapers /hadron-wallpapers /
 # Fallback icon theme and the Adwaita cursors (system default via
 # /usr/share/icons/default), as on niri.
@@ -4246,6 +4302,7 @@ COPY --from=bluez /bluez /
 # Shared visual assets + login manager.
 COPY --from=nerdfont /nerdfont /
 COPY --from=hadron-fonts /hadron-fonts /
+COPY --from=emoji /emoji /
 COPY --from=hadron-wallpapers /hadron-wallpapers /
 COPY --from=hicolor-icon-theme /hicolor-icon-theme /
 COPY --from=adwaita-cursors /adwaita-cursors /
@@ -4329,14 +4386,17 @@ COPY --from=greetd /greetd /
 COPY --from=pop-launcher /pop-launcher /
 COPY --from=cosmic /cosmic /
 # fuzzel and the font library it links: the picker of the Hadron menu
-# (hadron-pick).
+# (hadron-pick) and the emoji picker.
 COPY --from=fcft /fcft /
 COPY --from=fuzzel /fuzzel /
+# wl-copy: the emoji picker (hadron-emoji) puts the emoji on the clipboard.
+COPY --from=wl-clipboard /wl-clipboard /
 COPY --from=cosmic-fonts /cosmic-fonts /
 COPY --from=hicolor-icon-theme /hicolor-icon-theme /
 COPY --from=musl-locales /musl-locales /
 COPY --from=nerdfont /nerdfont /
 COPY --from=hadron-fonts /hadron-fonts /
+COPY --from=emoji /emoji /
 COPY --from=hadron-wallpapers /hadron-wallpapers /
 COPY --from=hadron-wallpapers-day /hadron-wallpapers-day /
 
@@ -4428,6 +4488,7 @@ COPY --from=wl-clipboard /wl-clipboard /
 COPY --from=cosmic-fonts /cosmic-fonts /
 COPY --from=nerdfont /nerdfont /
 COPY --from=hadron-fonts /hadron-fonts /
+COPY --from=emoji /emoji /
 COPY --from=hadron-wallpapers /hadron-wallpapers /
 COPY --from=hadron-wallpapers-day /hadron-wallpapers-day /
 COPY --from=hicolor-icon-theme /hicolor-icon-theme /
@@ -4647,9 +4708,12 @@ RUN chmod 1777 /tmp; \
       # it to the screen lock, which moves to Super+Alt+L, the lock key of the
       # other variants (Super+Alt+Right still moves to the output on the right).
       # The build fails if upstream changes either line.
+      # Super+; opens the emoji picker, as in every variant. COSMIC binds
+      # nothing there; the binding is added on the line after the menu's,
+      # and the build fails if Super+; is bound twice.
       f=/usr/share/cosmic/com.system76.CosmicSettings.Shortcuts/v1/defaults; \
       sed -i \
-        -e 's/(modifiers: \[Super\], key: "Escape"): System(LockScreen),/(modifiers: [Super], key: "Escape"): Spawn("hadron-menu"),/' \
+        -e 's/(modifiers: \[Super\], key: "Escape"): System(LockScreen),/(modifiers: [Super], key: "Escape"): Spawn("hadron-menu"),\n    (modifiers: [Super], key: "semicolon"): Spawn("hadron-emoji"),/' \
         -e 's/(modifiers: \[Super, Alt\], key: "l"): SwitchOutput(Right),/(modifiers: [Super, Alt], key: "l"): System(LockScreen),/' \
         "$f" || exit 1; \
       grep -qF '(modifiers: [Super], key: "Escape"): Spawn("hadron-menu"),' "$f" || exit 1; \
@@ -4659,6 +4723,8 @@ RUN chmod 1777 /tmp; \
       # notification, so the other notification keys are not bound here.
       sed -i 's/\((modifiers: \[Super\], key: "Escape"): Spawn("hadron-menu"),\)/\1\n    (modifiers: [Super, Alt], key: "BackSpace"): Spawn("hadron-notify-key dnd"),/' "$f" || exit 1; \
       grep -qF '(modifiers: [Super, Alt], key: "BackSpace"): Spawn("hadron-notify-key dnd"),' "$f" || exit 1; \
+      [ "$(grep -cF '(modifiers: [Super], key: "semicolon")' "$f")" -eq 1 ] || exit 1; \
+      grep -qF '(modifiers: [Super], key: "semicolon"): Spawn("hadron-emoji"),' "$f" || exit 1; \
       mkdir -p /etc/systemd/system/multi-user.target.wants; \
       for u in cosmic-greeter cosmic-greeter-daemon accounts-daemon; do \
         ln -sf /usr/lib/systemd/system/$u.service /etc/systemd/system/multi-user.target.wants/$u.service; \

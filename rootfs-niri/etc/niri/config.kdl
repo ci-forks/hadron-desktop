@@ -458,6 +458,9 @@ binds {
     Mod+Ctrl+BackSpace hotkey-overlay-title="Notification History" { spawn "hadron-notify-key" "restore"; }
     // help: Do not disturb on/off
     Mod+Alt+BackSpace hotkey-overlay-title="Do Not Disturb" { spawn "hadron-notify-key" "dnd"; }
+    // help-section: Basics
+    // help: Emoji picker: copies the chosen emoji
+    Mod+Semicolon hotkey-overlay-title="Emoji Picker" { spawn "hadron-emoji"; }
     Alt+Tab { spawn-sh "noctalia msg window-switcher hold"; }
     // help-section: System
     // help: Lock the screen
