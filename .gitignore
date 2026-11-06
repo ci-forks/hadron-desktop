@@ -25,3 +25,4 @@
 # (its main package lives under test/agent/cmd/mcp-smoke and is copied here to
 # satisfy Go's internal-import rule, then removed on exit).
 /agent/cmd/mcp-smoke/
+__pycache__/

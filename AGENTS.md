@@ -32,6 +32,16 @@ The baseline:
 | Bluetooth menu | pair, connect, disconnect, forget, power. `hadron-bluetooth-menu` (bluetoothctl through `hadron-pick`) on sway and i3, Super+Shift+B and the waybar module; the Noctalia control center and COSMIC's Bluetooth applet |
 | Saved-password store | gnome-keyring (Secret Service and its portal) on all four variants, so Electron and Chromium Flatpaks do not store secrets in plain text. `pam_gnome_keyring` in ly's and greetd's PAM services unlocks the login keyring with the login password; `gnome-keyring-daemon.socket` is enabled for every user. The agent removes it (autologin, nothing can unlock it) |
 
+## The shortcut sheet is generated
+
+`hadron-help` shows `rootfs-<variant>/usr/share/hadron/shortcuts.txt`, which
+`tools/gen-shortcuts.py` writes from the key bindings in the sway, i3 and niri
+configs. A binding appears on the sheet only when a `# help: ...` comment
+(`// help:` in niri) is on the line above it; see the script's docstring for
+`help+:`, `help-section:` and `help-row:`. After you change a binding or its
+comment, run `python3 tools/gen-shortcuts.py` and commit the result; CI fails
+on a stale sheet. COSMIC's list is hand-kept in `tools/shortcuts-cosmic.txt`.
+
 ## Adding a variant
 
 Besides the features above, a variant is wired into the build and release in

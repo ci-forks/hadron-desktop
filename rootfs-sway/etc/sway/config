@@ -79,19 +79,32 @@ exec hadron-welcome
 exec hadron-update tray
 
 ### Key bindings ##########################################################
+# help-row: Windows | Super + drag | Move a floating window with the mouse
 floating_modifier $mod normal
 
+# help-section: Basics
+# help: Open a terminal
 bindsym $mod+Return        exec $term
+# help: Launch an application
 bindsym $mod+d             exec $menu
+# help: Close the focused window
 bindsym $mod+Shift+q       kill
 bindsym $mod+Shift+c       reload
+# help: Power menu: log out, suspend, reboot, power off
 bindsym $mod+Shift+e       exec hadron-power-menu
+# help-section: System
+# help: Lock the screen
 bindsym $mod+Mod1+l        exec swaylock -f
+# help-section: Basics
+# help: This help
 bindsym $mod+F1            exec foot --app-id=floatterm -T "Keyboard shortcuts" hadron-help
 # The Hadron menu: apps, Wi-Fi, Bluetooth, audio, capture, update, help, power.
+# help: Hadron menu: apps, Wi-Fi, Bluetooth, updates, power
 bindsym $mod+Escape        exec hadron-menu
 
 # Focus
+# help-section: Windows
+# help+: Move focus
 bindsym $mod+$left  focus left
 bindsym $mod+$down  focus down
 bindsym $mod+$up    focus up
@@ -102,6 +115,7 @@ bindsym $mod+Up     focus up
 bindsym $mod+Right  focus right
 
 # Move windows
+# help+: Move the window
 bindsym $mod+Shift+$left  move left
 bindsym $mod+Shift+$down  move down
 bindsym $mod+Shift+$up    move up
@@ -112,6 +126,8 @@ bindsym $mod+Shift+Up     move up
 bindsym $mod+Shift+Right  move right
 
 # Workspaces
+# help-section: Workspaces
+# help+: Switch to the numbered workspace
 bindsym $mod+1 workspace number 1
 bindsym $mod+2 workspace number 2
 bindsym $mod+3 workspace number 3
@@ -122,6 +138,7 @@ bindsym $mod+7 workspace number 7
 bindsym $mod+8 workspace number 8
 bindsym $mod+9 workspace number 9
 bindsym $mod+0 workspace number 10
+# help+: Send the window to the numbered workspace
 bindsym $mod+Shift+1 move container to workspace number 1
 bindsym $mod+Shift+2 move container to workspace number 2
 bindsym $mod+Shift+3 move container to workspace number 3
@@ -136,10 +153,14 @@ bindsym $mod+Shift+0 move container to workspace number 10
 # Layout
 bindsym $mod+b splith
 bindsym $mod+v splitv
+# help-section: Windows
+# help+: Stacked, tabbed or split layout
 bindsym $mod+s layout stacking
 bindsym $mod+w layout tabbed
 bindsym $mod+e layout toggle split
+# help: Fullscreen
 bindsym $mod+f fullscreen
+# help: Float or tile the window
 bindsym $mod+Shift+space floating toggle
 bindsym $mod+space focus mode_toggle
 bindsym $mod+a focus parent
@@ -161,10 +182,14 @@ mode "resize" {
     bindsym Return mode "default"
     bindsym Escape mode "default"
 }
+# help: Resize mode (arrows or H J K L, then Enter)
 bindsym $mod+r mode "resize"
 
 # Screenshots (grim + slurp + wl-clipboard)
+# help-section: System
+# help: Screenshot to the clipboard
 bindsym Print       exec grim - | wl-copy
+# help: Screenshot of an area
 bindsym $mod+Print  exec grim -g "$(slurp)" - | wl-copy
 
 # Hardware keys: volume (wpctl), screen brightness (logind) and playback
@@ -184,8 +209,12 @@ bindsym --locked XF86AudioStop         exec hadron-media-key stop
 ### System control (no tray needed) #######################################
 # Network: a fuzzel Wi-Fi picker over nmcli. Bluetooth: a fuzzel menu over
 # bluetoothctl. Audio: fuzzel output switcher over wpctl (+ the media keys).
+# help-section: System
+# help: Wi-Fi
 bindsym $mod+n       exec hadron-wifi-menu
+# help: Audio output
 bindsym $mod+Shift+a exec hadron-audio-menu
+# help: Bluetooth
 bindsym $mod+Shift+b exec hadron-bluetooth-menu
 # floating "control" terminals (the shortcut sheet etc.), centered and sized
 for_window [app_id="floatterm"] floating enable, resize set 820 520, move position center
