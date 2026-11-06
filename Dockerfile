@@ -3095,7 +3095,14 @@ RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry
 # files reaches a layer, and each step empties it when done: the components'
 # release profiles differ (panic strategy, LTO), so little compiled code is
 # shared between them, and keeping it would grow by gigabytes per component.
-FROM cosmic-build AS cosmic
+#
+# They are split in two stages, the shell (cosmic-shell) and the applications
+# (cosmic-apps), of about two and a half hours each on a CI runner. One job
+# building both ran past GitHub's six-hour limit. release.yml builds each half
+# in its own job and pushes it as the cosmic-shell-dist or cosmic-apps-dist
+# image, tagged by `make print-stage-key`; the cosmic build then swaps them in
+# (`make COSMIC_SHELL_IMAGE=... COSMIC_APPS_IMAGE=...`).
+FROM cosmic-build AS cosmic-shell
 # renovate: datasource=github-tags depName=pop-os/cosmic-session extractVersion=^epoch-(?<version>\d+(\.\d+)*)$
 ARG COSMIC_VERSION=1.11.0
 ENV COSMIC_VERSION=${COSMIC_VERSION} COSMIC_OUT=/cosmic
@@ -3120,6 +3127,11 @@ RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry
 RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-idle && rm -rf /cargo-target/*
 RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-randr && rm -rf /cargo-target/*
 RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-screenshot && rm -rf /cargo-target/*
+FROM cosmic-build AS cosmic-apps
+# renovate: datasource=github-tags depName=pop-os/cosmic-session extractVersion=^epoch-(?<version>\d+(\.\d+)*)$
+ARG COSMIC_VERSION=1.11.0
+ENV COSMIC_VERSION=${COSMIC_VERSION} COSMIC_OUT=/cosmic
+ENV CARGO_TARGET_DIR=/cargo-target
 RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build xdg-desktop-portal-cosmic && rm -rf /cargo-target/*
 RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-settings && rm -rf /cargo-target/*
 RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked COSMIC_CARGO_ARGS="--package cosmic-files --package cosmic-files-applet --package cosmic-files-thumbnailer" cosmic-build cosmic-files && rm -rf /cargo-target/*
@@ -3149,6 +3161,19 @@ RUN mkdir -p /build/icons /build/wallpapers && \
     (cd /build/icons && just rootdir=/cosmic install) && \
     (cd /build/wallpapers && make install DESTDIR=/cosmic prefix=/usr) && \
     rm -rf /build/icons /build/wallpapers
+
+# Only the installed trees, for CI to push (see cosmic-shell above).
+FROM scratch AS cosmic-shell-dist
+COPY --from=cosmic-shell /cosmic /cosmic
+
+FROM scratch AS cosmic-apps-dist
+COPY --from=cosmic-apps /cosmic /cosmic
+
+# Both halves in one tree. The applications are copied last, as they were
+# installed last when one stage built everything.
+FROM scratch AS cosmic
+COPY --from=cosmic-shell /cosmic /cosmic
+COPY --from=cosmic-apps /cosmic /cosmic
 
 # musl-locales: the `locale` command musl lacks. cosmic-initial-setup and
 # COSMIC Settings build their language lists from `locale -a`; without it the
