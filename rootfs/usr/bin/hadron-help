@@ -13,13 +13,38 @@ section() { printf "\n${b}%s${r}\n" "$1"; }
 printf "${b}Hadron Desktop${r}  ${d}Super is the Windows / Command key${r}\n"
 
 section "Basics"
+row "Super + Escape"         "Hadron menu: apps, Wi-Fi, Bluetooth, updates, power"
+if [ "${XDG_CURRENT_DESKTOP:-}" = COSMIC ]; then
+row "Super"                  "launch an application"
+row "Super + T"              "open a terminal"
+row "Super + Q"              "close the focused window"
+row "Super + Shift + Escape" "log out"
+else
 row "Super + Enter"          "open a terminal"
 row "Super + D"              "launch an application"
 row "Super + Shift + Q"      "close the focused window"
 row "Super + Shift + E"      "power menu: log out, suspend, reboot, power off"
 row "Super + F1"             "this help"
+fi
 
-if [ "${XDG_CURRENT_DESKTOP:-}" = niri ]; then
+if [ "${XDG_CURRENT_DESKTOP:-}" = COSMIC ]; then
+section "Windows"
+row "Super + arrows / H J K L"          "move focus"
+row "Super + Shift + arrows / H J K L"  "move the window"
+row "Super + M"              "maximize"
+row "Super + Y"              "tile windows on and off"
+row "Super + G"              "float / tile the window"
+
+section "Workspaces"
+row "Super + W"              "workspaces overview"
+row "Super + A"              "app library"
+row "Super + 1 ... 9"        "switch to workspace 1 to 9"
+row "Super + Shift + 1 ... 9" "send the window to that workspace"
+
+section "System"
+row "Super + Alt + L"        "lock the screen"
+row "Print"                  "screenshot"
+elif [ "${XDG_CURRENT_DESKTOP:-}" = niri ]; then
 section "Windows"
 row "Super + Left / Right / H / L"   "focus the column to the left / right"
 row "Super + Up / Down / K / J"      "focus the window above / below"

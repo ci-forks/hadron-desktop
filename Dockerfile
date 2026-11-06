@@ -4197,6 +4197,10 @@ COPY --from=xdg-desktop-portal /xdg-desktop-portal /
 COPY --from=greetd /greetd /
 COPY --from=pop-launcher /pop-launcher /
 COPY --from=cosmic /cosmic /
+# fuzzel and the font library it links: the picker of the Hadron menu
+# (hadron-pick).
+COPY --from=fcft /fcft /
+COPY --from=fuzzel /fuzzel /
 COPY --from=cosmic-fonts /cosmic-fonts /
 COPY --from=hicolor-icon-theme /hicolor-icon-theme /
 COPY --from=musl-locales /musl-locales /
@@ -4287,6 +4291,8 @@ COPY --from=gsettings-desktop-schemas /gsettings-desktop-schemas /
 COPY --from=tllist /tllist /
 COPY --from=fcft /fcft /
 COPY --from=foot /foot /
+# fuzzel: the picker of the Hadron menu (hadron-pick).
+COPY --from=fuzzel /fuzzel /
 COPY --from=wl-clipboard /wl-clipboard /
 COPY --from=cosmic-fonts /cosmic-fonts /
 COPY --from=nerdfont /nerdfont /
@@ -4503,6 +4509,17 @@ RUN chmod 1777 /tmp; \
       f=/usr/share/cosmic/com.system76.CosmicSettings.Shortcuts/v1/system_actions; \
       sed -i -E 's/"playerctl (play-pause|next|previous)"/"hadron-media-key \1"/' "$f" || exit 1; \
       grep -q '"hadron-media-key play-pause"' "$f" && ! grep -q playerctl "$f" || exit 1; \
+      # Super+Escape opens the Hadron menu, as in every variant. COSMIC binds
+      # it to the screen lock, which moves to Super+Alt+L, the lock key of the
+      # other variants (Super+Alt+Right still moves to the output on the right).
+      # The build fails if upstream changes either line.
+      f=/usr/share/cosmic/com.system76.CosmicSettings.Shortcuts/v1/defaults; \
+      sed -i \
+        -e 's/(modifiers: \[Super\], key: "Escape"): System(LockScreen),/(modifiers: [Super], key: "Escape"): Spawn("hadron-menu"),/' \
+        -e 's/(modifiers: \[Super, Alt\], key: "l"): SwitchOutput(Right),/(modifiers: [Super, Alt], key: "l"): System(LockScreen),/' \
+        "$f" || exit 1; \
+      grep -qF '(modifiers: [Super], key: "Escape"): Spawn("hadron-menu"),' "$f" || exit 1; \
+      grep -qF '(modifiers: [Super, Alt], key: "l"): System(LockScreen),' "$f" || exit 1; \
       mkdir -p /etc/systemd/system/multi-user.target.wants; \
       for u in cosmic-greeter cosmic-greeter-daemon accounts-daemon; do \
         ln -sf /usr/lib/systemd/system/$u.service /etc/systemd/system/multi-user.target.wants/$u.service; \

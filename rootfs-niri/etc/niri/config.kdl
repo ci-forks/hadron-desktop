@@ -423,6 +423,7 @@ binds {
     Mod+S hotkey-overlay-title="Control Center: Wi-Fi, Bluetooth, sound" { spawn-sh "noctalia msg panel-toggle control-center"; }
     Mod+Shift+Comma hotkey-overlay-title="Shell Settings" { spawn-sh "noctalia msg settings-toggle"; }
     Mod+F1 hotkey-overlay-title="Keyboard Shortcuts" { spawn "foot" "--app-id=floatterm" "-W" "96x30" "-T" "Keyboard shortcuts" "hadron-help"; }
+    Mod+Escape hotkey-overlay-title="Hadron Menu" { spawn "hadron-menu"; }
     Alt+Tab { spawn-sh "noctalia msg window-switcher hold"; }
     Super+Alt+L hotkey-overlay-title="Lock the Screen" { spawn-sh "noctalia msg session lock"; }
 
@@ -681,7 +682,9 @@ binds {
     //
     // The allow-inhibiting=false property can be applied to other binds as well,
     // which ensures niri always processes them, even when an inhibitor is active.
-    Mod+Escape allow-inhibiting=false { toggle-keyboard-shortcuts-inhibit; }
+    // Hadron: on Mod+Shift+Escape, because Mod+Escape opens the Hadron menu
+    // in every variant.
+    Mod+Shift+Escape allow-inhibiting=false { toggle-keyboard-shortcuts-inhibit; }
 
     // The quit action will show a confirmation dialog to avoid accidental exits.
     Mod+Shift+E hotkey-overlay-title="Power Menu: lock, log out, reboot, power off" { spawn-sh "noctalia msg panel-toggle session"; }
