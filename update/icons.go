@@ -9,15 +9,25 @@ import (
 )
 
 // The tray icons are drawn here at startup instead of shipped as PNG files:
-// a coloured disc (Tokyo Night palette, one colour per state) with a white
-// glyph, so the repository carries no binary assets.
+// a coloured disc (one Hadron palette colour per state) with a dark glyph,
+// so the repository carries no binary assets. The disc stands out on the
+// dark panels; the glyph is the palette's on_accent, which has at least
+// 4.5:1 contrast on every disc colour (white on the yellow disc was 1.9:1).
+// Colours: generated from theme/palette.toml by tools/gen-theme.py.
 
 var iconColors = map[string]color.NRGBA{
-	"idle":   {0x7a, 0xa2, 0xf7, 0xff},
-	"update": {0x9e, 0xce, 0x6a, 0xff},
-	"busy":   {0xe0, 0xaf, 0x68, 0xff},
-	"reboot": {0xbb, 0x9a, 0xf7, 0xff},
-	"error":  {0xf7, 0x76, 0x8e, 0xff},
+	"idle":   rgb(0x7aa2f7),
+	"update": rgb(0x9ece6a),
+	"busy":   rgb(0xe0af68),
+	"reboot": rgb(0xbb9af7),
+	"error":  rgb(0xf7768e),
+}
+
+var glyphColor = rgb(0x16161e)
+
+// rgb is the opaque colour 0xRRGGBB.
+func rgb(v uint32) color.NRGBA {
+	return color.NRGBA{uint8(v >> 16), uint8(v >> 8), uint8(v), 0xff}
 }
 
 // iconFor is the icon of a daemon state.
@@ -43,7 +53,7 @@ func segDist(x, y, ax, ay, bx, by float64) float64 {
 }
 
 // glyph reports whether the point (x, y), in [-1, 1] with y growing down,
-// belongs to the white glyph of kind.
+// belongs to the glyph of kind.
 func glyph(kind string, x, y float64) bool {
 	switch kind {
 	case "idle": // a check mark: up to date
@@ -78,7 +88,7 @@ func iconPNG(kind string, size int) []byte {
 	half := float64(size) / 2
 	for py := 0; py < size; py++ {
 		for px := 0; px < size; px++ {
-			var disc, white int
+			var disc, ink int
 			for sy := 0; sy < ss; sy++ {
 				for sx := 0; sx < ss; sx++ {
 					x := (float64(px) + (float64(sx)+0.5)/ss - half) / half
@@ -88,19 +98,20 @@ func iconPNG(kind string, size int) []byte {
 					}
 					disc++
 					if glyph(kind, x, y) {
-						white++
+						ink++
 					}
 				}
 			}
 			if disc == 0 {
 				continue
 			}
-			// The disc colour blended with white by glyph coverage; alpha by
-			// disc coverage, so the edge is smooth on any panel.
-			mix := func(c uint8) uint8 {
-				return uint8((int(c)*(disc-white) + 0xff*white) / disc)
+			// The disc colour blended with the glyph colour by glyph
+			// coverage; alpha by disc coverage, so the edge is smooth on
+			// any panel.
+			mix := func(c, g uint8) uint8 {
+				return uint8((int(c)*(disc-ink) + int(g)*ink) / disc)
 			}
-			img.SetNRGBA(px, py, color.NRGBA{mix(fill.R), mix(fill.G), mix(fill.B), uint8(0xff * disc / (ss * ss))})
+			img.SetNRGBA(px, py, color.NRGBA{mix(fill.R, glyphColor.R), mix(fill.G, glyphColor.G), mix(fill.B, glyphColor.B), uint8(0xff * disc / (ss * ss))})
 		}
 	}
 	var buf bytes.Buffer

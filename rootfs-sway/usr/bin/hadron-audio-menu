@@ -1,5 +1,5 @@
 #!/bin/sh
-# fuzzel-based audio output switcher for Sway (WirePlumber via wpctl).
+# Audio output switcher for Sway (WirePlumber via wpctl), through hadron-pick.
 # Bound to Mod+Shift+a. Lists sinks; sets the chosen one as the default output.
 list=$(wpctl status 2>/dev/null | awk '
     /Sinks:/      { insink=1; next }
@@ -13,6 +13,6 @@ list=$(wpctl status 2>/dev/null | awk '
     }')
 
 [ -n "$list" ] || exit 0
-sel=$(printf '%s\n' "$list" | cut -f1 | fuzzel --dmenu --width=46 --lines=10 --prompt='Audio output > ') || exit 0
+sel=$(printf '%s\n' "$list" | cut -f1 | hadron-pick 'Audio output' 10) || exit 0
 id=$(printf '%s\n' "$list" | awk -F'\t' -v s="$sel" '$1==s{print $2; exit}')
 [ -n "$id" ] && wpctl set-default "$id"

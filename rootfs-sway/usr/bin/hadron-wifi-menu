@@ -1,11 +1,11 @@
 #!/bin/sh
-# fuzzel-based Wi-Fi menu for Sway (NetworkManager via nmcli). Bound to Mod+n.
-# No tray/applet needed — a dmenu picker over `nmcli`.
-menu() { fuzzel --dmenu --width=48 --lines=14 --prompt="$1"; }
+# Wi-Fi menu for Sway (NetworkManager via nmcli). Bound to Mod+n.
+# No tray/applet needed: hadron-pick (fuzzel) over `nmcli`.
+menu() { hadron-pick "$1" 14; }
 
 radio=$(nmcli -t -f WIFI radio 2>/dev/null || echo "")
 if [ "$radio" = "disabled" ]; then
-    [ "$(printf 'Turn Wi-Fi on' | menu 'Wi-Fi is off > ')" = "Turn Wi-Fi on" ] && nmcli radio wifi on
+    [ "$(printf 'Turn Wi-Fi on' | menu 'Wi-Fi is off')" = "Turn Wi-Fi on" ] && nmcli radio wifi on
     exit 0
 fi
 
@@ -21,7 +21,7 @@ aps=$(nmcli -t --escape no -f ACTIVE,SIGNAL,SECURITY,SSID device wifi list 2>/de
         printf "%s%s  (%d%%%s)\n", mark, ssid, $2, sec
     }')
 
-sel=$(printf '%s\n  ─────────\n  Disconnect\n  Turn Wi-Fi off\n  Rescan' "$aps" | menu 'Wi-Fi > ') || exit 0
+sel=$(printf '%s\n  ─────────\n  Disconnect\n  Turn Wi-Fi off\n  Rescan' "$aps" | menu 'Wi-Fi') || exit 0
 
 # strip leading marker and the "  (NN% ...)" suffix to recover the SSID / action
 clean=$(printf '%s' "$sel" | sed -e 's/^[● ] *//' -e 's/  *$//')

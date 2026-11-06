@@ -103,7 +103,8 @@ power() {
     case "$DESKTOP_NAME" in
         niri)   exec noctalia msg panel-open session ;;
         COSMIC)
-            what=$(printf '%s\n' Lock "Log out" Suspend Restart "Power off" | pick Power 5) || exit 0
+            what=$(printf '%s\t%s\n' Lock 󰌾 "Log out" 󰍃 Suspend 󰒲 Restart 󰜉 \
+                "Power off" 󰐥 | pick Power 5) || exit 0
             case "$what" in
                 Lock)        exec loginctl lock-session ;;
                 "Log out")   exec cosmic-osd log-out ;;
@@ -115,7 +116,9 @@ power() {
     esac
 }
 
-sel=$(printf '%s\n' Apps Wi-Fi Bluetooth Audio Capture Update Help Power | pick Hadron 8) || exit 0
+# Each entry is "Label<TAB>icon"; hadron-pick shows the icon in fuzzel only.
+sel=$(printf '%s\t%s\n' Apps 󰀻 Wi-Fi 󰖩 Bluetooth 󰂯 Audio 󰕾 Capture 󰄀 \
+    Update 󰚰 Help 󰌌 Power 󰐥 | pick Hadron 8) || exit 0
 case "$sel" in
     Apps)      apps ;;
     Wi-Fi)     panel wifi ;;

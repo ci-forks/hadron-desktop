@@ -3,8 +3,9 @@
 
 theme/palette.toml names each colour by its role (base, text, accent, dim...).
 The configs the programs read (sway, i3, waybar, foot, fuzzel, mako, dunst,
-dmenu, niri, st, Noctalia, the GRUB theme, the boot splash, the console palette
-on the kernel command line) stay plain files in the tree; this script only
+dmenu, niri, st, Noctalia, the update tray icon, the GRUB theme, the boot
+splash, the console palette on the kernel command line) stay plain files in
+the tree; this script only
 rewrites the colour values in them, so they never drift from the palette and a
 review sees ordinary config diffs. Stdlib only. Run from anywhere:
 
@@ -81,12 +82,12 @@ RULES = {
     "rootfs-i3/usr/bin/hadron-screenshot": ("hash", "hash", [
         (r"hacksaw -c '#{hex}'", "accent"),
     ]),
-    "rootfs-i3/usr/bin/hadron-audio-menu": ("hash", "hash", [DMENU]),
+    # The i3 menus pick through hadron-pick; strict, so no colour comes back.
+    "rootfs-i3/usr/bin/hadron-audio-menu": ("hash", "hash", []),
     "rootfs-i3/usr/bin/hadron-power-menu": ("hash", "hash", [
-        DMENU,
         (r"^\s+Lock\)\s+i3lock .*--color={hex} ;;$", "base"),
     ]),
-    "rootfs-i3/usr/bin/hadron-wifi-menu": ("hash", "hash", [DMENU]),
+    "rootfs-i3/usr/bin/hadron-wifi-menu": ("hash", "hash", []),
     "rootfs/usr/bin/hadron-pick": ("hash", "hash", [DMENU]),
     "rootfs-sway/etc/xdg/waybar/style.css": ("hash", "css", [
         (r"^@define-color (?P<role>\w+)\s+#{hex};$", None),  # role = the name
@@ -105,7 +106,7 @@ RULES = {
         (r"^background-color=#{hex}[0-9a-fA-F]{{2}}$", "base"),
         (r"^text-color=#{hex}$", "text"),
         (r"^border-color=#{hex}$", ["accent", "error"]),  # normal, urgency=high
-        (r"^progress-color=over #{hex}$", "overlay"),
+        (r"^progress-color=over #{hex}55$", "accent"),  # a third, text stays 5.6:1
     ]),
     "rootfs-sway/etc/xdg/foot/foot.ini": ("ini", "hash", FOOT),
     "rootfs-sway/etc/swaylock/config": ("ini", "hash", [
@@ -124,6 +125,8 @@ RULES = {
         (r"^\s+frame_color = \"#{hex}\"$", ["accent", "error"]),  # global, critical
         (r"^\s+background = \"#{hex}\"$", "base"),
         (r"^\s+foreground = \"#{hex}\"$", ["subtext", "text", "error"]),  # low, normal, critical
+        # The progress bar fill (the volume and brightness pop-up).
+        (r"^\s+highlight = \"#{hex}\"$", ["accent", "accent", "error"]),  # low, normal, critical
     ]),
     "rootfs-niri/etc/niri/config.kdl": ("hash", "kdl", [
         (r"^\s+active-color \"#{hex}\"$", "accent"),     # focus ring, border
@@ -159,6 +162,15 @@ RULES = {
         (r"""^\s+-e 's\|"gray90", /\\\* default foreground colour \\\*/\|"#{hex}", """, "text"),
         (r"""^\s+-e 's\|"black", /\\\* default background colour \\\*/\|"#{hex}", """, "base"),
     ]),
+    # The update tray icon: a disc per daemon state, the glyph in on_accent.
+    "update/icons.go": (None, "kdl", [
+        (r'^\t"idle":\s+rgb\(0x{hex}\),$', "accent"),
+        (r'^\t"update":\s+rgb\(0x{hex}\),$', "success"),
+        (r'^\t"busy":\s+rgb\(0x{hex}\),$', "warning"),
+        (r'^\t"reboot":\s+rgb\(0x{hex}\),$', "violet"),
+        (r'^\t"error":\s+rgb\(0x{hex}\),$', "error"),
+        (r"^var glyphColor = rgb\(0x{hex}\)$", "on_accent"),
+    ]),
 }
 
 NOCTALIA = "rootfs-niri/usr/share/hadron-desktop/noctalia-palettes/Hadron.json"
@@ -182,7 +194,7 @@ CONTRAST = [
     (["subtext"], ["base", "surface"], 4.5),
     (["accent", "glow", "violet", "success", "warning", "error"], ["base"], 4.5),
     (["dim"], ["base", "surface"], 3.0),
-    (["on_accent"], ["accent", "glow", "violet", "error", "warning"], 4.5),
+    (["on_accent"], ["accent", "glow", "violet", "error", "warning", "success"], 4.5),
 ]
 
 
