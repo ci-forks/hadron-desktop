@@ -32,6 +32,18 @@ func TestRenderCloudConfigContainsRequiredFields(t *testing.T) {
 	}
 }
 
+// The display name must be set on the user entry itself, so the user is
+// created with it. Without gecos, yip's users step names the user "Created by
+// entities", and a greeter that starts before the boot-stage usermod shows that.
+func TestRenderCloudConfigSetsGecosOnTheUser(t *testing.T) {
+	out := RenderCloudConfig(Choice{Hostname: "h", Username: "ada", Disk: "/dev/sda", Github: "ada"}, "x")
+	user, stages := strings.Index(out, "  - name: \"ada\"\n"), strings.Index(out, "\nstages:\n")
+	gecos := strings.Index(out, "\n    gecos: \"ada\"\n")
+	if user < 0 || stages < 0 || gecos < user || gecos > stages {
+		t.Errorf("expected gecos: \"ada\" in the users entry for ada:\n%s", out)
+	}
+}
+
 // The generated config must hook stages.initramfs, not stages.boot: save.ini has
 // to exist before ly starts, and the boot stage runs too late. This is a hard
 // constraint of the installer, so pin the literal nesting rather than just the
