@@ -109,11 +109,89 @@ jobs:
           make llvm-image
           docker push "$LLVM_OUT"
 
+  # COSMIC compiles for about five hours, which with its dependencies ran past
+  # the 330-minute budget of one job. Its two halves (the cosmic-shell and
+  # cosmic-apps stages) build here in parallel, each pushed as an image tagged
+  # by a hash of everything it is built from (`make print-stage-key`), so a
+  # release rebuilds a half only when its inputs changed. The cosmic build job
+  # then uses them in place of compiling COSMIC.
+  cosmic:
+    name: Prebuild COSMIC ${{ matrix.part }}
+    needs: llvm
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        part:
+          - shell
+          - apps
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      STAGE: cosmic-${{ matrix.part }}
+      LLVM_IMAGE: ${{ needs.llvm.result == 'success' && needs.llvm.outputs.image || '' }}
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+
+      - name: Log in to GHCR
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Look for a published ${{ env.STAGE }} image
+        id: ref
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${IMAGE_REPO}:$(make -s DESKTOP=cosmic print-stage-key)"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          if docker buildx imagetools inspect "$image" >/dev/null 2>&1; then
+            echo "Reusing $image"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No $image yet; building it"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Reclaim runner disk space
+        if: steps.ref.outputs.found != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo rm -rf \
+            /opt/ghc \
+            /opt/hostedtoolcache/CodeQL \
+            /usr/local/.ghcup \
+            /usr/local/lib/android \
+            /usr/share/dotnet
+          docker system prune --all --force
+          df -h /
+
+      - name: Build and push the ${{ env.STAGE }} image
+        if: steps.ref.outputs.found != 'true'
+        shell: bash
+        env:
+          STAGE_OUT: ${{ steps.ref.outputs.image }}
+        run: |
+          set -euo pipefail
+          make DESKTOP=cosmic stage-image
+          docker push "$STAGE_OUT"
+
   build:
     name: Build ${{ matrix.desktop }} ISO
-    needs: llvm
-    # A failed LLVM job does not stop the release: LLVM_IMAGE is then empty and
-    # the variants that need LLVM build it themselves, as before.
+    needs: [llvm, cosmic]
+    # A failed LLVM or COSMIC prebuild does not stop the release: the variants
+    # that need it then build it themselves, as before.
     if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 330
@@ -190,6 +268,23 @@ jobs:
           base_ref="$(make -s print-base-image)"
           [ -n "$base_ref" ] || { echo "could not read BASE_IMAGE from the Makefile" >&2; exit 1; }
           docker pull "$base_ref"
+
+      # The halves the cosmic job pushed. One that is missing (its job failed)
+      # is compiled here instead, which may not fit in this job's budget.
+      - name: Use the prebuilt COSMIC halves
+        if: matrix.desktop == 'cosmic'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for part in shell apps; do
+            image="${IMAGE_REPO}:$(make -s STAGE="cosmic-$part" print-stage-key)"
+            if docker buildx imagetools inspect "$image" >/dev/null 2>&1; then
+              echo "Using $image"
+              echo "COSMIC_${part^^}_IMAGE=$image" >> "$GITHUB_ENV"
+            else
+              echo "::warning::No $image; compiling cosmic-$part in this job"
+            fi
+          done
 
       - name: Build installer ISO
         shell: bash

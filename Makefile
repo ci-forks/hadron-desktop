@@ -11,6 +11,7 @@
 #   make agent-image                     # build the i3-based agent overlay
 #   make agent-iso                       # build the agent ISO
 #   make LLVM_OUT=<ref> llvm-image       # build only LLVM, for LLVM_IMAGE=<ref>
+#   make STAGE=cosmic-shell STAGE_OUT=<ref> stage-image  # one prebuilt half of COSMIC
 #   make clean                           # remove build artifacts
 #
 # Knobs (override on the command line):
@@ -81,9 +82,28 @@ ifdef LLVM_IMAGE
 BUILD_ARGS += --build-context llvm=docker-image://$(LLVM_IMAGE)
 endif
 
+# Prebuilt COSMIC, for CI, the same way. The cosmic stage is the cosmic-shell
+# and cosmic-apps stages, about two and a half hours each, which together ran
+# past the six-hour limit of one CI job. COSMIC_SHELL_IMAGE and
+# COSMIC_APPS_IMAGE name images built from their -dist targets
+# (`make STAGE=cosmic-shell STAGE_OUT=<ref> stage-image`), tagged with
+# `make STAGE=cosmic-shell print-stage-key`. That key hashes every stage the
+# half is built from, the files they copy and the build args they use
+# (tools/stage-key.py), so an image is reused until one of those changes.
+COSMIC_SHELL_IMAGE ?=
+COSMIC_APPS_IMAGE ?=
+ifdef COSMIC_SHELL_IMAGE
+BUILD_ARGS += --build-context cosmic-shell=docker-image://$(COSMIC_SHELL_IMAGE)
+endif
+ifdef COSMIC_APPS_IMAGE
+BUILD_ARGS += --build-context cosmic-apps=docker-image://$(COSMIC_APPS_IMAGE)
+endif
+STAGE ?=
+STAGE_OUT ?=
+
 export DOCKER_BUILDKIT := 1
 
-.PHONY: all image images iso agent-image agent-iso llvm-image vm vm-install check-boot-ux print-base-image print-llvm-tag clean
+.PHONY: all image images iso agent-image agent-iso llvm-image stage-image vm vm-install check-boot-ux print-base-image print-llvm-tag print-stage-key clean
 
 all: iso
 
@@ -128,6 +148,19 @@ print-llvm-tag:
 	@printf 'llvm-%s-%s\n' \
 	  "$$(awk -F= '/^ARG LLVM_VERSION=/{print $$2; exit}' Dockerfile)" \
 	  "$$({ echo '$(HADRON_VERSION)'; awk '/^FROM toolchain AS llvm$$/{p=1; print; next} p && /^FROM /{exit} p' Dockerfile; } | sha256sum | cut -c1-12)"
+
+# STAGE is cosmic-shell or cosmic-apps: the stages with a <STAGE>-dist target.
+stage-image:
+	@[ -n "$(STAGE)" ] && [ -n "$(STAGE_OUT)" ] || { echo "set STAGE and STAGE_OUT" >&2; exit 1; }
+	docker build $(BUILD_ARGS) --target $(STAGE)-dist -t $(STAGE_OUT) .
+
+# <STAGE>-<key>; the key takes the same build args as `make image`.
+print-stage-key:
+	@[ -n "$(STAGE)" ] || { echo "set STAGE" >&2; exit 1; }
+	@python3 tools/stage-key.py \
+	  --arg HADRON_VERSION=$(HADRON_VERSION) --arg BASE_IMAGE=$(BASE_IMAGE) --arg DESKTOP=$(DESKTOP) \
+	  $(if $(GPU),--arg GPU=$(GPU)) $(if $(FIRMWARE),--arg FIRMWARE=$(FIRMWARE)) $(if $(VERSION),--arg VERSION=$(VERSION)) \
+	  $(STAGE)
 
 iso: image
 	AURORA_IMAGE=$(AURORA_IMAGE) auroraboot/build.sh $(IMAGE) $(ISO_DIR)
