@@ -4657,16 +4657,21 @@ RUN --mount=type=bind,source=scripts/kairos-user-live-only.sh,target=/tmp/kairos
 # name is unset, preferring it over /etc/os-release. The OS identity fields in
 # /etc/os-release are intentionally left untouched.
 RUN echo 'GRUB_ENTRY_NAME="hadron-desktop"' >> /etc/kairos-release
-# Release identity for hadron-update. FLAVOR names the image line this system
-# upgrades along: hadron-update pulls ${IMAGE_REPO}:${FLAVOR}-<tag>, which
-# release.yml pushes for every published release. Dockerfile.agent rewrites
-# FLAVOR to `agent` for the appliance. VERSION is the release tag, so a dev
-# build (v0.0.0) never sorts as newer than a real release.
+# Release identity for hadron-update. FLAVOR and GPU name the image line this
+# system upgrades along: hadron-update pulls ${IMAGE_REPO}:${FLAVOR}-<tag> for
+# GPU=full and ${IMAGE_REPO}:${FLAVOR}-vm-<tag> for GPU=vm, which release.yml
+# pushes for every published release. Dockerfile.agent rewrites FLAVOR to
+# `agent` for the appliance, which has the one line agent-<tag>. VERSION is the
+# release tag, so a dev build (v0.0.0) never sorts as newer than a real
+# release.
 ARG IMAGE_REPO=ghcr.io/kairos-community/hadron-desktop
 ARG HADRON_VERSION
 ARG DESKTOP
-RUN printf 'FLAVOR=%s\nVERSION=%s\nHADRON_VERSION=%s\nIMAGE_REPO=%s\nGITHUB_REPO=%s\n' \
-      "${DESKTOP}" "${VERSION}" "${HADRON_VERSION}" "${IMAGE_REPO}" kairos-community/hadron-desktop \
+ARG GPU
+ARG FIRMWARE=false
+RUN case "${GPU}" in full|vm) ;; *) echo "GPU must be full or vm, not '${GPU}'" >&2; exit 1 ;; esac && \
+    printf 'FLAVOR=%s\nGPU=%s\nVERSION=%s\nHADRON_VERSION=%s\nIMAGE_REPO=%s\nGITHUB_REPO=%s\n' \
+      "${DESKTOP}" "${GPU}" "${VERSION}" "${HADRON_VERSION}" "${IMAGE_REPO}" kairos-community/hadron-desktop \
       > /etc/hadron-desktop/release
 # The same identity as OCI labels, so hadron-update can tell a Hadron Desktop
 # image from any other one without pulling it (the registry config blob carries
@@ -4675,7 +4680,9 @@ RUN printf 'FLAVOR=%s\nVERSION=%s\nHADRON_VERSION=%s\nIMAGE_REPO=%s\nGITHUB_REPO
 # The keys must match the constants in update/policy.go.
 LABEL io.kairos.hadron-desktop.flavor="${DESKTOP}" \
       io.kairos.hadron-desktop.version="${VERSION}" \
-      io.kairos.hadron-desktop.hadron-version="${HADRON_VERSION}"
+      io.kairos.hadron-desktop.hadron-version="${HADRON_VERSION}" \
+      io.kairos.hadron-desktop.gpu="${GPU}" \
+      io.kairos.hadron-desktop.firmware="${FIRMWARE}"
 # Tokyo Night GRUB menu colours — text-mode fallback. The main menu renders from
 # /etc/cos/grub.cfg (copied to COS_STATE at install) before grubmenu.cfg switches
 # to the gfxterm theme, and these 16-colour accents also apply if gfxterm/the

@@ -24,7 +24,7 @@ func TestClassifyTrustedByName(t *testing.T) {
 	rel := policyRel()
 	info := policyInfo(t, rel.ImageRepo+":niri-v0.0.4", nil)
 	v, err := Classify(info, rel, []Latest{{Tag: "v0.0.4"}})
-	want := Verdict{Flavor: "niri", Version: "v0.0.4", Trusted: true, Hadron: true}
+	want := Verdict{Flavor: "niri", Version: "v0.0.4", GPU: gpuFull, Trusted: true, Hadron: true}
 	if err != nil || v != want {
 		t.Fatalf("got %+v, %v; want %+v", v, err, want)
 	}
@@ -45,6 +45,10 @@ func TestClassifyTrustedByNameRejectsLookalikes(t *testing.T) {
 		rel.ImageRepo + ":foo-v0.0.4",             // not a desktop flavor
 		rel.ImageRepo + ":niri-v0.0.4-rc1",        // prerelease
 		rel.ImageRepo + ":niri-0.0.4",             // no v
+		rel.ImageRepo + ":niri-vm-v0.0.4-rc1",     // prerelease, vm line
+		rel.ImageRepo + ":niri-gpu-v0.0.4",        // not a line
+		rel.ImageRepo + ":vm-niri-v0.0.4",         // line first
+		rel.ImageRepo + ":niri-vm-vm-v0.0.4",      // line twice
 		"ghcr.io/evil/hadron-desktop:niri-v0.0.4", // other repo
 		rel.ImageRepo + "@sha256:" + hex64,        // digest only
 	} {
@@ -130,6 +134,46 @@ func TestClassifyVersionLabelMustBeStrict(t *testing.T) {
 		info := policyInfo(t, "example.com/o/i:x", map[string]string{labelFlavor: "sway", labelVersion: v})
 		if _, err := Classify(info, policyRel(), nil); !errors.Is(err, ErrNotHadron) {
 			t.Errorf("%q: got %v, want ErrNotHadron", v, err)
+		}
+	}
+}
+
+// An image of the other line is a published release like any other: trusted
+// by name, and its line reported so the CLI can warn, as for another flavor.
+func TestClassifyLines(t *testing.T) {
+	pub := []Latest{{Tag: "v0.0.4"}}
+	for _, rel := range []Release{policyRel(), func() Release { r := policyRel(); r.GPU = gpuVM; return r }()} {
+		for tag, line := range map[string]string{"niri-v0.0.4": gpuFull, "niri-vm-v0.0.4": gpuVM, "sway-vm-v0.0.4": gpuVM} {
+			v, err := Classify(policyInfo(t, rel.ImageRepo+":"+tag, nil), rel, pub)
+			if err != nil || !v.Trusted || v.GPU != line || v.Version != "v0.0.4" {
+				t.Errorf("%s on a %s system: got %+v, %v; want trusted, line %s", tag, rel.Line(), v, err, line)
+			}
+		}
+	}
+	if _, err := Classify(policyInfo(t, policyRel().ImageRepo+":agent-vm-v0.0.4", nil), policyRel(), pub); !errors.Is(err, ErrAgentImage) {
+		t.Errorf("agent-vm: got %v, want ErrAgentImage", err)
+	}
+}
+
+func TestClassifyLabelledLine(t *testing.T) {
+	for label, want := range map[string]string{"vm": gpuVM, "full": gpuFull, "": "", "bogus": ""} {
+		labels := map[string]string{labelFlavor: "sway", labelVersion: "v1.0.0"}
+		if label != "" {
+			labels[labelGPU] = label
+		}
+		v, err := Classify(policyInfo(t, "example.com/o/i:x", labels), policyRel(), nil)
+		if err != nil || v.GPU != want {
+			t.Errorf("label %q: got %+v, %v; want GPU %q", label, v, err, want)
+		}
+	}
+}
+
+func TestLineRef(t *testing.T) {
+	rel := policyRel()
+	for line, tag := range map[string]string{gpuFull: "i3-v0.0.4", gpuVM: "i3-vm-v0.0.4"} {
+		ref, err := LineRef(rel, "i3", line, "v0.0.4")
+		if err != nil || ref.Tag != tag {
+			t.Errorf("%s: got %+v, %v; want tag %s", line, ref, err, tag)
 		}
 	}
 }

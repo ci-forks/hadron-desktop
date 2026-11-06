@@ -370,7 +370,7 @@ func TestBusInspect(t *testing.T) {
 	info := inspect(t, f, release, false)
 	for k, want := range map[string]any{
 		"ref": release, "digest": dg[release], "os": "linux", "arch": "amd64",
-		"flavor": "sway", "version": "v0.0.6", "trusted": true, "hadron": true,
+		"flavor": "sway", "version": "v0.0.6", "gpu": "full", "trusted": true, "hadron": true,
 		"refusal": "", "overridable": false,
 	} {
 		if info[k].Value() != want {

@@ -437,7 +437,7 @@ func TestInspectReturnsTheVerdict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Digest != dg[ref] || v != (Verdict{Flavor: "niri", Version: "v0.0.6", Trusted: true, Hadron: true}) {
+	if info.Digest != dg[ref] || v != (Verdict{Flavor: "niri", Version: "v0.0.6", GPU: gpuFull, Trusted: true, Hadron: true}) {
 		t.Fatalf("got %+v, %+v", info, v)
 	}
 	if s := d.Status(); s.State != StateIdle {

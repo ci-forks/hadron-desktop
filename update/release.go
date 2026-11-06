@@ -19,11 +19,44 @@ type Release struct {
 	HadronVersion string // the Hadron base release, e.g. v0.6.3
 	ImageRepo     string // e.g. ghcr.io/kairos-community/hadron-desktop
 	GitHubRepo    string // e.g. kairos-community/hadron-desktop
+	// GPU is the image line: gpuFull or gpuVM. Releases up to v0.0.7 wrote
+	// no GPU key; LoadRelease reads them as gpuFull (see Line).
+	GPU string
 }
 
-// ImageFor is the OCI reference release.yml pushes for a tag of this flavor.
+// The two image lines a desktop flavor is released in. Each release pushes
+// <flavor>-<tag> (full: Mesa's Intel and AMD drivers and linux-firmware, for
+// real machines) and <flavor>-vm-<tag> (virtual GPUs and llvmpipe only, and
+// no firmware: smaller, for virtual machines). The agent has one line,
+// agent-<tag>.
+const (
+	gpuFull = "full"
+	gpuVM   = "vm"
+)
+
+// Line is the image line this system upgrades along. A release file without a
+// GPU key comes from v0.0.7 or earlier: those were GPU=vm images, but their
+// own hadron-update can only pull <flavor>-<tag>, which is the full line now,
+// and the full image runs in a VM too. So they are on the full line.
+func (r Release) Line() string {
+	if r.GPU == gpuVM {
+		return gpuVM
+	}
+	return gpuFull
+}
+
+// lineTag is the image tag release.yml pushes for a flavor, line and release.
+func lineTag(flavor, line, tag string) string {
+	if line == gpuVM && flavor != flavorAgent {
+		return flavor + "-" + gpuVM + "-" + tag
+	}
+	return flavor + "-" + tag
+}
+
+// ImageFor is the OCI reference release.yml pushes for a tag of this
+// system's flavor and line.
 func (r Release) ImageFor(tag string) string {
-	return fmt.Sprintf("%s:%s-%s", r.ImageRepo, r.Flavor, tag)
+	return fmt.Sprintf("%s:%s", r.ImageRepo, lineTag(r.Flavor, r.Line(), tag))
 }
 
 func releaseFile() string {
@@ -48,6 +81,12 @@ func LoadRelease(path string) (Release, error) {
 		HadronVersion: kv["HADRON_VERSION"],
 		ImageRepo:     kv["IMAGE_REPO"],
 		GitHubRepo:    kv["GITHUB_REPO"],
+		GPU:           kv["GPU"],
+	}
+	switch r.GPU {
+	case "", gpuFull, gpuVM:
+	default:
+		return Release{}, fmt.Errorf("%s: GPU is %q, want %s or %s", path, r.GPU, gpuFull, gpuVM)
 	}
 	for name, v := range map[string]string{
 		"FLAVOR": r.Flavor, "VERSION": r.Version,

@@ -107,5 +107,29 @@ class StageKeyTest(unittest.TestCase):
             self.key(stage="nope")
 
 
+class RepoDockerfileTest(unittest.TestCase):
+    """The COSMIC halves link Mesa, which differs per GPU line, so release.yml
+    prebuilds each half once per line. That only works while the two lines
+    get different keys."""
+
+    def key(self, *args):
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        out = subprocess.run(
+            [sys.executable, SCRIPT, "--dockerfile", os.path.join(repo, "Dockerfile"), *args],
+            capture_output=True, text=True, check=True, cwd=repo,
+        )
+        return out.stdout.strip()
+
+    def test_cosmic_halves_differ_per_gpu_line(self):
+        for stage in ("cosmic-shell", "cosmic-apps"):
+            with self.subTest(stage=stage):
+                vm = self.key("--arg", "DESKTOP=cosmic", "--arg", "GPU=vm", stage)
+                full = self.key("--arg", "DESKTOP=cosmic", "--arg", "GPU=full", stage)
+                self.assertNotEqual(vm, full)
+                # FIRMWARE does not reach COSMIC: the lines share nothing else.
+                self.assertEqual(full, self.key("--arg", "DESKTOP=cosmic", "--arg", "GPU=full",
+                                                "--arg", "FIRMWARE=true", stage))
+
+
 if __name__ == "__main__":
     unittest.main()

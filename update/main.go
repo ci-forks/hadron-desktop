@@ -39,6 +39,9 @@ Commands:
       --reboot           reboot when the upgrade finishes, without asking
       --yes              do not ask for confirmation
   switch FLAVOR     install another desktop (sway, i3, cosmic, niri)
+  switch [FLAVOR] --gpu LINE
+                    install the hardware (full) or the virtual machine (vm)
+                    image instead; later upgrades follow it
       --yes              do not ask for confirmation
       --reboot           reboot when the switch finishes, without asking
   reboot            restart the system into an installed update
@@ -119,6 +122,9 @@ func cmdStatus(name string, args []string, stdout, stderr io.Writer) int {
 
 	fmt.Fprintf(stdout, "Installed:  Hadron Desktop %s (%s, Hadron %s)\n",
 		rel.Version, rel.Flavor, orUnknown(rel.HadronVersion))
+	if rel.Flavor != flavorAgent {
+		fmt.Fprintf(stdout, "Image:      %s\n", lineLabels[rel.Line()])
+	}
 
 	if rel.Flavor != flavorAgent {
 		fmt.Fprintf(stdout, "Pin:        %s\n", orNone(currentPin()))
@@ -367,6 +373,16 @@ func orUnknown(s string) string {
 	return s
 }
 
+// lineWarning says what installing an image of line changes, for a system on
+// the other line. Later upgrades then follow line: the installed image's own
+// release file names it.
+func lineWarning(line string) string {
+	if line == gpuVM {
+		return "This is the virtual machine image: it has no Intel or AMD GPU drivers and no firmware, so on a real machine Wi-Fi, Bluetooth and graphics may stop working. Later upgrades stay on the virtual machine image."
+	}
+	return "This is the hardware image: it adds Intel and AMD GPU drivers and firmware, about 600 MB more. Later upgrades stay on the hardware image."
+}
+
 // flavorAgent is the headless flavor: it has no daemon, so its CLI keeps the
 // direct sudo + kairos-agent path.
 const flavorAgent = "agent"
@@ -508,6 +524,7 @@ func cmdSwitch(args []string, stdin io.Reader, stdout, stderr io.Writer) (code i
 	yes := fs.Bool("yes", false, "do not ask")
 	reboot := fs.Bool("reboot", false, "reboot when done")
 	pause := fs.Bool("pause-on-error", false, "")
+	gpu := fs.String("gpu", "", "image line: full or vm")
 	// The flavor comes first on the command line; flags may follow it.
 	var flavor string
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
@@ -521,14 +538,25 @@ func cmdSwitch(args []string, stdin io.Reader, stdout, stderr io.Writer) (code i
 	}
 	in := bufio.NewReader(stdin)
 	defer func() { pauseOnError(*pause, code, in, stdout) }()
-	if flavor == "" || fs.NArg() > 1 {
+	if (flavor == "" && *gpu == "") || fs.NArg() > 1 {
 		fmt.Fprint(stderr, usage)
+		return exitUsage
+	}
+	if *gpu != "" && *gpu != gpuFull && *gpu != gpuVM {
+		fmt.Fprintf(stderr, "hadron-update: --gpu is %q; choose %s or %s.\n", *gpu, gpuFull, gpuVM)
 		return exitUsage
 	}
 	rel, err := LoadRelease(releaseFile())
 	if err != nil {
 		fmt.Fprintln(stderr, "hadron-update:", err)
 		return exitError
+	}
+	if flavor == "" {
+		flavor = rel.Flavor
+	}
+	line := *gpu
+	if line == "" {
+		line = rel.Line()
 	}
 	known := false
 	for _, f := range switchable {
@@ -542,8 +570,12 @@ func cmdSwitch(args []string, stdin io.Reader, stdout, stderr io.Writer) (code i
 		fmt.Fprintln(stderr, "hadron-update: the agent flavor has no desktop to switch.")
 		return exitUsage
 	}
-	if flavor == rel.Flavor {
-		fmt.Fprintf(stderr, "hadron-update: this system already runs the %s flavor.\n", flavor)
+	if flavor == rel.Flavor && line == rel.Line() {
+		if *gpu != "" {
+			fmt.Fprintf(stderr, "hadron-update: this system already runs the %s image.\n", lineLabels[line])
+		} else {
+			fmt.Fprintf(stderr, "hadron-update: this system already runs the %s flavor.\n", flavor)
+		}
 		return exitUsage
 	}
 	c, ok := dialOrExplain(stderr)
@@ -556,12 +588,17 @@ func cmdSwitch(args []string, stdin io.Reader, stdout, stderr io.Writer) (code i
 	if rc != exitOK {
 		return rc
 	}
-	ref, err := ReleaseRef(rel, flavor, newest)
+	ref, err := LineRef(rel, flavor, line, newest)
 	if err != nil {
 		fmt.Fprintln(stderr, "hadron-update:", err)
 		return exitError
 	}
-	fmt.Fprintln(stdout, "Your per-user desktop settings may not carry over, and the login screen may change.")
+	if line != rel.Line() {
+		fmt.Fprintln(stdout, lineWarning(line))
+	}
+	if flavor != rel.Flavor {
+		fmt.Fprintln(stdout, "Your per-user desktop settings may not carry over, and the login screen may change.")
+	}
 	// The warning's own question replaces "Continue?", default No.
 	if !*yes && !confirm(in, stdout, "Switch anyway?", false) {
 		fmt.Fprintln(stdout, "Cancelled.")
@@ -654,6 +691,9 @@ func installFlow(c daemonClient, rel Release, ref string, advanced, yes, reboot 
 	}
 	fmt.Fprintf(stdout, "Image:    %s\nDigest:   %s\nFlavor:   %s\nVersion:  %s\n",
 		repo, info.Digest, orUnknown(info.Flavor), orUnknown(info.Version))
+	if info.GPU != "" {
+		fmt.Fprintf(stdout, "Graphics: %s\n", lineLabels[info.GPU])
+	}
 	switch {
 	case info.Trusted:
 		fmt.Fprintln(stdout, "Source:   a published Hadron Desktop release (trusted)")
@@ -681,6 +721,11 @@ func installFlow(c daemonClient, rel Release, ref string, advanced, yes, reboot 
 			return exitOK
 		}
 		override = true
+	}
+	// Another line is allowed, like another flavor; `switch --gpu` has
+	// already warned (and passes yes), anything else is warned here.
+	if info.GPU != "" && info.GPU != rel.Line() && !yes {
+		fmt.Fprintln(stdout, lineWarning(info.GPU))
 	}
 	fmt.Fprintln(stdout, "The running system is not touched; the new one is used from the next boot.")
 	if !yes && !confirm(in, stdout, "Continue?", true) {

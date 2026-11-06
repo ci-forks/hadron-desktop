@@ -66,8 +66,9 @@ func shorten(s string, n int) string {
 
 // BuildMenu is the tray menu for a status. It is pure: the tray rebuilds it on
 // every state change, and every rule about what may be clicked when lives
-// here. releases are the published tags; flavor is the running desktop.
-func BuildMenu(st Status, releases []Latest, flavor string) []MenuItem {
+// here. releases are the published tags; flavor is the running desktop and
+// line its image line (gpuFull or gpuVM).
+func BuildMenu(st Status, releases []Latest, flavor, line string) []MenuItem {
 	menu := []MenuItem{{ID: "status", Label: statusLine(st)}}
 	if st.State == StateUnmanaged {
 		// Nothing here was installed from a release, and the service
@@ -106,6 +107,13 @@ func BuildMenu(st Status, releases []Latest, flavor string) []MenuItem {
 		sw = append(sw, MenuItem{ID: "switch/" + f, Label: flavorLabels[f], Enabled: can})
 	}
 	menu = append(menu, MenuItem{ID: "switch", Label: "Switch desktop", Enabled: can, Children: sw})
+	// The other image line, the way the switch above offers the other
+	// desktops: a terminal shows what changes and asks.
+	if line == gpuVM {
+		menu = append(menu, MenuItem{ID: "gpu/" + gpuFull, Label: "Switch to the hardware image", Enabled: can})
+	} else {
+		menu = append(menu, MenuItem{ID: "gpu/" + gpuVM, Label: "Switch to the virtual machine image", Enabled: can})
+	}
 
 	if st.Advanced {
 		menu = append(menu, MenuItem{ID: "advanced", Label: "Install an image…", Enabled: can})
