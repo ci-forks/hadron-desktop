@@ -58,6 +58,12 @@ jobs:
           python3 tools/gen-grub-bg.py "$RUNNER_TEMP/background.tga"
           cmp "$RUNNER_TEMP/background.tga" rootfs/etc/kairos/branding/hadron-theme/background.tga
 
+      - name: Prebuilt stage keys
+        run: |
+          python3 tools/test_stage_key.py
+          make -s STAGE=cosmic-shell print-stage-key
+          make -s STAGE=cosmic-apps print-stage-key
+
       - name: Session scripts and configs parse
         shell: bash
         run: |
