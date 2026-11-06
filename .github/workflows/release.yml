@@ -47,6 +47,12 @@ jobs:
   # the Hadron release changes, and is reused by every later release.
   llvm:
     name: Prebuild LLVM
+    # One at a time across releases: two runs started together (the Hadron
+    # follower's tag and a hand-pushed one) would otherwise both compile the
+    # same image. The second waits, then finds the image the first pushed.
+    concurrency:
+      group: prebuild-llvm
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     timeout-minutes: 330
     permissions:
@@ -119,6 +125,10 @@ jobs:
     name: Prebuild COSMIC ${{ matrix.part }}
     needs: llvm
     if: ${{ !cancelled() }}
+    # One run per half at a time, as for LLVM above.
+    concurrency:
+      group: prebuild-cosmic-${{ matrix.part }}
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     timeout-minutes: 330
     permissions:
