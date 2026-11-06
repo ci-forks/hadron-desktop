@@ -3940,23 +3940,60 @@ RUN make && make install DESTDIR=/snixembed PREFIX=/usr && \
 # ===========================================================================
 # M6: real-hardware firmware (optional)
 #
-# Real wifi / bluetooth / GPU hardware needs firmware blobs in /lib/firmware.
-# This is OFF by default (the QEMU test path and slim images need no blobs);
-# build with --build-arg FIRMWARE=true to bundle a curated linux-firmware
-# subset for common laptop hardware. Validated on real hardware, not in CI.
+# Real wifi / bluetooth / GPU hardware needs firmware blobs. This is OFF by
+# default (the QEMU test path and slim images need no blobs); build with
+# --build-arg FIRMWARE=true to bundle a curated linux-firmware subset for
+# common laptop and desktop hardware. Not tested in CI: QEMU has none of it.
+#
+# The blobs go to /usr/lib/firmware, never /usr/local/lib/firmware. In Hadron
+# (kairos-io/kairos#4290, in v0.6.4) the kernel finds /usr/local/lib/firmware
+# only through /usr/lib/firmware/updates, and on an installed system
+# COS_PERSISTENT is mounted over /usr/local, which hides every blob the image
+# put there. Only the live ISO could load them.
+#
+# tools/install-firmware.sh installs each directory the way upstream's
+# copy-firmware.sh --zstd installs all of them: it compresses the blobs with
+# zstd (about half the size; Hadron's kernel has CONFIG_FW_LOADER_COMPRESS_ZSTD
+# and Hadron's own blobs are .zst too) and creates the links WHENCE declares,
+# which the release tarball does not contain (most nvidia/<chip> directories
+# are links). A prefix that matches nothing fails the build, so a directory
+# upstream moves (iwlwifi-*.ucode moved to intel/iwlwifi/, and the old pattern
+# here then shipped no Intel Wi-Fi firmware at all) is noticed.
 # ===========================================================================
 FROM alpine:3 AS firmware
 ARG FIRMWARE=false
-RUN mkdir -p /firmware/usr/local/lib/firmware
+# The tarball is checked against a pinned SHA256, so this is updated by hand
+# (scripts/check-renovate-pins.sh): take both values from
+# https://cdn.kernel.org/pub/linux/kernel/firmware/sha256sums.asc.
+ARG LINUX_FIRMWARE_VERSION=20261019
+ARG LINUX_FIRMWARE_SHA256=a10d1ab5baf2c74ba92e8c7cf313e691696c26bddfa6df00db795e48d70cd4ca
+RUN mkdir -p /firmware/usr/lib/firmware
+# intel/iwlwifi, intel/ibt-: Intel Wi-Fi and Bluetooth. ath*, qca: Qualcomm
+# Atheros. rtw*, rtl*: Realtek. brcm, mrvl, mediatek: Broadcom, Marvell,
+# MediaTek; cypress, because brcm links into it. i915, xe: Intel graphics (xe
+# from Lunar Lake on). amdgpu, radeon: AMD graphics (radeon for GCN 1 and 2 on
+# the radeon kernel driver). nvidia:
+# nouveau's display firmware; Mesa has no NVIDIA driver here, so those GPUs
+# render with llvmpipe. Hadron's base image already ships regulatory.db.
+COPY tools/install-firmware.sh /usr/local/bin/install-firmware
 RUN if [ "$FIRMWARE" = "true" ]; then \
-      apk add --no-cache git && \
-      git clone --depth 1 https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git /lf && \
-      cd /lf && for p in \
-        iwlwifi-*.ucode iwlwifi-*.pnvm ath10k ath11k ath12k ath9k_htc \
-        rtw88 rtw89 rtlwifi rtl_bt rtl_nic brcm mrvl mediatek \
-        intel/ibt-* qca i915 amdgpu nvidia regulatory.db regulatory.db.p7s ; do \
-          cp -a --parents $p /firmware/usr/local/lib/firmware/ 2>/dev/null || true ; \
-      done ; \
+      apk add --no-cache curl tar xz zstd coreutils && \
+      cd /tmp && \
+      curl -fL --retry 5 --retry-delay 3 --retry-all-errors \
+        https://cdn.kernel.org/pub/linux/kernel/firmware/linux-firmware-${LINUX_FIRMWARE_VERSION}.tar.xz \
+        -o lf.tar.xz && \
+      echo "${LINUX_FIRMWARE_SHA256}  lf.tar.xz" | sha256sum -c - && \
+      prefixes="intel/iwlwifi/ intel/ibt- ath9k_htc/ ath10k/ ath11k/ ath12k/ qca/ \
+        rtw88/ rtw89/ rtlwifi/ rtl_bt/ rtl_nic/ brcm/ mrvl/ mediatek/ \
+        cypress/ i915/ xe/ amdgpu/ radeon/ nvidia/" && \
+      top="linux-firmware-${LINUX_FIRMWARE_VERSION}" && \
+      set -f && \
+      tar -xJf lf.tar.xz --wildcards "$top/WHENCE" \
+        $(for p in $prefixes; do printf '%s/%s* ' "$top" "$p"; done) && \
+      set +f && \
+      rm lf.tar.xz && \
+      install-firmware "$top" /firmware/usr/lib/firmware $prefixes && \
+      rm -rf "$top" ; \
     fi
 
 

@@ -418,9 +418,13 @@ docker build --build-arg FIRMWARE=true -t sway-desktop:hw .
 docker build --build-arg DESKTOP=i3 --build-arg FIRMWARE=true -t i3-desktop:hw .
 ```
 
-This bundles a curated `linux-firmware` subset (iwlwifi, ath, rtw, brcm, intel
-bluetooth, i915, amdgpu, …) into `/lib/firmware`. Wifi/BT/audio on real hardware
-is validated by booting on a physical machine.
+This bundles a curated subset of a pinned `linux-firmware` release (Intel,
+Qualcomm Atheros, Realtek, Broadcom, Marvell and MediaTek Wi-Fi and Bluetooth;
+Intel, AMD and NVIDIA graphics) into `/usr/lib/firmware`, compressed with zstd:
+about 1 GB of blobs as about 500 MB. They must not go to
+`/usr/local/lib/firmware`, which an installed system mounts its persistent
+partition over. Wi-Fi, Bluetooth and GPU firmware loading is checked by booting
+on a physical machine; CI does not test it.
 
 ### Hardware GPU (accelerated GL)
 
