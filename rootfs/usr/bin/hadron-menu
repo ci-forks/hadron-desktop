@@ -115,6 +115,8 @@ power() {
     esac
 }
 
+# An entry name as the argument opens it directly (`hadron-menu Help` is what
+# the welcome notification runs when clicked).
 # Each entry is "Label<TAB>icon"; hadron-pick shows the icon in fuzzel only.
 # "Install apps" reopens the first-run app picker. The agent image does not
 # ship it.
@@ -131,7 +133,11 @@ Update${tab}󰚰
 Help${tab}󰌌
 Power${tab}󰐥"
 n=$(printf '%s\n' "$entries" | wc -l)
-sel=$(printf '%s\n' "$entries" | pick Hadron "$n") || exit 0
+if [ $# -gt 0 ]; then
+    sel=$1
+else
+    sel=$(printf '%s\n' "$entries" | pick Hadron "$n") || exit 0
+fi
 case "$sel" in
     Apps)      apps ;;
     "Install apps") exec hadron-first-run-apps ;;

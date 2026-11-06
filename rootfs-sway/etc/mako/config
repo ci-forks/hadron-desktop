@@ -14,6 +14,15 @@ default-timeout=6000
 max-visible=5
 anchor=top-right
 
+# Do not disturb (hadron-notify-key dnd): nothing is shown; the notifications
+# are kept and appear when the mode is turned off.
+[mode=do-not-disturb]
+invisible=1
+
 [urgency=high]
 border-color=#f7768e
 default-timeout=0
+
+# Critical notifications still show in do not disturb.
+[mode=do-not-disturb urgency=high]
+invisible=0

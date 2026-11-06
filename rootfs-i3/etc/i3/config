@@ -203,6 +203,17 @@ bindsym $mod+n       exec --no-startup-id hadron-wifi-menu
 bindsym $mod+Shift+a exec --no-startup-id hadron-audio-menu
 # help: Bluetooth
 bindsym $mod+Shift+b exec --no-startup-id hadron-bluetooth-menu
+# Notifications (dunst): close the newest, close all, show the last closed,
+# do not disturb on/off.
+# help-section: Notifications
+# help: Close the newest notification
+bindsym $mod+BackSpace       exec --no-startup-id hadron-notify-key dismiss
+# help: Close all notifications
+bindsym $mod+Shift+BackSpace exec --no-startup-id hadron-notify-key dismiss-all
+# help: Show the last closed notification
+bindsym $mod+Ctrl+BackSpace  exec --no-startup-id hadron-notify-key restore
+# help: Do not disturb on/off
+bindsym $mod+Mod1+BackSpace  exec --no-startup-id hadron-notify-key dnd
 for_window [class="HadronFloat"] floating enable, resize set 820 520, move position center
 for_window [class="HadronFloat" title="Keyboard shortcuts"] resize set 900 720, move position center
 

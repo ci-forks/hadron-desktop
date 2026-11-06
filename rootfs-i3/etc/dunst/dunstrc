@@ -22,6 +22,9 @@
     format = "<b>%s</b>\n%b"
     corner_radius = 10
     timeout = 6
+    # A click runs the notification's default action (the welcome opens the
+    # shortcut sheet), then closes it.
+    mouse_left_click = do_action, close_current
 
 [urgency_low]
     background = "#1a1b26"

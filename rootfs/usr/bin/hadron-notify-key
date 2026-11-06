@@ -1,0 +1,74 @@
+#!/bin/sh
+# Notification keys, the same on every variant:
+#
+#   Super+BackSpace         hadron-notify-key dismiss      close the newest
+#   Super+Shift+BackSpace   hadron-notify-key dismiss-all  close all
+#   Super+Ctrl+BackSpace    hadron-notify-key restore      show the last closed
+#   Super+Alt+BackSpace     hadron-notify-key dnd          do not disturb on/off
+#
+# Each goes to the variant's notification server: mako (sway), dunst (i3),
+# Noctalia (niri). COSMIC's notification server has no command interface, so
+# there only `dnd` works, through the setting its panel applet also writes;
+# its notifications close with a click, and the panel lists the old ones.
+set -u
+
+DESKTOP_NAME=""
+# shellcheck disable=SC1091
+[ -r /etc/hadron-desktop/session ] && . /etc/hadron-desktop/session
+
+# say SUMMARY: a short notification that replaces the previous one.
+say() {
+    busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications \
+        org.freedesktop.Notifications Notify 'susssasa{sv}i' \
+        "Hadron Desktop" 0 "" "$1" "" 0 \
+        2 x-dunst-stack-tag s hadron-notify x-canonical-private-synchronous s hadron-notify \
+        2000 >/dev/null 2>&1 || true
+}
+
+# COSMIC keeps do-not-disturb as a cosmic-config value; cosmic-notifications
+# and the panel watch the file.
+cosmic_dnd() {
+    f="${XDG_CONFIG_HOME:-$HOME/.config}/cosmic/com.system76.CosmicNotifications/v1/do_not_disturb"
+    if [ "$(cat "$f" 2>/dev/null)" = true ]; then new=false; else new=true; fi
+    mkdir -p "${f%/*}" && printf '%s' "$new" > "$f"
+    [ "$new" = false ] && say "Notifications on"
+    return 0
+}
+
+case "${1:-}" in
+    dismiss)
+        case "$DESKTOP_NAME" in
+            Sway)   makoctl dismiss ;;
+            i3)     dunstctl close ;;
+            niri)   noctalia msg notification-clear-active ;;
+        esac ;;
+    dismiss-all)
+        case "$DESKTOP_NAME" in
+            Sway)   makoctl dismiss --all ;;
+            i3)     dunstctl close-all ;;
+            niri)   noctalia msg notification-clear-active ;;
+        esac ;;
+    restore)
+        case "$DESKTOP_NAME" in
+            Sway)   makoctl restore ;;
+            i3)     dunstctl history-pop ;;
+            # Noctalia keeps no "closed" stack; its history is a panel.
+            niri)   noctalia msg panel-toggle control-center notifications ;;
+        esac ;;
+    dnd)
+        # The server hides everything while it is on, so only "off" is shown.
+        case "$DESKTOP_NAME" in
+            Sway)
+                makoctl mode -t do-not-disturb >/dev/null
+                makoctl mode | grep -qx do-not-disturb || say "Notifications on" ;;
+            i3)
+                dunstctl set-paused toggle
+                [ "$(dunstctl is-paused)" = false ] && say "Notifications on" ;;
+            niri)   noctalia msg notification-dnd-toggle ;;
+            COSMIC) cosmic_dnd ;;
+        esac ;;
+    *)
+        echo "usage: hadron-notify-key dismiss|dismiss-all|restore|dnd" >&2
+        exit 2 ;;
+esac
+exit 0

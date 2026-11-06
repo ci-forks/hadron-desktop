@@ -25,3 +25,7 @@ System	Super + Shift + ,	Shell settings: bar, dock, wallpaper, theme
 System	Super + Alt + L	Lock the screen
 System	Print	Screenshot (pick an area, then Enter)
 System	Super + Shift + Escape	Toggle the shortcut inhibit
+Notifications	Super + BackSpace	Close the newest notification
+Notifications	Super + Shift + BackSpace	Close all notifications
+Notifications	Super + Ctrl + BackSpace	Notification history
+Notifications	Super + Alt + BackSpace	Do not disturb on/off

@@ -25,3 +25,5 @@ Workspaces | Super + Shift + 1 ... 9 | Send the window to the numbered workspace
 
 System | Super + Alt + L | Lock the screen @ (modifiers: [Super, Alt], key: "l"): System(LockScreen),
 System | Print | Screenshot
+
+Notifications | Super + Alt + BackSpace | Do not disturb on/off @ (modifiers: [Super, Alt], key: "BackSpace"): Spawn("hadron-notify-key dnd"),

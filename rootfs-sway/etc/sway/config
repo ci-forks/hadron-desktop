@@ -219,6 +219,17 @@ bindsym $mod+n       exec hadron-wifi-menu
 bindsym $mod+Shift+a exec hadron-audio-menu
 # help: Bluetooth
 bindsym $mod+Shift+b exec hadron-bluetooth-menu
+# Notifications (mako): close the newest, close all, show the last closed,
+# do not disturb on/off.
+# help-section: Notifications
+# help: Close the newest notification
+bindsym $mod+BackSpace       exec hadron-notify-key dismiss
+# help: Close all notifications
+bindsym $mod+Shift+BackSpace exec hadron-notify-key dismiss-all
+# help: Show the last closed notification
+bindsym $mod+Ctrl+BackSpace  exec hadron-notify-key restore
+# help: Do not disturb on/off
+bindsym $mod+Mod1+BackSpace  exec hadron-notify-key dnd
 # floating "control" terminals (the shortcut sheet etc.), centered and sized
 for_window [app_id="floatterm"] floating enable, resize set 820 520, move position center
 for_window [app_id="floatterm" title="Keyboard shortcuts"] resize set 900 720, move position center

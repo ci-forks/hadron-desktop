@@ -3,16 +3,37 @@
 # the shortcut cheat sheet. Started with the session, in the same batch as the
 # notification daemon (mako, dunst or the Noctalia shell), so it retries until
 # the daemon owns the bus name; a shell can take several seconds to come up.
+#
+# A click on it opens the shortcut sheet: the notification has a "default"
+# action, and this script waits for the server's ActionInvoked signal for it
+# (gdbus monitor, from GLib) until the server closes it.
 state="${XDG_STATE_HOME:-$HOME/.local/state}/hadron-desktop"
 [ -e "$state/welcomed" ] && exit 0
 tries=0
-until busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications \
-    org.freedesktop.Notifications Notify susssasa{sv}i \
+until out=$(busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications \
+    org.freedesktop.Notifications Notify 'susssasa{sv}i' \
     "Hadron Desktop" 0 "" "Welcome to Hadron Desktop" \
-    "Press Super+Escape for the Hadron menu, Super+F1 for keyboard shortcuts, Super+D to launch apps and Super+Shift+E for the power menu." \
-    0 0 15000 >/dev/null 2>&1; do
+    "Press Super+Escape for the Hadron menu, Super+F1 for keyboard shortcuts, Super+D to launch apps and Super+Shift+E for the power menu. Click here to see the shortcuts." \
+    2 default "Show the shortcuts" 0 15000 2>/dev/null); do
     tries=$((tries + 1))
     [ "$tries" -ge 15 ] && exit 0
     sleep 2
 done
 mkdir -p "$state" && : > "$state/welcomed"
+
+# busctl prints "u 7"; the id is the number.
+id=${out#u }
+case "$id" in ''|*[!0-9]*) exit 0 ;; esac
+command -v gdbus >/dev/null 2>&1 || exit 0
+# The monitor prints one line per signal, for example
+#   /org/freedesktop/Notifications: org.freedesktop.Notifications.ActionInvoked (uint32 7, 'default')
+# Stop on our ActionInvoked, on our NotificationClosed, or after a minute.
+timeout 60 gdbus monitor --session --dest org.freedesktop.Notifications \
+    --object-path /org/freedesktop/Notifications 2>/dev/null |
+while IFS= read -r line; do
+    case "$line" in
+        *".ActionInvoked (uint32 $id, 'default')"*) exec hadron-menu Help ;;
+        *".NotificationClosed (uint32 $id,"*)       exit 0 ;;
+    esac
+done
+exit 0
