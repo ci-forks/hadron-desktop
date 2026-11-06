@@ -16,3 +16,4 @@ Workspaces	Super + 1 ... 9	Switch to the numbered workspace
 Workspaces	Super + Shift + 1 ... 9	Send the window to the numbered workspace
 System	Super + Alt + L	Lock the screen
 System	Print	Screenshot
+Notifications	Super + Alt + BackSpace	Do not disturb on/off

@@ -21,3 +21,7 @@ System	Super + Print	Screenshot of an area
 System	Super + N	Wi-Fi
 System	Super + Shift + A	Audio output
 System	Super + Shift + B	Bluetooth
+Notifications	Super + BackSpace	Close the newest notification
+Notifications	Super + Shift + BackSpace	Close all notifications
+Notifications	Super + Ctrl + BackSpace	Show the last closed notification
+Notifications	Super + Alt + BackSpace	Do not disturb on/off

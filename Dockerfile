@@ -4628,6 +4628,11 @@ RUN chmod 1777 /tmp; \
         "$f" || exit 1; \
       grep -qF '(modifiers: [Super], key: "Escape"): Spawn("hadron-menu"),' "$f" || exit 1; \
       grep -qF '(modifiers: [Super, Alt], key: "l"): System(LockScreen),' "$f" || exit 1; \
+      # Super+Alt+BackSpace turns do not disturb on and off, as in the other
+      # variants (hadron-notify-key). COSMIC has no command to close a
+      # notification, so the other notification keys are not bound here.
+      sed -i 's/\((modifiers: \[Super\], key: "Escape"): Spawn("hadron-menu"),\)/\1\n    (modifiers: [Super, Alt], key: "BackSpace"): Spawn("hadron-notify-key dnd"),/' "$f" || exit 1; \
+      grep -qF '(modifiers: [Super, Alt], key: "BackSpace"): Spawn("hadron-notify-key dnd"),' "$f" || exit 1; \
       mkdir -p /etc/systemd/system/multi-user.target.wants; \
       for u in cosmic-greeter cosmic-greeter-daemon accounts-daemon; do \
         ln -sf /usr/lib/systemd/system/$u.service /etc/systemd/system/multi-user.target.wants/$u.service; \

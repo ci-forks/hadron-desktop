@@ -71,11 +71,14 @@ jobs:
           python3 tools/test_gen_shortcuts.py
           python3 tools/gen-shortcuts.py --check
 
+      - name: Notification keys and the welcome click
+        run: test/notify/check-notify-keys.sh
+
       - name: Session scripts and configs parse
         shell: bash
         run: |
           set -euo pipefail
-          for f in rootfs*/usr/bin/* scripts/*.sh test/boot-ux/*.sh; do
+          for f in rootfs*/usr/bin/* scripts/*.sh test/boot-ux/*.sh test/notify/*.sh; do
             if head -n1 "$f" | grep -q bash; then bash -n "$f"; else sh -n "$f"; fi
           done
           jq empty rootfs-sway/etc/xdg/waybar/config

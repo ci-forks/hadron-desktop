@@ -438,6 +438,16 @@ binds {
     Mod+F1 hotkey-overlay-title="Keyboard Shortcuts" { spawn "foot" "--app-id=floatterm" "-W" "96x30" "-T" "Keyboard shortcuts" "hadron-help"; }
     // help: Hadron menu: apps, Wi-Fi, Bluetooth, updates, power
     Mod+Escape hotkey-overlay-title="Hadron Menu" { spawn "hadron-menu"; }
+    // Notifications (Noctalia): close, close all, history, do not disturb.
+    // help-section: Notifications
+    // help: Close the newest notification
+    Mod+BackSpace hotkey-overlay-title="Close Notifications" { spawn "hadron-notify-key" "dismiss"; }
+    // help: Close all notifications
+    Mod+Shift+BackSpace hotkey-overlay-title=null { spawn "hadron-notify-key" "dismiss-all"; }
+    // help: Notification history
+    Mod+Ctrl+BackSpace hotkey-overlay-title="Notification History" { spawn "hadron-notify-key" "restore"; }
+    // help: Do not disturb on/off
+    Mod+Alt+BackSpace hotkey-overlay-title="Do Not Disturb" { spawn "hadron-notify-key" "dnd"; }
     Alt+Tab { spawn-sh "noctalia msg window-switcher hold"; }
     // help-section: System
     // help: Lock the screen
