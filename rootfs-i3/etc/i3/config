@@ -51,6 +51,9 @@ exec --no-startup-id $term
 # First-login welcome (once per user). It talks to dunst over the session bus
 # start-desktop opened. The update icon starts from config.d/30-update-tray.conf.
 exec --no-startup-id hadron-welcome
+# First-run app picker (a browser and essentials from Flathub), once per user,
+# after the network is up. The agent image deletes this line.
+exec --no-startup-id hadron-first-run-apps --login
 
 floating_modifier $mod
 

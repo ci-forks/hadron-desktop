@@ -22,6 +22,7 @@ The baseline:
 | Upgrades only by `admin`, through polkit | polkit with the `admin` rule (`50-hadron-update.rules`) on all four variants. Agent removes the update service and its polkit files |
 | System tray that hosts StatusNotifierItem icons | waybar `tray`, i3bar + snixembed (started from `config.d/30-update-tray.conf`), COSMIC status area, Noctalia `tray` |
 | First-login welcome | `hadron-welcome`; COSMIC uses cosmic-initial-setup |
+| First-run app picker (a browser and essentials from Flathub) | `hadron-first-run-apps --login` at session start: `exec` in the sway and i3 configs, `spawn-at-startup` on niri, `/etc/xdg/autostart/hadron-first-run-apps.desktop` on COSMIC (it waits for cosmic-initial-setup). Once per user (stamp in `~/.local/state/hadron/`), after `nm-online`; "Install apps" in `hadron-menu` reopens it. `test/first-run/check-first-run-apps.sh`. Not on agent, which removes the script and its i3 line |
 | Keyboard habits (tiling variants) | Super+Enter terminal, Super+D launcher (`hadron-apps` on i3, which lists .desktop and Flatpak apps; Super+Shift+D keeps `dmenu_run`), Super+Shift+Q close, Super+Shift+E power menu, Super+F1 shortcut sheet (`hadron-help`) |
 | Network, audio, power menus | `hadron-wifi-menu`, `hadron-audio-menu`, `hadron-power-menu`, or the shell's own panels |
 | Audio | PipeWire and WirePlumber started with the session, media keys work |
