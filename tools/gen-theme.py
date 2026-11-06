@@ -91,7 +91,7 @@ RULES = {
     "rootfs-sway/etc/xdg/waybar/style.css": ("hash", "css", [
         (r"^@define-color (?P<role>\w+)\s+#{hex};$", None),  # role = the name
     ]),
-    "rootfs-sway/etc/xdg/fuzzel/fuzzel.ini": ("ini", "hash", [
+    "rootfs/etc/xdg/fuzzel/fuzzel.ini": ("ini", "hash", [
         (r"^background={hex}[0-9a-fA-F]{{2}}$", "base"),
         (r"^text={hex}ff$", "text"),
         (r"^prompt={hex}ff$", "glow"),

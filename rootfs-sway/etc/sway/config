@@ -88,6 +88,8 @@ bindsym $mod+Shift+c       reload
 bindsym $mod+Shift+e       exec hadron-power-menu
 bindsym $mod+Mod1+l        exec swaylock -f
 bindsym $mod+F1            exec foot --app-id=floatterm -T "Keyboard shortcuts" hadron-help
+# The Hadron menu: apps, Wi-Fi, Bluetooth, audio, capture, update, help, power.
+bindsym $mod+Escape        exec hadron-menu
 
 # Focus
 bindsym $mod+$left  focus left

@@ -56,6 +56,9 @@ kairos-init from the Kairos monorepo (`ghcr.io/kairos-io/kairos/kairos-init:mast
 - **Bluetooth:** BlueZ. On Sway and i3, Super+Shift+B opens a menu to turn
   the adapter on or off and to pair, connect, disconnect or forget a device;
   niri and COSMIC use the Bluetooth panel of their shell.
+- **Hadron menu:** Super+Escape on every variant opens one menu for apps,
+  Wi-Fi, Bluetooth, audio, screenshots, updates, the shortcut sheet and the
+  power actions.
 - **Hardware keys:** volume, mute, screen brightness and play/pause/next/previous
   work on every variant and show the new level on screen.
 - **Containers:** rootful docker + distrobox (mutable dev-env containers).

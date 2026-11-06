@@ -9,7 +9,7 @@ tries=0
 until busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications \
     org.freedesktop.Notifications Notify susssasa{sv}i \
     "Hadron Desktop" 0 "" "Welcome to Hadron Desktop" \
-    "Press Super+F1 for keyboard shortcuts, Super+D to launch apps and Super+Shift+E for the power menu." \
+    "Press Super+Escape for the Hadron menu, Super+F1 for keyboard shortcuts, Super+D to launch apps and Super+Shift+E for the power menu." \
     0 0 15000 >/dev/null 2>&1; do
     tries=$((tries + 1))
     [ "$tries" -ge 15 ] && exit 0
