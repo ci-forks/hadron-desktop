@@ -3869,7 +3869,10 @@ RUN ./configure ${COMMON_CONFIGURE_ARGS} --disable-valadoc GI_GIRDIR=/usr/share/
 # icons, the only kind i3bar hosts. It draws them with GTK3's GtkStatusIcon,
 # which exists only in the X11 backend, so it builds against gtk3-x11 and
 # libdbusmenu-gtk3-x11 rather than the Wayland gtk3. Upstream is on sourcehut
-# only (no GitHub mirror), so the archive comes from git.sr.ht.
+# only (no GitHub mirror), so the archive comes from git.sr.ht. When git.sr.ht
+# refuses the connection (it did for a whole agent gate run), the same archive
+# comes from Debian's pool: snixembed_<version>.orig.tar.gz is byte-identical
+# to the sourcehut tarball (same sha256 for 0.3.3).
 #
 # libdbusmenu ships its Vala bindings only when built with GObject
 # Introspection, which Hadron does not build. snixembed uses one thing from
@@ -3906,7 +3909,11 @@ COPY --from=vala /vala /
 ARG SNIXEMBED_VERSION=0.3.3
 RUN mkdir -p /snixembed
 WORKDIR /build
-RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://git.sr.ht/~steef/snixembed/archive/${SNIXEMBED_VERSION}.tar.gz -o s.tar.gz && tar -xzf s.tar.gz && rm s.tar.gz && mv snixembed-* src
+RUN { curl --connect-timeout 20 --retry 5 --retry-delay 3 --retry-all-errors -fL -o s.tar.gz \
+        https://git.sr.ht/~steef/snixembed/archive/${SNIXEMBED_VERSION}.tar.gz || \
+      curl --retry 5 --retry-delay 3 --retry-all-errors -fL -o s.tar.gz \
+        https://deb.debian.org/debian/pool/main/s/snixembed/snixembed_${SNIXEMBED_VERSION}.orig.tar.gz; } && \
+    tar -xzf s.tar.gz && rm s.tar.gz && mv snixembed-* src
 WORKDIR /build/src
 RUN v=/usr/share/vala/vapi && mkdir -p $v && \
     printf '%s\n' '/* Empty: snixembed uses nothing from libdbusmenu-glib directly. */' \
