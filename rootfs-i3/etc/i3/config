@@ -177,6 +177,10 @@ bar {
     position top
     status_command /usr/bin/hadron-status
     tray_output primary
+    # 4 px around and between the tray icons (the default is 2): the icons
+    # are the bar height less 8 px, close to waybar's 18 px icons, and do not
+    # touch each other.
+    tray_padding 4
     separator_symbol "  "
     colors {
         background $bg

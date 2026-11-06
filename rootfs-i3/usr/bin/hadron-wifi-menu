@@ -1,9 +1,7 @@
 #!/bin/sh
-# dmenu-based Wi-Fi menu for the XLibre/i3 variant (NetworkManager via nmcli).
-menu() {
-    dmenu -i -l 14 -p "$1" -fn 'Inter Variable-11' \
-        -nb '#1a1b26' -nf '#c0caf5' -sb '#7aa2f7' -sf '#16161e'
-}
+# Wi-Fi menu for the XLibre/i3 variant (NetworkManager via nmcli), through
+# hadron-pick (dmenu here).
+menu() { hadron-pick "$1" 14; }
 
 radio=$(nmcli -t -f WIFI radio 2>/dev/null || echo "")
 if [ "$radio" = "disabled" ]; then

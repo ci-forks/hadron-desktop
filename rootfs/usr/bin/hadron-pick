@@ -1,16 +1,36 @@
 #!/bin/sh
-# The menu picker the shared hadron-* menus use: reads one choice per line on
+# The menu picker every hadron-* menu uses: reads one choice per line on
 # stdin, prints the chosen line, and exits non-zero when the user cancels.
 #
 #   printf '%s\n' One Two | hadron-pick 'Prompt' [LINES]
 #
-# fuzzel on Wayland, dmenu on X11 (i3), in the Hadron palette, with the same
-# look as the per-variant Wi-Fi, audio and power menus.
+# A line can add an icon after a tab, "Label<TAB>glyph", where the glyph is a
+# Symbols Nerd Font character. fuzzel shows the glyph before the label; dmenu
+# shows only the label. Either way the printed choice is the label alone, so
+# a caller matches the same text on every variant.
+#
+# fuzzel on Wayland, dmenu on X11 (i3), both in the Hadron palette, so the
+# Hadron menu and the Wi-Fi, audio, Bluetooth and power menus look the same.
 prompt=${1:-Select}
 lines=${2:-14}
+tab=$(printf '\t')
 
 if [ -n "${WAYLAND_DISPLAY:-}" ] && command -v fuzzel >/dev/null 2>&1; then
-    exec fuzzel --dmenu --width=48 --lines="$lines" --prompt="$prompt > "
+    pick() { fuzzel --dmenu --width=48 --lines="$lines" --prompt="$prompt > "; }
+    items=$(cat)
+    [ -n "$items" ] || exit 1
+    case "$items" in
+        *"$tab"*) ;;
+        *) printf '%s\n' "$items" | pick; exit ;;
+    esac
+    sel=$(printf '%s\n' "$items" |
+        awk -F "$tab" 'NF > 1 { print $2 "  " $1; next } { print }' | pick) || exit
+    # Back from "glyph  Label" to "Label"; typed text that is no item stays.
+    printf '%s\n' "$items" | S=$sel awk -F "$tab" '
+        NF > 1 && $2 "  " $1 == ENVIRON["S"] { print $1; found = 1; exit }
+        $0 == ENVIRON["S"] { print; found = 1; exit }
+        END { if (!found) print ENVIRON["S"] }'
+    exit 0
 fi
-exec dmenu -i -l "$lines" -p "$prompt" -fn 'Inter Variable-11' \
+cut -f1 | dmenu -i -l "$lines" -p "$prompt" -fn 'Inter Variable-11' \
     -nb '#1a1b26' -nf '#c0caf5' -sb '#7aa2f7' -sf '#16161e'

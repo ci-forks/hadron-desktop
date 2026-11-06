@@ -1,15 +1,21 @@
 #!/bin/sh
-# dmenu power menu for the XLibre/i3 variant, bound to Mod+Shift+e.
-# Hadron has no polkit, so logind refuses reboot/poweroff/suspend from an
-# unprivileged session; they go through sudo instead. The desktop user is in
-# `admin`, which Kairos' 10_accounting stage gives passwordless sudo, so -n
-# never prompts. Lock runs the same i3lock as Mod+Alt+l (/etc/i3/config).
-sel=$(printf '%s\n' "Lock" "Log out" "Suspend" "Reboot" "Power off" |
-    dmenu -i -p "Power" -fn "Inter Variable-11" -nb "#1a1b26" -nf "#c0caf5" -sb "#7aa2f7" -sf "#16161e") || exit 0
+# Power menu for the XLibre/i3 variant, bound to Mod+Shift+e. The picker is
+# hadron-pick (dmenu here), so it is the same list as the Hadron menu and the
+# Sway power menu.
+# logind allows suspend, restart and power off to the user of the active local
+# session through polkit, so any user can use them, not only `admin`. If polkit
+# refuses (another user is logged in too, say), an admin's passwordless sudo
+# (Kairos' 10_accounting stage) is tried; -n never prompts.
+# Lock runs the same i3lock as Mod+Alt+l (/etc/i3/config).
+# power ACTION: systemctl through polkit, else through sudo.
+power() { systemctl "$1" 2>/dev/null || sudo -n /usr/bin/systemctl "$1"; }
+
+sel=$(printf '%s\t%s\n' Lock 󰌾 "Log out" 󰍃 Suspend 󰒲 Restart 󰜉 "Power off" 󰐥 |
+    hadron-pick Power 5) || exit 0
 case "$sel" in
     Lock)        i3lock --ignore-empty-password --show-failed-attempts --color=1a1b26 ;;
     "Log out")   i3-msg exit ;;
-    Suspend)     sudo -n /usr/bin/systemctl suspend ;;
-    Reboot)      sudo -n /usr/bin/systemctl reboot ;;
-    "Power off") sudo -n /usr/bin/systemctl poweroff ;;
+    Suspend)     power suspend ;;
+    Restart)     power reboot ;;
+    "Power off") power poweroff ;;
 esac

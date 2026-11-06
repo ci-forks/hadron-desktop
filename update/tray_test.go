@@ -481,6 +481,14 @@ func TestIcons(t *testing.T) {
 			if _, _, _, a := img.At(0, 0).RGBA(); a != 0 {
 				t.Errorf("%s/%d: corner not transparent", kind, size)
 			}
+			// The middle of the three busy dots is glyph, in the dark
+			// on_accent colour that stays readable on the light discs.
+			if kind == "busy" {
+				r, g, b, _ := img.At(size/2, size/2).RGBA()
+				if uint8(r>>8) != 0x16 || uint8(g>>8) != 0x16 || uint8(b>>8) != 0x1e {
+					t.Errorf("busy/%d: glyph colour %02x%02x%02x", size, r>>8, g>>8, b>>8)
+				}
+			}
 		}
 	}
 }

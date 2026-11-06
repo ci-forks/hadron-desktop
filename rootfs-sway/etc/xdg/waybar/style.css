@@ -3,6 +3,7 @@
    palette, not these values. */
 @define-color base      #1a1b26;
 @define-color surface   #24283b;
+@define-color overlay   #292e42;
 @define-color border    #414868;
 @define-color dim       #737aa2;
 @define-color text      #c0caf5;
@@ -14,6 +15,10 @@
 @define-color error     #f7768e;
 @define-color on_accent #16161e;
 
+/* Floating capsules: the bar itself is transparent and sits 6 px below the
+   top edge (margins in the config); each module is a capsule with radius 8,
+   and the chips inside a capsule (workspace buttons) have radius 4. */
+
 * {
     font-family: "Inter Variable", "Symbols Nerd Font", sans-serif;
     font-size: 10pt;
@@ -21,14 +26,31 @@
 }
 
 window#waybar {
-    background-color: @base;
+    background-color: transparent;
     color: @text;
-    border-bottom: 2px solid @border;
 }
+
+#workspaces,
+#mode,
+#clock,
+#network,
+#bluetooth,
+#wireplumber,
+#cpu,
+#memory,
+#battery,
+#tray,
+#custom-power {
+    padding: 0 10px;
+    border-radius: 8px;
+    background-color: @surface;
+}
+
+#workspaces { padding: 0 2px; }
 
 #workspaces button {
     padding: 0 8px;
-    margin: 2px 2px;
+    margin: 3px 1px;
     color: @dim;
     background-color: transparent;
     border-radius: 4px;
@@ -42,33 +64,18 @@ window#waybar {
     background-color: @error;
 }
 #workspaces button:hover {
-    background-color: @surface;
+    background-color: @overlay;
     color: @text;
 }
 
 #mode {
     color: @on_accent;
     background-color: @warning;
-    padding: 0 8px;
-    border-radius: 4px;
 }
 
 #clock {
     color: @glow;
     font-weight: bold;
-}
-
-#network,
-#bluetooth,
-#wireplumber,
-#cpu,
-#memory,
-#battery,
-#tray {
-    padding: 0 10px;
-    margin: 2px 2px;
-    border-radius: 4px;
-    background-color: @surface;
 }
 
 #network        { color: @accent; }
@@ -81,10 +88,14 @@ window#waybar {
 #battery.warning  { color: @warning; }
 #battery.critical { color: @error; }
 #network.disconnected,
-#wireplumber.muted { color: @dim; }
+#wireplumber.muted,
+#bluetooth.off,
+#bluetooth.no-controller { color: @dim; }
 
-#tray { background-color: @surface; }
 #tray > .needs-attention { color: @error; }
 
-#custom-power   { color: @error; padding: 0 12px 0 8px; }
-#custom-power:hover { background-color: @surface; }
+#custom-power   { color: @error; padding: 0 12px 0 10px; }
+#network:hover,
+#bluetooth:hover,
+#wireplumber:hover,
+#custom-power:hover { background-color: @overlay; }

@@ -10,6 +10,7 @@
     notification_limit = 5
     progress_bar = true
     progress_bar_height = 10
+    progress_bar_corner_radius = 4
     separator_height = 2
     padding = 12
     horizontal_padding = 14
@@ -25,13 +26,16 @@
 [urgency_low]
     background = "#1a1b26"
     foreground = "#a9b1d6"
+    highlight = "#7aa2f7"
 
 [urgency_normal]
     background = "#1a1b26"
     foreground = "#c0caf5"
+    highlight = "#7aa2f7"
 
 [urgency_critical]
     background = "#1a1b26"
     foreground = "#f7768e"
+    highlight = "#f7768e"
     frame_color = "#f7768e"
     timeout = 0

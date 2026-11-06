@@ -1,5 +1,6 @@
 #!/bin/sh
-# dmenu-based WirePlumber output switcher for the XLibre/i3 variant.
+# WirePlumber output switcher for the XLibre/i3 variant, through hadron-pick
+# (dmenu here).
 list=$(wpctl status 2>/dev/null | awk '
     /Sinks:/      { insink=1; next }
     /Sources:|Filters:|Streams:|^ *$/ { insink=0 }
@@ -12,7 +13,6 @@ list=$(wpctl status 2>/dev/null | awk '
     }')
 
 [ -n "$list" ] || exit 0
-sel=$(printf '%s\n' "$list" | cut -f1 | dmenu -i -l 10 -p 'Audio output' \
-    -fn 'Inter Variable-11' -nb '#1a1b26' -nf '#c0caf5' -sb '#7aa2f7' -sf '#16161e') || exit 0
+sel=$(printf '%s\n' "$list" | cut -f1 | hadron-pick 'Audio output' 10) || exit 0
 id=$(printf '%s\n' "$list" | awk -F'\t' -v s="$sel" '$1==s{print $2; exit}')
 [ -n "$id" ] && wpctl set-default "$id"
