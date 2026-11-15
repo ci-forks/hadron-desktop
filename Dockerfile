@@ -4684,6 +4684,10 @@ COPY rootfs/etc/hadron-desktop/extensions.conf /etc/hadron-desktop/extensions.co
 COPY rootfs/usr/lib/systemd/system/hadron-updated.service /usr/lib/systemd/system/hadron-updated.service
 COPY rootfs/usr/share/dbus-1/ /usr/share/dbus-1/
 COPY rootfs/usr/share/polkit-1/ /usr/share/polkit-1/
+# Docker: its units, and the boot stage that persists /var/lib/docker and
+# starts the daemon on the installed system only.
+COPY rootfs/usr/lib/systemd/system/docker.service rootfs/usr/lib/systemd/system/docker.socket /usr/lib/systemd/system/
+COPY rootfs/system/oem/92_docker.yaml /system/oem/92_docker.yaml
 COPY rootfs-server/ /
 
 FROM ${DESKTOP}-rootfs AS desktop-rootfs
@@ -4984,6 +4988,8 @@ COPY --from=toolchain /usr/lib/libgcc_s.so* /usr/lib/
 COPY --from=toolchain /usr/lib/libreadline.so* /usr/lib/
 # Network card firmware and CPU microcode (empty unless FIRMWARE=true).
 COPY --from=firmware /firmware /
+# Docker, the same static bundle as the desktop (no Distrobox).
+COPY --from=docker /docker /
 COPY --from=server-config / /
 # The splash is kept for one job: in the initramfs it asks for the disk
 # passphrase (51hadron-askpass), and falls back to text without a framebuffer.
@@ -4993,10 +4999,17 @@ COPY --from=hadron-splash /build/splash/hadron-splash /usr/bin/kairos-splash
 # NetworkManager starts at boot; nmcli changes need root (sudo), see
 # rootfs-server/etc/NetworkManager/NetworkManager.conf. polkit answers the
 # update service only (50-hadron-update.rules: the admin group, no prompt),
-# so it works the same from SSH and from the console.
+# so it works the same from SSH and from the console. Docker stays disabled
+# in the image, as on the desktop: the live ISO's /var is an overlayfs, where
+# overlay2 fails its nested-overlay check. 92_docker.yaml starts it on the
+# installed system, on the persistent /var/lib/docker.
 RUN chmod 1777 /tmp; \
     ldconfig 2>/dev/null || true; \
     for g in admin audio video render input bluetooth seat docker; do groupadd -f "$g"; done; \
+    mkdir -p /var/lib/docker; \
+    systemctl disable docker.socket docker.service 2>/dev/null || true; \
+    rm -f /etc/systemd/system/sockets.target.wants/docker.socket \
+      /etc/systemd/system/multi-user.target.wants/docker.service; \
     useradd -r -M -d / -s /usr/sbin/nologin polkitd; \
     chmod 4755 /usr/lib/polkit-1/polkit-agent-helper-1; \
     for d in /etc/polkit-1/rules.d /usr/share/polkit-1/rules.d; do \

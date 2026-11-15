@@ -32,7 +32,7 @@ for l in flavor=server gpu=full firmware=true; do
 done
 
 # No desktop.
-for b in sway Xorg X Xwayland niri cosmic-comp i3 ly greetd waybar foot flatpak pipewire wireplumber dockerd wpa_supplicant bluetoothd; do
+for b in sway Xorg X Xwayland niri cosmic-comp i3 ly greetd waybar foot flatpak pipewire wireplumber distrobox wpa_supplicant bluetoothd; do
     check "no $b" "! command -v $b && ! test -e /usr/bin/$b"
 done
 check "no Mesa or LLVM" "! ls /usr/lib/libGL* /usr/lib/libEGL* /usr/lib/libLLVM* /usr/lib/dri 2>/dev/null | grep -q ."
@@ -65,6 +65,25 @@ check "the installer's groups exist" \
 check "the installer is wired" "grep -q /usr/bin/hadron-install-ui /system/oem/90_desktop_installer.yaml"
 check "the passphrase prompt modules are in the initramfs" \
     "lsinitrd /boot/initrd | grep -q hadron-unlock && lsinitrd /boot/initrd | grep -q usr/libexec/hadron-ask-gate && lsinitrd /boot/initrd | grep -q usr/bin/kairos-splash"
+
+# Docker, as on the desktop: disabled in the image (the live ISO's /var is an
+# overlayfs), started by 92_docker.yaml on the installed system, with
+# /var/lib/docker on the persistent partition.
+for b in dockerd docker containerd containerd-shim-runc-v2 runc docker-init docker-proxy ctr; do
+    check "$b is installed" "test -x /usr/bin/$b"
+done
+check "the docker CLI runs" "docker --version | grep -q 'Docker version'"
+check "docker units are installed" \
+    "test -f /usr/lib/systemd/system/docker.service && test -f /usr/lib/systemd/system/docker.socket"
+check "the docker socket belongs to the docker group" \
+    "grep -qx 'SocketGroup=docker' /usr/lib/systemd/system/docker.socket"
+check "docker is not enabled in the image" \
+    "! test -e /etc/systemd/system/multi-user.target.wants/docker.service && ! test -e /etc/systemd/system/sockets.target.wants/docker.socket"
+check "the boot stage persists /var/lib/docker and starts docker after install" \
+    "grep -q 'CUSTOM_BIND_MOUNTS: \"/var/lib/docker\"' /system/oem/92_docker.yaml && grep -q 'live_mode' /system/oem/92_docker.yaml && grep -q 'systemctl start docker.service' /system/oem/92_docker.yaml"
+check "iptables is installed" "command -v iptables"
+check "the container kernel modules are present" \
+    "k=\$(ls /lib/modules) && for m in overlay bridge br_netfilter veth nf_nat xt_MASQUERADE; do find /lib/modules/\$k -name \"\$m.ko*\" | grep -q . || exit 1; done"
 
 # Firmware: network cards and microcode, no desktop set.
 F=/usr/lib/firmware

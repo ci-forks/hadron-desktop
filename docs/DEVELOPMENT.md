@@ -50,7 +50,7 @@ kairos-init from the Kairos monorepo (`ghcr.io/kairos-io/kairos/kairos-init:mast
 - **Server edition** (`DESKTOP=server`): no desktop at all. The kernel,
   network card firmware and CPU microcode, NetworkManager and nmcli, the
   OpenSSH server, a console login, the Hadron installer with disk encryption,
-  and `hadron-update` and `hadron-ext`. It is built from its own Dockerfile
+  `hadron-update` and `hadron-ext`, and Docker (no Distrobox). It is built from its own Dockerfile
   stage (`server-default`), so no graphics, audio or Flatpak stage is built.
   The table in AGENTS.md lists what it has and lacks.
 - **Login:** on Sway, i3 and niri, `ly` runs on `tty1`. It launches Sway directly for
