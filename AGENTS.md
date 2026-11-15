@@ -3,7 +3,9 @@
 ## Every desktop variant has the same feature set
 
 A variant is one value of `DESKTOP` (today sway, i3, cosmic, niri). The agent
-image is an overlay on i3, not a variant, and is exempt where noted.
+image is an overlay on i3, not a variant, and is exempt where noted. The
+server edition (`DESKTOP=server`) is not a variant either and is exempt from
+the whole table below: it has no desktop. See "The server edition".
 
 A user who switches variants must find the same Hadron features, reached the
 same way. When you add a variant, or a feature that one variant gets, add it to
@@ -39,6 +41,29 @@ The baseline:
 | Emoji | Noto Color Emoji (the Dockerfile `emoji` stage; FreeType is built with libpng to load its PNG glyphs) as the last fallback in `60-hadron.conf`. `hadron-emoji` on Super+; and in the Hadron menu: the list `/usr/share/hadron/emoji.txt`, made from Unicode's `emoji-test.txt`, through `hadron-pick`, then wl-copy (sway, niri, COSMIC) or xsel (i3) and a notification. COSMIC's Super+; is added in the Dockerfile. `test/emoji/check-emoji.sh` |
 | System extensions | `hadron-ext` (a link to `hadron-update`, also `hadron-update ext`): browse the catalogs in `/etc/hadron-desktop/extensions.conf` (default hadron-layers), install, enable, disable, remove. The root `hadron-updated` runs `kairos-agent sysext` (`--common`, enabled `--now`) behind polkit's `io.kairos.hadron-update.extensions` (admin only, no Flatpak callers), shares the update job slot, and refuses an extension whose files differ from the running `/usr` (systemd-dissect `--mtree`) unless `--force`. The "Extensions" entry of `hadron-menu` (hadron-pick, ✓ on the installed ones) and the tray's "Extensions…" open the same list on every variant. `extensions.ignore_signatures` is set in `/etc/kairos/90_hadron_extensions.yaml` and `/system/oem/93_hadron_extensions.yaml`, both removed on a Trusted Boot image. See `docs/superpowers/specs/2026-11-07-extensions-design.md`; `test/extensions/check-extensions-menu.sh`. Not on agent: Dockerfile.agent removes `hadron-ext`, its config and the signature setting |
 | Disk encryption from the installer (opt-in) | the installer's "Encrypt your files?" step, on every machine and off by default: `install.encrypted_partitions: [COS_PERSISTENT]` with kcrypt `method: passphrase` (LUKS2, argon2id, label `COS_PERSISTENT_LUKS`, subsystem `kcrypt:passphrase`); the passphrase reaches kcrypt only through a 0600 file in `/run` that the installer deletes, never through `/oem`. Asked for at every boot by `hadron-unlock` in the initramfs (#60). Marker `/etc/hadron-desktop/encryption` (`mode=passphrase`). The same installer for every variant; see `docs/superpowers/specs/2026-11-07-encrypt-home-design.md`. Not on agent, whose installer runs `hadron-install-ui --progress-only` without the wizard |
+
+## The server edition
+
+`DESKTOP=server` builds a headless image: the Dockerfile's `server-default`
+stage, which takes no desktop stage, so none of them is built. One image
+line, released as `hadron-desktop-server-<tag>-amd64.iso` and `:server-<tag>`
+(the Makefile and release.yml build it as `GPU=full FIRMWARE=true` only to
+name that line).
+
+| It has | It does not have |
+|---|---|
+| kernel, network card firmware (the Ethernet drivers' set in the `firmware` stage, checked by `--require`) and CPU microcode | GPU, Wi-Fi, Bluetooth and audio firmware, SOF |
+| NetworkManager and nmcli; changes need root (`auth-polkit=root-only`) | wpa_supplicant, Wi-Fi |
+| OpenSSH server, a console login on tty1 | ly, greetd, a display server, a compositor, Mesa, LLVM |
+| the Hadron installer, both encryption modes, the splash's passphrase prompt in the initramfs | fonts beyond the console font, GTK, Qt, Flatpak, PipeWire, Docker |
+| `hadron-update` and `hadron-ext` through `hadron-updated` and polkit (the admin rule needs no agent, so they work over SSH) | the tray, the Hadron menu and every `hadron-*` desktop script |
+
+Its configuration is `rootfs-server/` plus the files the `server-config`
+stage names one by one from `rootfs/`. A new file in `rootfs/` that the server
+needs (boot, installer, update service, polkit) must be added there too. A
+server installs only server images and a desktop never installs one
+(`Classify` in update/policy.go); `hadron-update switch` refuses on a server.
+`test/server/check-server.sh` checks a built image.
 
 ## The shortcut sheet is generated
 

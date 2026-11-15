@@ -20,7 +20,8 @@
 # new release.
 ARG HADRON_VERSION=v0.6.4
 ARG BASE_IMAGE=ghcr.io/kairos-io/hadron:${HADRON_VERSION}
-# Select the display server + window manager pair. Supported values: sway, i3.
+# Select the display server + window manager pair: sway, i3, cosmic or niri.
+# server builds the server edition instead, with no desktop (server-default).
 ARG DESKTOP=sway
 # GPU=vm (default): software/virtual GL only (llvmpipe, virgl, softpipe, svga).
 #   llvmpipe links libLLVM, so the llvm stage below is built (or taken from
@@ -4161,6 +4162,15 @@ RUN make && make install DESTDIR=/snixembed PREFIX=/usr && \
 # COS_PERSISTENT is mounted over /usr/local, which hides every blob the image
 # put there. Only the live ISO could load them.
 #
+# The server edition (DESKTOP=server) takes another set: no GPU, Wi-Fi,
+# Bluetooth or audio firmware, and no SOF. It takes the firmware of the
+# Ethernet drivers in the kernel instead, from the 1 GbE Realtek and Broadcom
+# chips to the 100 GbE Intel (the ice DDP package), Broadcom NetXtreme II,
+# QLogic FastLinQ (qed), Chelsio and Netronome cards, and both microcodes.
+# Left out: Mellanox Spectrum switch ASICs, Omni-Path, PCMCIA and the storage
+# HBAs (qla2xxx, bfa, isci and the old SCSI cards). --require covers this set
+# the same way.
+#
 # tools/install-firmware.sh installs the files the way upstream's
 # copy-firmware.sh --zstd does: compressed with zstd (Hadron's kernel has
 # CONFIG_FW_LOADER_COMPRESS_ZSTD), with every link WHENCE declares to them.
@@ -4177,6 +4187,7 @@ FROM ${BASE_IMAGE} AS hadron-kernel
 
 FROM alpine:3 AS firmware
 ARG FIRMWARE=false
+ARG DESKTOP
 # The tarballs are checked against pinned SHA256s, so these are updated by
 # hand (scripts/check-renovate-pins.sh). linux-firmware: take both values from
 # https://cdn.kernel.org/pub/linux/kernel/firmware/sha256sums.asc.
@@ -4200,10 +4211,18 @@ RUN --mount=type=bind,from=hadron-kernel,source=/usr/lib/modules,target=/kmods \
         case "$m" in *.zst) zstd -dcq "$m" ;; *.xz) xz -dc "$m" ;; *) cat "$m" ;; esac | \
           tr '\0' '\n' | sed -n 's/^firmware=//p'; \
       done | sort -u > kernel-firmware.txt && \
+      if [ "$DESKTOP" = server ]; then \
+      newest="" && \
+      patterns="intel/ice/ddp/ e100/ rtl_nic/ tigon/ bnx2/ bnx2x/ qed/ phanfw.bin \
+        cxgb3/ cxgb4/ netronome/ myri10ge_ ctfw- ct2fw- tehuti/ \
+        3com/typhoon adaptec/starfire kaweth/ \
+        amd-ucode/" ; \
+      else \
       gsp="$(sed -n 's|^nvidia/tu102/gsp/gsp-\(.*\)\.bin$|\1|p' kernel-firmware.txt | sort -V | tail -n 1)" && \
       if [ "$gsp" != "$NOUVEAU_GSP_RM" ]; then \
         echo "nouveau prefers GSP-RM '$gsp', set NOUVEAU_GSP_RM to it" >&2; exit 1; \
       fi && \
+      newest="--newest intel/iwlwifi/=2" && \
       patterns="amdgpu/ radeon/ i915/ xe/ nvidia/*/gsp/*-${NOUVEAU_GSP_RM} \
         intel/iwlwifi/ intel/ibt- \
         ath9k_htc/ ath10k/QCA6174/ ath10k/QCA9377/ ath10k/QCA988X/ \
@@ -4213,7 +4232,8 @@ RUN --mount=type=bind,from=hadron-kernel,source=/usr/lib/modules,target=/kmods \
         mediatek/WIFI_ mediatek/BT_RAM_CODE_ mediatek/mt7925/ mediatek/mt7927/ mediatek/mt76 \
         brcm/brcmfmac cypress/ mrvl/pcie \
         cirrus/ ti/audio/ \
-        amd-ucode/" && \
+        amd-ucode/" ; \
+      fi && \
       top="linux-firmware-${LINUX_FIRMWARE_VERSION}" && \
       curl -fL --retry 5 --retry-delay 3 --retry-all-errors \
         https://cdn.kernel.org/pub/linux/kernel/firmware/${top}.tar.xz -o lf.tar.xz && \
@@ -4222,13 +4242,13 @@ RUN --mount=type=bind,from=hadron-kernel,source=/usr/lib/modules,target=/kmods \
       tar -xJf lf.tar.xz --wildcards "$top/WHENCE" \
         $(for p in $patterns; do printf '%s/%s* ' "$top" "$p"; done) && \
       rm lf.tar.xz && \
-      install-firmware --newest intel/iwlwifi/=2 --require kernel-firmware.txt \
+      install-firmware $newest --require kernel-firmware.txt \
         "$top" /firmware/usr/lib/firmware $patterns && \
       set +f && \
       rm -rf "$top" kernel-firmware.txt ; \
     fi
 COPY tools/install-sof.sh /usr/local/bin/install-sof
-RUN if [ "$FIRMWARE" = "true" ]; then \
+RUN if [ "$FIRMWARE" = "true" ] && [ "$DESKTOP" != server ]; then \
       set -e && cd /tmp && \
       curl -fL --retry 5 --retry-delay 3 --retry-all-errors \
         https://github.com/thesofproject/sof-bin/releases/download/v${SOF_BIN_VERSION}/sof-bin-${SOF_BIN_VERSION}.tar.gz \
@@ -4628,6 +4648,44 @@ COPY rootfs-cosmic/ /
 FROM common-config AS niri-config
 COPY rootfs-niri/ /
 
+# ---------------------------------------------------------------------------
+# Server edition (DESKTOP=server): no display server, compositor, login
+# manager, Mesa, fonts, Flatpak, audio or desktop session. It is not a
+# desktop variant: its image is the server-default stage below, which never
+# names a desktop stage, so BuildKit builds none of them. What it keeps from
+# the desktop build is the network stack (NetworkManager and nmcli), polkit
+# for the update service, and the boot, installer and update parts of
+# rootfs/, taken file by file because most of rootfs/ is desktop scripts.
+# ---------------------------------------------------------------------------
+FROM scratch AS server-rootfs
+COPY --from=libucontext /libucontext /
+COPY --from=pcre2 /pcre2 /
+COPY --from=glib2 /glib2 /
+COPY --from=libnl /libnl /
+COPY --from=libndp /libndp /
+COPY --from=ncurses /ncurses /
+COPY --from=networkmanager /networkmanager /
+COPY --from=duktape /duktape /
+COPY --from=polkit /polkit /
+
+FROM scratch AS server-config
+# The disk passphrase prompt in the initramfs (hadron-unlock, and the splash
+# answering the password agent), the console font and the GRUB theme.
+COPY rootfs/etc/dracut.conf.d/ /etc/dracut.conf.d/
+COPY rootfs/usr/lib/dracut/ /usr/lib/dracut/
+COPY rootfs/etc/vconsole.conf /etc/vconsole.conf
+COPY rootfs/etc/kairos/ /etc/kairos/
+COPY rootfs/usr/libexec/hadron-grub-theme /usr/libexec/hadron-grub-theme
+COPY rootfs/system/oem/09_hadron_grub_theme.yaml rootfs/system/oem/10_hadron_grub_env.yaml /system/oem/
+# The installer, and system extensions.
+COPY rootfs/system/oem/90_desktop_installer.yaml rootfs/system/oem/93_hadron_extensions.yaml /system/oem/
+COPY rootfs/etc/hadron-desktop/extensions.conf /etc/hadron-desktop/extensions.conf
+# The update service, its D-Bus activation and its polkit policy.
+COPY rootfs/usr/lib/systemd/system/hadron-updated.service /usr/lib/systemd/system/hadron-updated.service
+COPY rootfs/usr/share/dbus-1/ /usr/share/dbus-1/
+COPY rootfs/usr/share/polkit-1/ /usr/share/polkit-1/
+COPY rootfs-server/ /
+
 FROM ${DESKTOP}-rootfs AS desktop-rootfs
 FROM ${DESKTOP}-config AS desktop-config
 
@@ -4684,7 +4742,7 @@ RUN CGO_ENABLED=0 go test ./... \
     && { /out/hadron-update --nonsense >/dev/null 2>&1; [ $? -eq 2 ]; }
 
 
-FROM ${BASE_IMAGE} AS default
+FROM ${BASE_IMAGE} AS desktop-default
 # Built desktop stack
 COPY --from=desktop-rootfs / /
 # Runtime libraries provided by the toolchain but not the base image
@@ -4911,6 +4969,50 @@ COPY --from=update-build /out/hadron-update /usr/bin/hadron-update
 # hadron-ext is the same binary: run under that name it is `hadron-update ext`
 # (system extensions, see update/ext.go).
 RUN ln -sf hadron-update /usr/bin/hadron-ext
+
+
+# The server edition's image. Keep the binaries at the end in step with
+# desktop-default above.
+FROM ${BASE_IMAGE} AS server-default
+COPY --from=server-rootfs / /
+COPY --from=toolchain /usr/lib/libffi.so* /usr/lib/
+COPY --from=toolchain /usr/lib/libexpat.so* /usr/lib/
+COPY --from=toolchain /usr/lib/libstdc++.so.6* /usr/lib/
+COPY --from=toolchain /usr/lib/libgcc_s.so* /usr/lib/
+COPY --from=toolchain /usr/lib/libreadline.so* /usr/lib/
+# Network card firmware and CPU microcode (empty unless FIRMWARE=true).
+COPY --from=firmware /firmware /
+COPY --from=server-config / /
+# The splash is kept for one job: in the initramfs it asks for the disk
+# passphrase (51hadron-askpass), and falls back to text without a framebuffer.
+COPY --from=hadron-splash /build/splash/hadron-splash /usr/bin/kairos-splash
+# The installer puts its user in the desktop groups (install-ui/config.go);
+# a group that does not exist would stop the user from being created.
+# NetworkManager starts at boot; nmcli changes need root (sudo), see
+# rootfs-server/etc/NetworkManager/NetworkManager.conf. polkit answers the
+# update service only (50-hadron-update.rules: the admin group, no prompt),
+# so it works the same from SSH and from the console.
+RUN chmod 1777 /tmp; \
+    ldconfig 2>/dev/null || true; \
+    for g in admin audio video render input bluetooth seat docker; do groupadd -f "$g"; done; \
+    useradd -r -M -d / -s /usr/sbin/nologin polkitd; \
+    chmod 4755 /usr/lib/polkit-1/polkit-agent-helper-1; \
+    for d in /etc/polkit-1/rules.d /usr/share/polkit-1/rules.d; do \
+      mkdir -p "$d" && chown polkitd:root "$d" && chmod 700 "$d"; \
+    done; \
+    systemctl enable NetworkManager.service; \
+    test -L /etc/systemd/system/multi-user.target.wants/NetworkManager.service
+COPY --from=install-ui-build /out/hadron-install-ui /usr/bin/hadron-install-ui
+COPY --from=update-build /out/hadron-update /usr/bin/hadron-update
+RUN ln -sf hadron-update /usr/bin/hadron-ext
+
+# The image the kairos stage turns bootable: the desktop for sway, i3, cosmic
+# and niri, the server edition for server.
+FROM desktop-default AS sway-default
+FROM desktop-default AS i3-default
+FROM desktop-default AS cosmic-default
+FROM desktop-default AS niri-default
+FROM ${DESKTOP}-default AS default
 
 
 # ===========================================================================

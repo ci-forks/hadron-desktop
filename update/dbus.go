@@ -169,6 +169,7 @@ func busError(err error) *dbus.Error {
 	case errors.Is(err, ErrRebooting):
 		name = "Rebooting"
 	case errors.Is(err, ErrAgentImage), errors.Is(err, ErrNotHadron), errors.Is(err, ErrNotRelease),
+		errors.Is(err, ErrServerImage), errors.Is(err, ErrDesktopImage),
 		errors.Is(err, ErrNeedsCredentials), errors.Is(err, ErrWrongPlatform),
 		errors.Is(err, errUnmanaged), errors.Is(err, errExtNeedsAdvanced):
 		name = "Refused"
@@ -577,6 +578,10 @@ func (a busAPI) Inspect(ref string, advanced bool) (map[string]dbus.Variant, *db
 		refusal, overridable = ErrNotRelease.Error(), AdvancedEnabled()
 	case errors.Is(err, ErrAgentImage):
 		refusal = ErrAgentImage.Error()
+	case errors.Is(err, ErrServerImage):
+		refusal = ErrServerImage.Error()
+	case errors.Is(err, ErrDesktopImage):
+		refusal = ErrDesktopImage.Error()
 	case err != nil:
 		return nil, busError(err)
 	}

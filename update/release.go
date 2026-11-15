@@ -14,7 +14,7 @@ const defaultReleaseFile = "/etc/hadron-desktop/release"
 
 // Release is the identity of the running system.
 type Release struct {
-	Flavor        string // sway, i3, cosmic, niri or agent
+	Flavor        string // sway, i3, cosmic, niri, agent or server
 	Version       string // the hadron-desktop release tag, e.g. v0.1.0
 	HadronVersion string // the Hadron base release, e.g. v0.6.3
 	ImageRepo     string // e.g. ghcr.io/kairos-community/hadron-desktop
@@ -27,8 +27,8 @@ type Release struct {
 // The two image lines a desktop flavor is released in. Each release pushes
 // <flavor>-<tag> (full: Mesa's Intel and AMD drivers and linux-firmware, for
 // real machines) and <flavor>-vm-<tag> (virtual GPUs and llvmpipe only, and
-// no firmware: smaller, for virtual machines). The agent has one line,
-// agent-<tag>.
+// no firmware: smaller, for virtual machines). The agent and the server
+// edition have one line each, agent-<tag> and server-<tag>.
 const (
 	gpuFull = "full"
 	gpuVM   = "vm"
@@ -47,7 +47,7 @@ func (r Release) Line() string {
 
 // lineTag is the image tag release.yml pushes for a flavor, line and release.
 func lineTag(flavor, line, tag string) string {
-	if line == gpuVM && flavor != flavorAgent {
+	if line == gpuVM && flavor != flavorAgent && flavor != flavorServer {
 		return flavor + "-" + gpuVM + "-" + tag
 	}
 	return flavor + "-" + tag

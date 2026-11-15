@@ -331,6 +331,40 @@ func TestSwitchValidation(t *testing.T) {
 	}
 }
 
+// The server edition switches to nothing: no desktop, no other line.
+func TestSwitchRefusedOnTheServer(t *testing.T) {
+	setupFlavor(t, flavorServer, "v0.1.0", "v0.2.0")
+	f := okDaemon()
+	useDaemon(t, f)
+	for _, args := range [][]string{{"sway"}, {"server"}, {"--gpu", "vm"}, {"server", "--gpu", "full"}} {
+		code, _, e := runCLI("y\ny\n", append([]string{"switch"}, append(args, "--yes")...)...)
+		if code != exitUsage || !strings.Contains(e, "server images") {
+			t.Errorf("switch %v: code %d, stderr %q", args, code, e)
+		}
+	}
+	if f.called("Apply") {
+		t.Fatal("applied a switch on the server")
+	}
+}
+
+// The server upgrades along server-<tag> through the daemon, like a desktop.
+func TestServerUpgradesToServerImages(t *testing.T) {
+	setupFlavor(t, flavorServer, "v0.1.0", "v0.2.0")
+	f := okDaemon()
+	f.info.Flavor = flavorServer
+	useDaemon(t, f)
+	code, out, e := runCLI("y\nn\n", "upgrade")
+	if code != exitOK {
+		t.Fatalf("code %d, stderr %q", code, e)
+	}
+	if !strings.HasSuffix(f.applied[0], ":server-v0.2.0") {
+		t.Fatalf("Apply ref %q", f.applied[0])
+	}
+	if code, out, _ = runCLI("", "status"); code != exitOK || !strings.Contains(out, "server edition (no desktop)") {
+		t.Fatalf("status: code %d, out %q", code, out)
+	}
+}
+
 func TestSwitchWarnsAndAsks(t *testing.T) {
 	setup(t, "v0.1.0", "v0.2.0")
 	f := okDaemon()

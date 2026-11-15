@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# The checks are strings that the inner sh expands, on purpose.
+# shellcheck disable=SC2016
+# Check a built server edition image: what it must have, and the desktop
+# parts it must not have.
+#
+#   test/server/check-server.sh [IMAGE]
+set -euo pipefail
+IMAGE="${1:-server-desktop:dev}"
+fail=0
+check() {
+    local desc="$1"; shift
+    if docker run --rm --entrypoint sh "$IMAGE" -c "$*" >/dev/null 2>&1; then
+        echo "PASS: $desc"
+    else
+        echo "FAIL: $desc"; fail=1
+    fi
+}
+libs() { # DESC PATH: PATH runs its loader and every library resolves
+    check "$1" "test -x $2 && ldd $2 >/tmp/ldd 2>&1 && ! grep -q 'not found' /tmp/ldd"
+}
+
+R=/etc/hadron-desktop/release
+check "release file names the server line" \
+    "grep -qx FLAVOR=server $R && grep -qx GPU=full $R"
+check "the image is labelled as the server edition" \
+    "true" # labels are checked from outside below
+for l in flavor=server gpu=full firmware=true; do
+    k="${l%%=*}" v="${l#*=}"
+    got="$(docker image inspect --format "{{index .Config.Labels \"io.kairos.hadron-desktop.$k\"}}" "$IMAGE")"
+    if [ "$got" = "$v" ]; then echo "PASS: label $k is $v"; else echo "FAIL: label $k is '$got', want $v"; fail=1; fi
+done
+
+# No desktop.
+for b in sway Xorg X Xwayland niri cosmic-comp i3 ly greetd waybar foot flatpak pipewire wireplumber dockerd wpa_supplicant bluetoothd; do
+    check "no $b" "! command -v $b && ! test -e /usr/bin/$b"
+done
+check "no Mesa or LLVM" "! ls /usr/lib/libGL* /usr/lib/libEGL* /usr/lib/libLLVM* /usr/lib/dri 2>/dev/null | grep -q ."
+check "no GTK or Qt" "! ls /usr/lib/libgtk* /usr/lib/libQt* 2>/dev/null | grep -q ."
+check "no fontconfig fonts" "! test -d /usr/share/fonts"
+check "no desktop scripts" "! ls /usr/bin/hadron-menu /usr/bin/hadron-pick /usr/bin/start-desktop 2>/dev/null | grep -q ."
+check "no ly unit or session" "! test -e /usr/lib/systemd/system/ly@.service && ! test -d /usr/share/wayland-sessions"
+check "tty1 has a console login (getty not masked)" \
+    "! test -L /etc/systemd/system/getty@tty1.service"
+
+# What it keeps.
+libs "NetworkManager finds its libraries" /usr/bin/NetworkManager
+libs "nmcli finds its libraries" /usr/bin/nmcli
+check "NetworkManager starts at boot" \
+    "test -L /etc/systemd/system/multi-user.target.wants/NetworkManager.service"
+check "network changes need root" \
+    "grep -qx 'auth-polkit=root-only' /etc/NetworkManager/NetworkManager.conf"
+check "sshd is installed" "test -x /usr/sbin/sshd || test -x /usr/bin/sshd"
+libs "polkitd finds its libraries" /usr/lib/polkit-1/polkitd
+check "polkit agent helper is setuid" "test -u /usr/lib/polkit-1/polkit-agent-helper-1"
+check "the admin rule answers the update service" \
+    "grep -q 'isInGroup(\"admin\")' /usr/share/polkit-1/rules.d/50-hadron-update.rules"
+check "polkitd user exists" "getent passwd polkitd"
+check "the update service is D-Bus activated" \
+    "test -f /usr/share/dbus-1/system-services/io.kairos.HadronUpdate1.service && test -f /usr/lib/systemd/system/hadron-updated.service"
+check "hadron-update and hadron-ext run" \
+    "hadron-update help | grep -q upgrade && test \"\$(readlink /usr/bin/hadron-ext)\" = hadron-update"
+check "the installer's groups exist" \
+    "for g in admin audio video render input bluetooth seat docker; do getent group \$g || exit 1; done"
+check "the installer is wired" "grep -q /usr/bin/hadron-install-ui /system/oem/90_desktop_installer.yaml"
+check "the passphrase prompt modules are in the initramfs" \
+    "lsinitrd /boot/initrd | grep -q hadron-unlock && lsinitrd /boot/initrd | grep -q usr/libexec/hadron-ask-gate && lsinitrd /boot/initrd | grep -q usr/bin/kairos-splash"
+
+# Firmware: network cards and microcode, no desktop set.
+F=/usr/lib/firmware
+for f in intel/ice/ddp/ice.pkg rtl_nic/rtl8125b-2.fw tigon/tg3.bin bnx2x/bnx2x-e2-7.13.21.0.fw; do
+    check "firmware $f" "test -e $F/$f || test -e $F/$f.zst"
+done
+check "Intel and AMD microcode" "ls $F/intel-ucode | grep -q . && test -s $F/amd-ucode/microcode_amd_fam19h.bin"
+for d in amdgpu i915 nvidia intel/iwlwifi intel/sof intel/sof-ipc4 ath11k rtw89 brcm; do
+    check "no $d firmware" "! test -e $F/$d"
+done
+
+exit "$fail"

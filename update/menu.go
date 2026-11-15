@@ -101,6 +101,11 @@ func BuildMenu(st Status, releases []Latest, flavor, line string) []MenuItem {
 		menu = append(menu, MenuItem{ID: "releases", Label: "Other releases", Enabled: can, Children: rel})
 	}
 
+	// The server edition has no tray, but its menu must not offer a desktop
+	// or another line either: it upgrades only to server images.
+	if flavor == flavorServer {
+		return finishMenu(menu, st, can)
+	}
 	var sw []MenuItem
 	for _, f := range switchable {
 		if f == flavor {
@@ -117,6 +122,11 @@ func BuildMenu(st Status, releases []Latest, flavor, line string) []MenuItem {
 		menu = append(menu, MenuItem{ID: "gpu/" + gpuVM, Label: "Switch to the virtual machine image", Enabled: can})
 	}
 
+	return finishMenu(menu, st, can)
+}
+
+// finishMenu adds the entries every flavor's menu ends with.
+func finishMenu(menu []MenuItem, st Status, can bool) []MenuItem {
 	if st.Advanced {
 		menu = append(menu, MenuItem{ID: "advanced", Label: "Install an image…", Enabled: can})
 	}

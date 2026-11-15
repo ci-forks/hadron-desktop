@@ -1,0 +1,5 @@
+Welcome to Hadron Server, the headless edition of Hadron Desktop, built from source on Kairos.
+
+  Network    : nmcli device status   ·   sudo nmcli connection modify …
+  Updates    : hadron-update   ·   hadron-update upgrade
+  Extensions : hadron-ext list   ·   hadron-ext browse

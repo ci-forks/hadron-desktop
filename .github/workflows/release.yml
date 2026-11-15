@@ -210,7 +210,9 @@ jobs:
   # Every flavor in two lines. full (GPU=full FIRMWARE=true) is the standard
   # one: Mesa's iris and radeonsi drivers and linux-firmware for real Intel and
   # AMD machines, with llvmpipe for VMs too. vm (GPU=vm) has only the virtual
-  # and software drivers and no firmware: smaller, for VMs.
+  # and software drivers and no firmware: smaller, for VMs. The server edition
+  # (no desktop) has one line, server-<tag>; it is GPU=full only to name that
+  # line, and takes network card firmware instead of the desktop set.
   build:
     name: Build ${{ matrix.desktop }} ISO (${{ matrix.gpu }})
     needs: [llvm, cosmic]
@@ -235,6 +237,9 @@ jobs:
         gpu:
           - full
           - vm
+        include:
+          - desktop: server
+            gpu: full
     env:
       DESKTOP: ${{ matrix.desktop }}
       GPU: ${{ matrix.gpu }}
@@ -323,6 +328,13 @@ jobs:
         run: |
           set -euo pipefail
           make DESKTOP="$DESKTOP" GPU="$GPU" FIRMWARE="$FIRMWARE" VERSION="$RELEASE_TAG" iso
+
+      # The server edition must have no desktop and must have its network
+      # stack, update service and network card firmware.
+      - name: Check the server image
+        if: matrix.desktop == 'server'
+        shell: bash
+        run: test/server/check-server.sh "${DESKTOP}-desktop:dev"
 
       - name: Prepare release assets
         shell: bash
@@ -800,12 +812,12 @@ jobs:
           sboms=(release/*.spdx.json)
           manifests=(release/*.build.json)
 
-          # Four flavors in two lines each, and the agent.
-          if (( ${#isos[@]} != 9 \
-             || ${#checksums[@]} != 9 \
-             || ${#sboms[@]} != 9 \
-             || ${#manifests[@]} != 9 )); then
-            echo "Expected nine ISOs, nine checksums, nine SBOMs, and nine build manifests" >&2
+          # Four flavors in two lines each, the server edition and the agent.
+          if (( ${#isos[@]} != 10 \
+             || ${#checksums[@]} != 10 \
+             || ${#sboms[@]} != 10 \
+             || ${#manifests[@]} != 10 )); then
+            echo "Expected ten ISOs, ten checksums, ten SBOMs, and ten build manifests" >&2
             echo "Found ${#isos[@]} ISOs, ${#checksums[@]} checksums, ${#sboms[@]} SBOMs, ${#manifests[@]} manifests" >&2
             find release -maxdepth 1 -type f -print >&2
             exit 1
@@ -839,10 +851,11 @@ jobs:
               and (.hadron_base_digest | test("^sha256:[0-9a-f]{64}$"))
               and (.image_id | test("^sha256:[0-9a-f]{64}$"))
               and (.iso_sha256 | test("^[0-9a-f]{64}$"))
-              and (.desktop_flavor as $flavor | ["sway","i3","cosmic","niri","agent"] | index($flavor) != null)
+              and (.desktop_flavor as $flavor | ["sway","i3","cosmic","niri","server","agent"] | index($flavor) != null)
               and (.gpu == "full" or .gpu == "vm")
               and (.firmware == (.gpu == "full"))
               and (if .desktop_flavor == "agent" then .gpu == "vm" else true end)
+              and (if .desktop_flavor == "server" then .gpu == "full" else true end)
               and (.iso == "hadron-desktop-\(.desktop_flavor)\(if .gpu == "vm" and .desktop_flavor != "agent" then "-vm" else "" end)-\(.release_tag)-amd64.iso")
               and (if .desktop_flavor == "i3" or .desktop_flavor == "agent"
                    then (.xlibre_version | type == "string" and length > 0)
@@ -867,8 +880,8 @@ jobs:
           # Exactly one manifest per flavor and line, so a duplicated build
           # cannot pass the count check while one is missing.
           lines="$(jq -r '"\(.desktop_flavor)/\(.gpu)"' ./*.build.json | sort | tr '\n' ' ')"
-          if [[ "$lines" != "agent/vm cosmic/full cosmic/vm i3/full i3/vm niri/full niri/vm sway/full sway/vm " ]]; then
-            echo "Expected one manifest each for sway, i3, cosmic and niri in the full and vm lines, and agent; got: $lines" >&2
+          if [[ "$lines" != "agent/vm cosmic/full cosmic/vm i3/full i3/vm niri/full niri/vm server/full sway/full sway/vm " ]]; then
+            echo "Expected one manifest each for sway, i3, cosmic and niri in the full and vm lines, server (full) and agent; got: $lines" >&2
             exit 1
           fi
 
@@ -887,7 +900,7 @@ jobs:
             echo "https://github.com/orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/${name#*/}/settings" >&2
             exit 1
           fi
-          for line in sway i3 cosmic niri sway-vm i3-vm cosmic-vm niri-vm agent; do
+          for line in sway i3 cosmic niri sway-vm i3-vm cosmic-vm niri-vm server agent; do
             ref="${IMAGE_REPO}:${line}-${RELEASE_TAG}"
             code="$(curl -sS -o /dev/null -w '%{http_code}' --head \
               -H "Authorization: Bearer $token" \

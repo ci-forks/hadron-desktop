@@ -3,8 +3,8 @@
 #
 # Usage: release-manifest.sh <flavor> <gpu> <release-tag> <image> <iso-asset-path> <out.json>
 #
-#   flavor          sway | i3 | cosmic | niri | agent
-#   gpu             full | vm: the image line (agent: vm)
+#   flavor          sway | i3 | cosmic | niri | server | agent
+#   gpu             full | vm: the image line (agent: vm, server: full)
 #   release-tag     the release tag being published, e.g. v0.4.0
 #   image           the final OCI image, e.g. i3-desktop:dev
 #   iso-asset-path  path to the ISO; its sibling .sha256 must already exist
@@ -66,12 +66,12 @@ check_image_labels() {
 flavor="$1" gpu="$2" release_tag="$3" image="$4" iso_path="$5" out="$6"
 
 case "$flavor" in
-  sway|i3|cosmic|niri|agent) ;;
-  *) die "unknown flavor: $flavor (want sway, i3, cosmic, niri, or agent)" ;;
+  sway|i3|cosmic|niri|server|agent) ;;
+  *) die "unknown flavor: $flavor (want sway, i3, cosmic, niri, server, or agent)" ;;
 esac
 case "$flavor/$gpu" in
-  agent/vm | sway/full | sway/vm | i3/full | i3/vm | cosmic/full | cosmic/vm | niri/full | niri/vm) ;;
-  *) die "unknown line for $flavor: $gpu (want full or vm; agent is vm only)" ;;
+  agent/vm | server/full | sway/full | sway/vm | i3/full | i3/vm | cosmic/full | cosmic/vm | niri/full | niri/vm) ;;
+  *) die "unknown line for $flavor: $gpu (want full or vm; agent is vm only, server full only)" ;;
 esac
 [ -f "$iso_path" ]           || die "no ISO at $iso_path"
 [ -f "$iso_path.sha256" ]    || die "no checksum at $iso_path.sha256"

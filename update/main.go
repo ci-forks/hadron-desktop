@@ -132,7 +132,11 @@ func cmdStatus(name string, args []string, stdout, stderr io.Writer) int {
 
 	fmt.Fprintf(stdout, "Installed:  Hadron Desktop %s (%s, Hadron %s)\n",
 		rel.Version, rel.Flavor, orUnknown(rel.HadronVersion))
-	if rel.Flavor != flavorAgent {
+	switch rel.Flavor {
+	case flavorAgent:
+	case flavorServer:
+		fmt.Fprintln(stdout, "Image:      server edition (no desktop)")
+	default:
 		fmt.Fprintf(stdout, "Image:      %s\n", lineLabels[rel.Line()])
 	}
 
@@ -393,9 +397,14 @@ func lineWarning(line string) string {
 	return "This is the hardware image: it adds Intel and AMD GPU drivers and firmware, about 600 MB more. Later upgrades stay on the hardware image."
 }
 
-// flavorAgent is the headless flavor: it has no daemon, so its CLI keeps the
+// flavorAgent is the agent appliance: it has no daemon, so its CLI keeps the
 // direct sudo + kairos-agent path.
 const flavorAgent = "agent"
+
+// flavorServer is the server edition: no desktop, one image line
+// (server-<tag>). It has the daemon, so its CLI works as on a desktop, but it
+// installs only server images, and a desktop never installs one.
+const flavorServer = "server"
 
 // switchable are the desktops `switch` can install.
 var switchable = []string{"sway", "i3", "cosmic", "niri"}
@@ -567,6 +576,10 @@ func cmdSwitch(args []string, stdin io.Reader, stdout, stderr io.Writer) (code i
 	line := *gpu
 	if line == "" {
 		line = rel.Line()
+	}
+	if rel.Flavor == flavorServer {
+		fmt.Fprintln(stderr, "hadron-update: the server edition has no desktop to switch; it upgrades only to server images.")
+		return exitUsage
 	}
 	known := false
 	for _, f := range switchable {
