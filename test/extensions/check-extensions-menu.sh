@@ -84,7 +84,9 @@ expect "hadron-help hides hadron-ext without it (agent)" "$(HADRON_SHORTCUTS="$T
 expect "hadron-help still ends with the update rows" "$(HADRON_SHORTCUTS="$T/sheet" "$repo/rootfs/usr/bin/hadron-help" --text | tail -n 1 | grep -c 'hadron-update upgrade')" 1
 
 # --- wiring -----------------------------------------------------------------
-expect "the image links hadron-ext to hadron-update" "$(grep -c '^RUN ln -sf hadron-update /usr/bin/hadron-ext$' /src/Dockerfile)" 1
+# Every stage that installs hadron-update (the desktop and the server) links
+# hadron-ext to it.
+expect "the image links hadron-ext to hadron-update" "$(grep -c '^RUN ln -sf hadron-update /usr/bin/hadron-ext$' /src/Dockerfile)" "$(grep -c '^COPY --from=update-build /out/hadron-update /usr/bin/hadron-update$' /src/Dockerfile)"
 expect "the polkit file declares the extensions action" "$(grep -c '<action id="io.kairos.hadron-update.extensions">' /src/rootfs/usr/share/polkit-1/actions/io.kairos.hadron-update.policy)" 1
 expect "the Kairos config ignores extension signatures" "$(grep -c '^  ignore_signatures: true$' /src/rootfs/etc/kairos/90_hadron_extensions.yaml)" 1
 expect "the default catalog list names hadron-layers" "$(grep -c '^catalog=https://kairos-io.github.io/hadron-layers/releases.json$' /src/rootfs/etc/hadron-desktop/extensions.conf)" 1

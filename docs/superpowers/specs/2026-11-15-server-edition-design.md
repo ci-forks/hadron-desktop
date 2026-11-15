@@ -99,5 +99,3 @@ a warm toolchain: its slowest stages are glib, NetworkManager and polkit.
 - The first release that ships the server lists older releases (v0.0.10 and
   earlier) that have no `server-<tag>` image; `hadron-update` on a dev build
   offers them. An installed release only sees later ones, which do.
-- When `hadron-recovery` (#66) lands, its link must be added to
-  `server-default` too, next to `hadron-ext`.

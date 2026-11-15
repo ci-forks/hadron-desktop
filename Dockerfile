@@ -5020,6 +5020,7 @@ RUN chmod 1777 /tmp; \
 COPY --from=install-ui-build /out/hadron-install-ui /usr/bin/hadron-install-ui
 COPY --from=update-build /out/hadron-update /usr/bin/hadron-update
 RUN ln -sf hadron-update /usr/bin/hadron-ext
+RUN ln -sf hadron-update /usr/bin/hadron-recovery
 
 # The image the kairos stage turns bootable: the desktop for sway, i3, cosmic
 # and niri, the server edition for server.
