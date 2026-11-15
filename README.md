@@ -120,14 +120,15 @@ signed with [cosign](https://github.com/sigstore/cosign).
 There is also a **server** ISO, `hadron-desktop-server-<version>-amd64.iso`,
 with no desktop at all: no display server, login screen, audio or Flatpak. It
 has the same installer (with disk encryption), the same A/B updates and system
-extensions, NetworkManager, an SSH server and firmware for common server
-network cards. Log in on the console or over SSH:
+extensions, NetworkManager, an SSH server, Docker and firmware for common
+server network cards. Log in on the console or over SSH:
 
 ```sh
 hadron-update                 # installed version and latest release
 hadron-update upgrade         # install the latest server release
 hadron-ext list               # system extensions
 sudo nmcli device status      # the network
+docker run --rm hello-world   # containers, kept on the persistent partition
 ```
 
 A server upgrades only to server releases; it cannot switch to a desktop.

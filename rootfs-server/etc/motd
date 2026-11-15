@@ -3,3 +3,4 @@ Welcome to Hadron Server, the headless edition of Hadron Desktop, built from sou
   Network    : nmcli device status   ·   sudo nmcli connection modify …
   Updates    : hadron-update   ·   hadron-update upgrade
   Extensions : hadron-ext list   ·   hadron-ext browse
+  Containers : docker ps   ·   docker run --rm hello-world

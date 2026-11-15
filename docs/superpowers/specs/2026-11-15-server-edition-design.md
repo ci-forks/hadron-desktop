@@ -28,8 +28,9 @@ just like a server edition."
    boot, installer and update files of `rootfs/`, named one by one in the
    `server-config` stage. Left out: every display server, compositor, login
    manager, Mesa and LLVM, fonts beyond the console font, GTK and Qt,
-   Flatpak, PipeWire, BlueZ, wpa_supplicant, Docker and Distrobox, the tray
-   and every `hadron-*` desktop script.
+   Flatpak, PipeWire, BlueZ, wpa_supplicant, Distrobox, the tray and every
+   `hadron-*` desktop script. Docker was left out at first and added later
+   (decision 10).
 5. **Firmware.** The firmware stage takes a second set when `DESKTOP=server`:
    no GPU, Wi-Fi, Bluetooth or audio firmware and no sof-bin; instead the
    firmware the kernel's Ethernet drivers declare (ice DDP, e100, r8169 and
@@ -59,6 +60,20 @@ just like a server edition."
    from being created) and the harmless ly `save.ini` is still written.
    A follow-up could make the installer edition-aware.
 
+10. **Docker.** Asked for after the first version, "useful to run other
+    things outside the standard things available on the disk". The server
+    takes the desktop's Docker unchanged: the static bundle (`docker` stage),
+    `docker.service` and `docker.socket`, and `92_docker.yaml`, which adds
+    `/var/lib/docker` to the persistent bind mounts and enables and starts
+    dockerd only on the installed system. The image keeps it disabled,
+    because the live ISO's `/var` is an overlayfs and Docker's overlay
+    storage refuses a nested overlay. Docker 29 keeps its images in the
+    containerd store (the `overlayfs` snapshotter) under `/var/lib/docker`,
+    so they survive a reboot like the rest of that directory. The `docker`
+    group already existed for the installer, which puts the user in it. The
+    base image provides iptables and the kernel modules (overlay, bridge,
+    br_netfilter, veth, nf_nat). No Distrobox: it is a desktop tool.
+
 ## Size (measured 2026-11-15)
 
 | | server (this change, local build) | sway-vm v0.0.10 (published) |
@@ -66,6 +81,10 @@ just like a server edition."
 | image, unpacked (`du -sx /`) | 509 MB | 1030 MB |
 | image, compressed layers | 342 MB | 488 MB |
 | ISO | 455 MB | 568 MB |
+
+Docker (decision 10) adds 225 MB unpacked (the static binaries), 88 MB of
+compressed layers and 86 MB to the ISO: 735 MB unpacked, 431 MB compressed
+and a 541 MB ISO.
 
 The Hadron base alone is 246 MB unpacked. The server carries 46 MB of
 firmware (19 MB of it Intel microcode, which also goes into the initramfs

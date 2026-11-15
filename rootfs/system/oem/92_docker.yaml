@@ -1,4 +1,4 @@
-# Docker on the installed desktop.
+# Docker on the installed system (the desktops and the server edition).
 #
 # Two responsibilities:
 #  1. Persist /var/lib/docker. Kairos does not persist /var/lib by default, so
@@ -17,7 +17,7 @@ stages:
         CUSTOM_BIND_MOUNTS: "/var/lib/docker"
   boot:
     - if: '! grep -q "install-mode" /proc/cmdline && [ ! -f /run/cos/live_mode ]'
-      name: "enable + start docker on the installed desktop"
+      name: "enable + start docker on the installed system"
       commands:
         - mkdir -p /var/lib/docker /etc/systemd/system/multi-user.target.wants
         - ln -sf /usr/lib/systemd/system/docker.service /etc/systemd/system/multi-user.target.wants/docker.service
