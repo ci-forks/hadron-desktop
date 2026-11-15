@@ -12,7 +12,7 @@ source "$root/scripts/release-manifest.sh"
 # The script's die() exits; run each check in a subshell to read its status.
 
 tmp="$(mktemp -d)"
-images=(none good goodvm wrong nogpu badfw)
+images=(none good goodvm wrong nogpu badfw server)
 trap 'for i in "${images[@]}"; do docker rmi -f "hadron-label-test:$i" >/dev/null 2>&1 || true; done; rm -rf "$tmp"' EXIT
 
 build() { # tag, label lines...
@@ -34,6 +34,7 @@ build hadron-label-test:goodvm $ns.flavor=i3 $ns.version=v1.2.3 $ns.gpu=vm $ns.f
 build hadron-label-test:wrong  $ns.flavor=sway $ns.version=v1.2.2 $ns.gpu=full $ns.firmware=true
 build hadron-label-test:nogpu  $ns.flavor=i3 $ns.version=v1.2.3
 build hadron-label-test:badfw  $ns.flavor=i3 $ns.version=v1.2.3 $ns.gpu=full $ns.firmware=false
+build hadron-label-test:server $ns.flavor=server $ns.version=v1.2.3 $ns.gpu=full $ns.firmware=true
 
 expect "unlabeled image is refused"        1 hadron-label-test:none   i3 full v1.2.3
 expect "wrong flavor is refused"           1 hadron-label-test:wrong  i3 full v1.2.2
@@ -44,4 +45,6 @@ expect "full image as vm is refused"       1 hadron-label-test:good   i3 vm v1.2
 expect "full image without firmware fails" 1 hadron-label-test:badfw  i3 full v1.2.3
 expect "matching full labels pass"         0 hadron-label-test:good   i3 full v1.2.3
 expect "matching vm labels pass"           0 hadron-label-test:goodvm i3 vm v1.2.3
+expect "server image as a desktop is refused" 1 hadron-label-test:server sway full v1.2.3
+expect "matching server labels pass"       0 hadron-label-test:server server full v1.2.3
 exit "$fail"

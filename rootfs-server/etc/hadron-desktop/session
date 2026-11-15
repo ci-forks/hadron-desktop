@@ -1,0 +1,4 @@
+# The server edition has no desktop session. These two names make the GRUB
+# theme's subtitle ("server · headless · kairos").
+DESKTOP_NAME=Server
+DISPLAY_NAME=Headless

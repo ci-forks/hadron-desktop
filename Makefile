@@ -7,6 +7,7 @@
 #   make DESKTOP=i3 image               # XLibre + i3 variant
 #   make DESKTOP=cosmic image           # COSMIC (stacking, for newcomers)
 #   make DESKTOP=niri image             # niri + Noctalia (scrolling tiling)
+#   make DESKTOP=server iso             # the server edition: no desktop
 #   make images                          # build both variant images
 #   make agent-image                     # build the i3-based agent overlay
 #   make agent-iso                       # build the agent ISO
@@ -39,12 +40,22 @@ AGENT_IMAGE      ?= agent-desktop:dev
 AGENT_WORK       := build/agent-desktop
 AGENT_ISO_DIR    := $(AGENT_WORK)/iso
 
-VALID_DESKTOPS := sway i3 cosmic niri
+# server is an edition, not a desktop: its image has no desktop at all.
+VALID_DESKTOPS := sway i3 cosmic niri server
 ifneq ($(words $(DESKTOP)),1)
 $(error unsupported DESKTOP '$(DESKTOP)'; choose exactly one of: $(VALID_DESKTOPS))
 endif
 ifeq ($(filter $(DESKTOP),$(VALID_DESKTOPS)),)
 $(error unsupported DESKTOP '$(DESKTOP)'; choose one of: $(VALID_DESKTOPS))
+endif
+
+# The server edition has one image line, released as server-<tag>. It is
+# GPU=full in the build args only to name that line (it has no Mesa), and it
+# always takes its firmware set (network cards and microcode), whatever the
+# command line sets.
+ifeq ($(DESKTOP),server)
+override GPU := full
+override FIRMWARE := true
 endif
 
 WORK    := build/$(DESKTOP)-desktop
@@ -224,6 +235,9 @@ vm-install:           ## fresh disk, boot the newest installer ISO
 vm:                   ## boot the already-installed disk
 	tools/vm.sh run
 
+# The server edition has no login screen, wallpaper or tray, so it gets the
+# initramfs, installer and default-user checks and test/server/check-server.sh.
+#
 # Boot-UX assertions (splash, initramfs, branding, ISO overlay), the update
 # tray wiring (test/update/check-tray-wiring.sh) and the live-only default
 # user (test/accounting/check-default-user.sh) for every variant image that
@@ -254,6 +268,16 @@ check-boot-ux:
 	    echo "==> boot-ux: skipping $$img (not built)"; \
 	  fi; \
 	done; \
+	if docker image inspect server-desktop:dev >/dev/null 2>&1; then \
+	  echo "==> boot-ux: server-desktop:dev (server edition)"; \
+	  ran=1; \
+	  test/boot-ux/check-initramfs.sh server-desktop:dev || fail=1; \
+	  test/boot-ux/check-installer.sh server-desktop:dev || fail=1; \
+	  test/server/check-server.sh server-desktop:dev || fail=1; \
+	  test/accounting/check-default-user.sh server-desktop:dev || fail=1; \
+	else \
+	  echo "==> boot-ux: skipping server-desktop:dev (not built)"; \
+	fi; \
 	if [ "$$ran" -eq 0 ]; then \
 	  echo "check-boot-ux: no variant image built; run 'make image' first" >&2; exit 1; \
 	fi; \

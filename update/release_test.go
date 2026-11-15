@@ -93,6 +93,8 @@ func TestReleaseLines(t *testing.T) {
 		{"cosmic", "vm", gpuVM, "ghcr.io/kairos-community/hadron-desktop:cosmic-vm-v0.2.0"},
 		{"agent", "vm", gpuVM, "ghcr.io/kairos-community/hadron-desktop:agent-v0.2.0"},
 		{"agent", "", gpuFull, "ghcr.io/kairos-community/hadron-desktop:agent-v0.2.0"},
+		{"server", "full", gpuFull, "ghcr.io/kairos-community/hadron-desktop:server-v0.2.0"},
+		{"server", "vm", gpuVM, "ghcr.io/kairos-community/hadron-desktop:server-v0.2.0"},
 	}
 	for _, c := range cases {
 		body := strings.Replace(goodRelease, "FLAVOR=sway", "FLAVOR="+c.flavor, 1)

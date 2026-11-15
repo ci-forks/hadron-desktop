@@ -263,3 +263,18 @@ func TestBuildMenuOffersExtensions(t *testing.T) {
 		t.Error("an install is offered during an extension job")
 	}
 }
+
+// The server edition's menu offers no desktop and no other line.
+func TestBuildMenuServerOffersNoSwitch(t *testing.T) {
+	m := BuildMenu(menuStatus(StateUpToDate), menuReleases, flavorServer, gpuFull)
+	for _, id := range ids(m) {
+		if id == "switch" || strings.HasPrefix(id, "switch/") || strings.HasPrefix(id, "gpu/") {
+			t.Errorf("server menu offers %s", id)
+		}
+	}
+	for _, id := range []string{"releases", "extensions", "rollback", "advanced"} {
+		if _, ok := find(m, id); !ok {
+			t.Errorf("server menu lacks %s", id)
+		}
+	}
+}

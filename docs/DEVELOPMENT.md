@@ -47,6 +47,12 @@ kairos-init from the Kairos monorepo (`ghcr.io/kairos-io/kairos/kairos-init:mast
   `~/.config/niri/config.kdl` to change it.
 - **Agent overlay:** an opt-in i3-based appliance build that layers Cua and
   the agent services on top of the XLibre desktop.
+- **Server edition** (`DESKTOP=server`): no desktop at all. The kernel,
+  network card firmware and CPU microcode, NetworkManager and nmcli, the
+  OpenSSH server, a console login, the Hadron installer with disk encryption,
+  and `hadron-update` and `hadron-ext`. It is built from its own Dockerfile
+  stage (`server-default`), so no graphics, audio or Flatpak stage is built.
+  The table in AGENTS.md lists what it has and lacks.
 - **Login:** on Sway, i3 and niri, `ly` runs on `tty1`. It launches Sway directly for
   the Wayland session and owns the XLibre server lifecycle for the i3 X session.
   On COSMIC, greetd runs the graphical cosmic-greeter on `tty1`, and the first
@@ -89,6 +95,7 @@ make image                 # default Wayland/Sway image: sway-desktop:dev
 make DESKTOP=i3 image      # XLibre/i3 image: i3-desktop:dev
 make DESKTOP=cosmic image  # COSMIC image: cosmic-desktop:dev
 make DESKTOP=niri image    # niri + Noctalia image: niri-desktop:dev
+make DESKTOP=server image  # the server edition, no desktop: server-desktop:dev
 make images                # build both image variants
 make agent-image           # build the opt-in agent overlay image
 make agent-iso             # build the opt-in agent ISO
@@ -215,6 +222,13 @@ Every desktop flavor is released in two lines:
 The agent is a VM appliance and has one line, built with `GPU=vm`:
 `hadron-desktop-agent-<tag>-amd64.iso` and `:agent-<tag>`.
 
+The server edition has one line too: `hadron-desktop-server-<tag>-amd64.iso`
+and `:server-<tag>`. It is built with `GPU=full FIRMWARE=true` (the Makefile
+sets both for `DESKTOP=server`), which names the line; it has no Mesa, and its
+firmware is the network card set. A server upgrades only to server images,
+and a desktop never installs one: `hadron-update` refuses both, and `switch`
+refuses on a server.
+
 Every release also pushes the upgrade images above to
 `ghcr.io/kairos-community/hadron-desktop` (the agent image only after all five
 gates pass). `hadron-update` installs those; it only considers tags GitHub
@@ -227,8 +241,8 @@ system to the other line. Each pushed image is signed with cosign (keyless, by
 digest) and labelled with its flavor, line and release tag;
 `scripts/release-manifest.sh` fails the release if they disagree.
 
-Each release carries thirty-six files — nine ISOs (four flavors in two lines,
-and the agent), and for every ISO a checksum, an SPDX SBOM, and a build
+Each release carries forty files — ten ISOs (four flavors in two lines, the
+server edition and the agent), and for every ISO a checksum, an SPDX SBOM, and a build
 manifest:
 
 | Asset | Contents |
@@ -238,7 +252,7 @@ manifest:
 | `….iso.spdx.json` | SPDX JSON SBOM of the OCI image the ISO wraps, produced by `anchore/syft:v1.29.0` |
 | `….iso.build.json` | the build manifest described below |
 
-`<flavor>` is `sway`, `i3`, `cosmic`, `niri`, or `agent`. The build manifest records exactly what
+`<flavor>` is `sway`, `i3`, `cosmic`, `niri`, `server`, or `agent`. The build manifest records exactly what
 went into the image, so a downloaded ISO can be traced back to its sources:
 
 ```json
@@ -260,13 +274,13 @@ went into the image, so a downloaded ISO can be traced back to its sources:
 ```
 
 All thirteen keys are present in every manifest. `gpu` is the line (`full` or
-`vm`, always `vm` for agent), and `firmware` is `true` exactly on the full line.
+`vm`, always `vm` for agent and `full` for server), and `firmware` is `true` exactly on the full line.
 `xlibre_version` is set only for i3
 and agent, the two flavors that run the XLibre X server, and
 `cua_revision`/`atspi_version` are `null` for every flavor except agent.
 
-The publishing job refuses to upload unless it finds exactly nine ISOs, nine
-checksums, nine SBOMs, and nine manifests, one for each flavor and line, every
+The publishing job refuses to upload unless it finds exactly ten ISOs, ten
+checksums, ten SBOMs, and ten manifests, one for each flavor and line, every
 checksum verifies, every SBOM
 parses as SPDX with a non-empty package list, and every manifest carries valid
 values that match the ISO shipped beside it. The agent job uploads nothing at

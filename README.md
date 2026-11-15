@@ -115,6 +115,23 @@ hadron-update switch niri     # change to another desktop
 Only members of the `admin` group can install updates. Release images are
 signed with [cosign](https://github.com/sigstore/cosign).
 
+## Server edition
+
+There is also a **server** ISO, `hadron-desktop-server-<version>-amd64.iso`,
+with no desktop at all: no display server, login screen, audio or Flatpak. It
+has the same installer (with disk encryption), the same A/B updates and system
+extensions, NetworkManager, an SSH server and firmware for common server
+network cards. Log in on the console or over SSH:
+
+```sh
+hadron-update                 # installed version and latest release
+hadron-update upgrade         # install the latest server release
+hadron-ext list               # system extensions
+sudo nmcli device status      # the network
+```
+
+A server upgrades only to server releases; it cannot switch to a desktop.
+
 ## Agent edition
 
 There is also an **agent** ISO: an i3 appliance for virtual machines that an
@@ -128,7 +145,7 @@ Everything is built from one multi-stage `Dockerfile`, against a pinned Hadron
 release, with no other source checkout:
 
 ```sh
-make DESKTOP=cosmic iso      # sway, i3, cosmic or niri
+make DESKTOP=cosmic iso      # sway, i3, cosmic or niri; server for the server edition
 make vm-install              # boot the ISO in QEMU
 ```
 

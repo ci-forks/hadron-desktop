@@ -177,3 +177,64 @@ func TestLineRef(t *testing.T) {
 		}
 	}
 }
+
+// The server edition and the desktops never install each other's images,
+// whether the image says so by its tag or by its label, and advanced mode
+// cannot override it (the errors are neither ErrNotHadron nor ErrNotRelease).
+func TestClassifyKeepsTheEditionsApart(t *testing.T) {
+	desktop := policyRel()
+	server := policyRel()
+	server.Flavor = flavorServer
+	pub := []Latest{{Tag: "v0.0.4"}}
+	cases := []struct {
+		name   string
+		rel    Release
+		ref    string
+		labels map[string]string
+		want   error
+	}{
+		{"server tag on a desktop", desktop, desktop.ImageRepo + ":server-v0.0.4", nil, ErrServerImage},
+		{"server label on a desktop", desktop, "example.com/other/img:latest",
+			map[string]string{labelFlavor: "server", labelVersion: "v0.0.4"}, ErrServerImage},
+		{"desktop tag on a server", server, server.ImageRepo + ":sway-v0.0.4", nil, ErrDesktopImage},
+		{"desktop vm tag on a server", server, server.ImageRepo + ":niri-vm-v0.0.4", nil, ErrDesktopImage},
+		{"desktop label on a server", server, "example.com/other/img:latest",
+			map[string]string{labelFlavor: "i3", labelVersion: "v0.0.4"}, ErrDesktopImage},
+		{"server label under a desktop tag", server, server.ImageRepo + ":sway-v0.0.4",
+			map[string]string{labelFlavor: "server", labelVersion: "v0.0.4"}, ErrDesktopImage},
+	}
+	for _, c := range cases {
+		_, err := Classify(policyInfo(t, c.ref, c.labels), c.rel, pub)
+		if !errors.Is(err, c.want) {
+			t.Errorf("%s: got %v, want %v", c.name, err, c.want)
+		}
+		if errors.Is(err, ErrNotHadron) || errors.Is(err, ErrNotRelease) {
+			t.Errorf("%s: %v would be overridable", c.name, err)
+		}
+	}
+}
+
+func TestClassifyServerTrustsServerReleases(t *testing.T) {
+	rel := policyRel()
+	rel.Flavor = flavorServer
+	pub := []Latest{{Tag: "v0.0.4"}}
+	v, err := Classify(policyInfo(t, rel.ImageRepo+":server-v0.0.4", nil), rel, pub)
+	want := Verdict{Flavor: flavorServer, Version: "v0.0.4", GPU: gpuFull, Trusted: true, Hadron: true}
+	if err != nil || v != want {
+		t.Fatalf("got %+v, %v; want %+v", v, err, want)
+	}
+	// There is no server vm line.
+	if _, err := Classify(policyInfo(t, rel.ImageRepo+":server-vm-v0.0.4", nil), rel, pub); !errors.Is(err, ErrNotHadron) {
+		t.Fatalf("server-vm tag: got %v, want ErrNotHadron", err)
+	}
+	// A labelled server image from elsewhere is Hadron, not trusted.
+	v, err = Classify(policyInfo(t, "example.com/other/img:latest",
+		map[string]string{labelFlavor: "server", labelVersion: "v0.0.5"}), rel, pub)
+	if err != nil || v.Trusted || !v.Hadron || v.Flavor != flavorServer {
+		t.Fatalf("labelled: got %+v, %v", v, err)
+	}
+	// Images from other repositories are not judged by their tag.
+	if _, err := Classify(policyInfo(t, "example.com/other/img:sway-v0.0.4", nil), rel, pub); !errors.Is(err, ErrNotHadron) {
+		t.Fatalf("other repo: got %v, want ErrNotHadron", err)
+	}
+}
