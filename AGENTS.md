@@ -56,7 +56,7 @@ name that line).
 | NetworkManager and nmcli; changes need root (`auth-polkit=root-only`) | wpa_supplicant, Wi-Fi |
 | OpenSSH server, a console login on tty1 | ly, greetd, a display server, a compositor, Mesa, LLVM |
 | the Hadron installer, both encryption modes, the splash's passphrase prompt in the initramfs | fonts beyond the console font, GTK, Qt, Flatpak, PipeWire, Distrobox |
-| `hadron-update` and `hadron-ext` through `hadron-updated` and polkit (the admin rule needs no agent, so they work over SSH) | the tray, the Hadron menu and every `hadron-*` desktop script |
+| `hadron-update`, `hadron-ext` and `hadron-recovery` through `hadron-updated` and polkit (the admin rule needs no agent, so they work over SSH) | the tray, the Hadron menu and every `hadron-*` desktop script |
 | Docker, as on the desktop: the static bundle, `docker.service` and `docker.socket`, and `92_docker.yaml`, which keeps `/var/lib/docker` on the persistent partition and starts dockerd only on the installed system | |
 
 Its configuration is `rootfs-server/` plus the files the `server-config`

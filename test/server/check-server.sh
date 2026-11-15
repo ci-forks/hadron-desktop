@@ -60,6 +60,8 @@ check "the update service is D-Bus activated" \
     "test -f /usr/share/dbus-1/system-services/io.kairos.HadronUpdate1.service && test -f /usr/lib/systemd/system/hadron-updated.service"
 check "hadron-update and hadron-ext run" \
     "hadron-update help | grep -q upgrade && test \"\$(readlink /usr/bin/hadron-ext)\" = hadron-update"
+check "hadron-recovery links to hadron-update" \
+    "test \"\$(readlink /usr/bin/hadron-recovery)\" = hadron-update"
 check "the installer's groups exist" \
     "for g in admin audio video render input bluetooth seat docker; do getent group \$g || exit 1; done"
 check "the installer is wired" "grep -q /usr/bin/hadron-install-ui /system/oem/90_desktop_installer.yaml"
