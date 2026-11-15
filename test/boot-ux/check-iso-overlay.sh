@@ -53,8 +53,13 @@ check "quiet cmdline on the default entry" \
     "entry 'hadron-desktop' | grep -qF '$QUIET'"
 check "console palette on the default entry" \
     "grep -q '^set hadron_vt_palette=\"vt.default_red=' '$CFG' && entry 'hadron-desktop' | grep -qF ' \$hadron_vt_palette'"
-check "nomodeset rendered on the default entry" \
-    "entry 'hadron-desktop' | grep -q 'vga=795 nomodeset'"
+# The normal entries load the graphics driver and its firmware; "safe
+# graphics" is the same install with nomodeset, for machines where that driver
+# hangs or shows nothing.
+check "no nomodeset on the default entry" \
+    "test -f '$CFG' && ! entry 'hadron-desktop' | grep -q nomodeset"
+check "safe graphics entry installs with nomodeset" \
+    "entry 'hadron-desktop (safe graphics)' | grep -q 'vga=795 nomodeset install-mode '"
 check "debug entry left verbose" \
     "entry 'hadron-desktop (debug)' | grep -q 'rd.debug' && ! entry 'hadron-desktop (debug)' | grep -q 'quiet'"
 check "recovery entry left verbose" \
