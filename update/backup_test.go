@@ -39,7 +39,10 @@ func backupSetup(t *testing.T) backupPaths {
 	t.Setenv("ISOTOPE_UPDATE_EXT_STATE", p.ExtDir)
 
 	oldPaths, oldRoot, oldFlatpak, oldLookup, oldTmpfs := defaultBackupPaths, needRoot, flatpakPresent, lookupUser, onTmpfs
+	oldLayout, oldMounts := diskLayout, mountinfoPath
 	onTmpfs = func(string) bool { return false } // t.TempDir may be a tmpfs
+	diskLayout = func(p backupPaths) string { return "encryption=" + encryptionMode(p) }
+	mountinfoPath = filepath.Join(root, "no-mountinfo")
 	defaultBackupPaths = func() backupPaths { return p }
 	needRoot = func() bool { return false }
 	flatpakPresent = func() bool { return false }
@@ -51,6 +54,7 @@ func backupSetup(t *testing.T) backupPaths {
 	}
 	t.Cleanup(func() {
 		defaultBackupPaths, needRoot, flatpakPresent, lookupUser, onTmpfs = oldPaths, oldRoot, oldFlatpak, oldLookup, oldTmpfs
+		diskLayout, mountinfoPath = oldLayout, oldMounts
 	})
 	return p
 }
@@ -120,6 +124,7 @@ func TestBackupRunsResticWithTheExcludes(t *testing.T) {
 		"--exclude " + p.Persist + "/.state/var-log.bind",
 		"--exclude " + p.Persist + "/.isotope-restore",
 		"--exclude " + p.State + "/password ", "--exclude " + p.State + "/cache ",
+		"--exclude " + p.State + "/work-* ", "--exclude " + p.State + "/pending ",
 		" " + p.Persist + " " + p.OEM} {
 		if !strings.Contains(calls[0], w) {
 			t.Errorf("backup call lacks %q: %s", w, calls[0])
@@ -136,9 +141,9 @@ func TestBackupRunsResticWithTheExcludes(t *testing.T) {
 	if !strings.HasPrefix(string(users), "anna ") {
 		t.Errorf("manifest users: %q", users)
 	}
-	enc, _ := os.ReadFile(p.State + "/manifest/encryption")
-	if string(enc) != "none\n" {
-		t.Errorf("manifest encryption: %q", enc)
+	layout, _ := os.ReadFile(p.State + "/manifest/layout")
+	if string(layout) != "encryption=none\n" {
+		t.Errorf("manifest layout: %q", layout)
 	}
 }
 
@@ -508,6 +513,13 @@ func TestExportAndWholeMachineRestoreWithRestic(t *testing.T) {
 	rebootCommand = func() *exec.Cmd { rebooted = true; return exec.Command("true") }
 	t.Cleanup(func() { rebootCommand = old })
 
+	// One installed extension, which comes back through isotope ext.
+	extDir := os.Getenv("ISOTOPE_UPDATE_EXT_DIR")
+	os.MkdirAll(extDir, 0o755)
+	os.MkdirAll(p.ExtDir, 0o755)
+	write(t, extDir+"/tailscale.raw", "image")
+	write(t, p.ExtDir+"/tailscale.raw", "tailscale\n")
+
 	file := filepath.Join(t.TempDir(), "laptop.isotope")
 	code, out, errOut := runCLI("pw-123\n", "backup", "--export", file, "--password-stdin")
 	if code != exitOK || !strings.Contains(out, "Wrote "+file) {
@@ -527,6 +539,8 @@ func TestExportAndWholeMachineRestoreWithRestic(t *testing.T) {
 	write(t, p.homeState()+"/anna/new.txt", "made after the install")
 	os.MkdirAll(p.OEM, 0o755)
 	write(t, p.OEM+"/90_custom.yaml", "users: [new]\n")
+	write(t, p.OEM+"/99_isotope-user.yaml", "users: [new]\n")
+	write(t, p.OEM+"/notes.txt", "not a cloud-config")
 
 	code, out, errOut = runCLI("pw-123\ny\n", "restore", "--from", file, "--yes")
 	if code != exitOK {
@@ -537,7 +551,6 @@ func TestExportAndWholeMachineRestoreWithRestic(t *testing.T) {
 		p.homeState() + "/anna/new.txt":                 "made after the install",
 		p.bindDir("/etc/ssh") + "/ssh_host_ed25519_key": "host key\n",
 		p.OEM + "/90_custom.yaml":                       "users: [anna]\n",
-		p.password():                                    "pw-123\n",
 	} {
 		if b, _ := os.ReadFile(path); string(b) != want {
 			t.Errorf("%s: %q, want %q", path, b, want)
@@ -554,6 +567,24 @@ func TestExportAndWholeMachineRestoreWithRestic(t *testing.T) {
 	}
 	if !rebooted {
 		t.Error("no restart after a whole-machine restore")
+	}
+	// /oem has exactly the backup's cloud-configs; the install's own is aside.
+	if exists(p.OEM + "/99_isotope-user.yaml") {
+		t.Error("a cloud-config of the new install still runs at boot")
+	}
+	if aside, _ := filepath.Glob(p.State + "/oem-before-restore/*/99_isotope-user.yaml"); len(aside) != 1 {
+		t.Error("the new install's cloud-config was not kept aside")
+	}
+	if !exists(p.OEM + "/notes.txt") {
+		t.Error("a file of /oem that is not a cloud-config was removed")
+	}
+	if b, _ := os.ReadFile(p.pending() + "/extensions"); !strings.HasPrefix(string(b), "tailscale.raw tailscale ") {
+		t.Errorf("the extensions queued for isotope restore --finish: %q", b)
+	}
+	// The export had no target, so the restored machine has none, and no
+	// password is kept.
+	if exists(p.password()) {
+		t.Error("a password without a target")
 	}
 }
 
@@ -604,5 +635,98 @@ func TestUnpackRefusesEscapes(t *testing.T) {
 	}
 	if exists(filepath.Join(dir, "evil")) {
 		t.Fatal("an entry climbed out")
+	}
+}
+
+func TestOnPersistMapsBindMounts(t *testing.T) {
+	p := backupPaths{Persist: "/usr/local"}
+	dir := t.TempDir()
+	old := mountinfoPath
+	mountinfoPath = filepath.Join(dir, "mountinfo")
+	t.Cleanup(func() { mountinfoPath = old })
+	write(t, mountinfoPath, `22 1 0:20 / / rw - overlay overlay rw
+30 22 253:1 / /usr/local rw - ext4 /dev/mapper/persistent rw
+31 22 253:1 /.state/home.bind /home rw - ext4 /dev/mapper/persistent rw
+32 22 253:1 /.state/root.bind /root rw - ext4 /dev/mapper/persistent rw
+33 22 8:17 / /run/media/anna/My\040Disk rw - vfat /dev/sdb1 rw
+`)
+	for in, want := range map[string]string{
+		"/root/backups":               "/usr/local/.state/root.bind/backups",
+		"/home/anna/b":                "/usr/local/.state/home.bind/anna/b",
+		"/usr/local/x":                "/usr/local/x",
+		"/run/media/anna/My Disk/iso": "/run/media/anna/My Disk/iso",
+		"/srv/elsewhere":              "/srv/elsewhere",
+	} {
+		if got := p.onPersist(in); got != want {
+			t.Errorf("%s: %s, want %s", in, got, want)
+		}
+	}
+}
+
+func TestWholeRestoreKeepsThisMachinesBackupSettings(t *testing.T) {
+	p := backupSetup(t)
+	saveBackupConfig(p, backupConfig{Target: "/run/media/anna/Old/isotope", Schedule: "weekly"})
+	r := restorer{p: p, pass: filepath.Join(t.TempDir(), "typed")}
+	write(t, r.pass, "typed-pw\n")
+
+	// This machine already had a target: its config and password win.
+	mine := backupConfig{Target: "sftp:nas:/new", Schedule: "daily"}
+	if err := r.keepBackupSettings(mine, "my-pw\n"); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := loadBackupConfig(p); c.Target != "sftp:nas:/new" {
+		t.Errorf("config %+v", c)
+	}
+	if b, _ := os.ReadFile(p.password()); string(b) != "my-pw\n" {
+		t.Errorf("password %q", b)
+	}
+
+	// A fresh machine: the restored config, with the typed password.
+	saveBackupConfig(p, backupConfig{Target: "/run/media/anna/Old/isotope"})
+	os.Remove(p.password())
+	if err := r.keepBackupSettings(backupConfig{}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(p.password()); string(b) != "typed-pw\n" {
+		t.Errorf("password %q", b)
+	}
+}
+
+func TestRestoreFinishInstallsWhatWasQueued(t *testing.T) {
+	p := backupSetup(t)
+	fakeRestic(t)
+	os.MkdirAll(p.pending(), 0o700)
+	write(t, p.pending()+"/users", "anna 1000\n")
+	write(t, p.pending()+"/flatpak-user-anna", "org.gnome.Maps\tflathub\n")
+	write(t, p.pending()+"/flatpak-system", "org.mozilla.firefox\tflathub\n")
+	var ran []string
+	old := sysCommand
+	sysCommand = func(name string, args ...string) *exec.Cmd {
+		ran = append(ran, name+" "+strings.Join(args, " "))
+		if strings.Contains(strings.Join(args, " "), "org.gnome.Maps") {
+			return exec.Command("false")
+		}
+		return exec.Command("true")
+	}
+	t.Cleanup(func() { sysCommand = old })
+	code, _, _ := runCLI("", "restore", "--finish")
+	if code != exitError {
+		t.Fatalf("exit %d with a failed app", code)
+	}
+	joined := strings.Join(ran, "\n")
+	for _, w := range []string{"flatpak install --system --noninteractive -y flathub org.mozilla.firefox",
+		"runuser -u anna -- flatpak install --user --noninteractive -y flathub org.gnome.Maps"} {
+		if !strings.Contains(joined, w) {
+			t.Errorf("did not run %q in:\n%s", w, joined)
+		}
+	}
+	if exists(p.pending()) {
+		t.Error("the queue is still there: it would run at every boot")
+	}
+	if _, out, _ := runCLI("", "backup", "status"); !strings.Contains(out, "could not install") || !strings.Contains(out, "org.gnome.Maps") {
+		t.Errorf("status does not say what failed: %q", out)
+	}
+	if code, _, _ := runCLI("", "restore", "--finish"); code != exitOK {
+		t.Error("a second --finish with nothing queued fails")
 	}
 }

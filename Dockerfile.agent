@@ -235,5 +235,7 @@ RUN rm -f /usr/bin/isotope-recovery && ! test -e /usr/bin/isotope-recovery
 # isotope-menu hides its entry.
 RUN rm -f /usr/bin/restic /usr/lib/systemd/system/isotope-backup.service \
       /usr/lib/systemd/system/isotope-backup.timer \
-      /etc/systemd/system/timers.target.wants/isotope-backup.timer && \
+      /usr/lib/systemd/system/isotope-restore-finish.service \
+      /etc/systemd/system/timers.target.wants/isotope-backup.timer \
+      /etc/systemd/system/multi-user.target.wants/isotope-restore-finish.service && \
     ! test -e /usr/bin/restic

@@ -15,6 +15,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/sys/unix"
 )
 
 func backupExport(p backupPaths, file string, containers, passStdin bool, in *bufio.Reader, stdout, stderr io.Writer) int {
@@ -52,8 +54,16 @@ func exportTo(p backupPaths, file string, containers, passStdin bool, in *bufio.
 		return err
 	}
 
-	// The repository is made next to the file, on the same disk, then packed.
-	work := filepath.Join(dir, "."+filepath.Base(file)+".partial.d")
+	// The repository is made in a directory only root can reach, on the
+	// persistent partition, then packed into the file. Not next to the file:
+	// a user who owns that directory could swap ours for a link.
+	if err := os.MkdirAll(p.State, 0o755); err != nil {
+		return err
+	}
+	work, err := os.MkdirTemp(p.State, "work-")
+	if err != nil {
+		return err
+	}
 	partial := file + ".partial"
 	passFile := filepath.Join(p.Run, "password.export")
 	clean := func() {
@@ -65,9 +75,6 @@ func exportTo(p backupPaths, file string, containers, passStdin bool, in *bufio.
 	defer stop()
 	defer clean()
 	if err := writeSecret(passFile, pw); err != nil {
-		return err
-	}
-	if err := os.Mkdir(work, 0o700); err != nil {
 		return err
 	}
 	cmd, err := resticCmd(p, work, passFile, "init")
@@ -99,7 +106,8 @@ func exportTo(p backupPaths, file string, containers, passStdin bool, in *bufio.
 // packDir writes the files under dir into a tar at out, relative to dir.
 // Only directories and regular files: a restic repository has nothing else.
 func packDir(dir, out string) error {
-	f, err := os.OpenFile(out, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	// O_EXCL also refuses a link a user put at that name.
+	f, err := os.OpenFile(out, os.O_WRONLY|os.O_CREATE|os.O_EXCL|unix.O_NOFOLLOW, 0o600)
 	if err != nil {
 		return err
 	}
@@ -157,8 +165,8 @@ func syncPath(path string) error {
 	return f.Sync()
 }
 
-// unpackFile extracts an exported backup into dir, a new directory that only
-// root can enter. Names that are absolute, climb out with "..", or are
+// unpackFile extracts an exported backup into dir, a new directory under
+// /usr/local/isotope-backup, which only root can change. Names that are absolute, climb out with "..", or are
 // anything but a directory or a regular file are refused.
 func unpackFile(file, dir string) error {
 	f, err := os.Open(file)

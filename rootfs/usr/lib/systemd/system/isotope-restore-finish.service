@@ -1,0 +1,17 @@
+[Unit]
+Description=Isotope: install the apps and extensions of a restored backup
+Documentation=https://github.com/kairos-community/isotope
+# A whole-machine `isotope restore` leaves the lists here and restarts. Now
+# the restored users exist and the network can be up, so the Flatpak apps and
+# system extensions are installed again; the directory is then removed, so
+# this runs once.
+ConditionPathExists=/usr/local/isotope-backup/pending
+After=network-online.target isotope-updated.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/isotope restore --finish
+
+[Install]
+WantedBy=multi-user.target

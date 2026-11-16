@@ -63,7 +63,7 @@ check "isotope runs, and isotope-update and isotope-ext link to it" \
 check "isotope-recovery links to isotope" \
     "test \"\$(readlink /usr/bin/isotope-recovery)\" = isotope"
 check "backups: restic runs and the timer is enabled" \
-    "restic version | grep -q '^restic ' && test -L /etc/systemd/system/timers.target.wants/isotope-backup.timer && test -f /usr/lib/systemd/system/isotope-backup.service"
+    "restic version | grep -q '^restic ' && test -L /etc/systemd/system/timers.target.wants/isotope-backup.timer && test -f /usr/lib/systemd/system/isotope-backup.service && test -L /etc/systemd/system/multi-user.target.wants/isotope-restore-finish.service"
 check "the installer's groups exist" \
     "for g in admin audio video render input bluetooth seat docker; do getent group \$g || exit 1; done"
 check "the installer is wired" "grep -q /usr/bin/isotope-install-ui /system/oem/90_desktop_installer.yaml"

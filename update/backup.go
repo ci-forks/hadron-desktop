@@ -71,17 +71,95 @@ func (p backupPaths) password() string { return filepath.Join(p.State, "password
 func (p backupPaths) envFile() string  { return filepath.Join(p.State, "env") }
 func (p backupPaths) manifest() string { return filepath.Join(p.State, "manifest") }
 
+// pending is what a whole restore leaves for `isotope restore --finish`;
+// finishResult is what that run could not install.
+func (p backupPaths) pending() string      { return filepath.Join(p.State, "pending") }
+func (p backupPaths) finishResult() string { return filepath.Join(p.State, "restore-result") }
+
+// extOnPersist is kairos-agent's extension directory, /var/lib/kairos/
+// extensions, on the persistent partition, relative to it.
+func (p backupPaths) extOnPersist() string {
+	rel, _ := filepath.Rel(p.Persist, p.bindDir("/var/lib/kairos"))
+	return filepath.Join(rel, "extensions")
+}
+
 // stage is where a restore puts the files first: on the persistent
 // partition, so moving them into place is a rename. Root's, mode 0700.
 func (p backupPaths) stage() string { return filepath.Join(p.Persist, ".isotope-restore") }
 
-// onPersist maps a path the user sees (/home/anna/x) to where it is on the
-// persistent partition, for the paths the backup reads by that name.
-func (p backupPaths) onPersist(path string) string {
-	if path == "/home" || strings.HasPrefix(path, "/home/") {
-		return p.homeState() + strings.TrimPrefix(path, "/home")
+// mountinfoPath is read to map a path to the persistent partition. A
+// variable for the tests.
+var mountinfoPath = "/proc/self/mountinfo"
+
+type mountEntry struct{ dev, root, point string }
+
+func readMounts() []mountEntry {
+	b, err := os.ReadFile(mountinfoPath)
+	if err != nil {
+		return nil
 	}
-	return path
+	var out []mountEntry
+	for _, line := range strings.Split(string(b), "\n") {
+		f := strings.Fields(line)
+		if len(f) < 5 {
+			continue
+		}
+		out = append(out, mountEntry{dev: f[2], root: unescapeMount(f[3]), point: unescapeMount(f[4])})
+	}
+	return out
+}
+
+// unescapeMount undoes mountinfo's octal escapes (\040 is a space).
+func unescapeMount(s string) string {
+	if !strings.Contains(s, "\\") {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+3 < len(s) {
+			if n, err := strconv.ParseUint(s[i+1:i+4], 8, 8); err == nil {
+				b.WriteByte(byte(n))
+				i += 3
+				continue
+			}
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
+func under(path, dir string) bool {
+	return path == dir || strings.HasPrefix(path, strings.TrimSuffix(dir, "/")+"/")
+}
+
+// onPersist maps a path the user sees (/home/anna/x, /root/backups) to where
+// it is on the persistent partition (/usr/local/.state/home.bind/anna/x), so
+// the backup can exclude it. A path on another file system is returned as it
+// is: the backup does not read it anyway.
+func (p backupPaths) onPersist(path string) string {
+	mounts := readMounts()
+	var persist *mountEntry
+	for i, m := range mounts {
+		if m.point == p.Persist {
+			persist = &mounts[i]
+		}
+	}
+	if persist == nil || under(path, p.Persist) {
+		return path
+	}
+	// The mount the path is in: the longest mount point above it; the last
+	// one listed when the same point is mounted over.
+	var best *mountEntry
+	for i, m := range mounts {
+		if under(path, m.point) && (best == nil || len(m.point) >= len(best.point)) {
+			best = &mounts[i]
+		}
+	}
+	if best == nil || best.dev != persist.dev {
+		return path
+	}
+	rel := strings.TrimPrefix(strings.TrimPrefix(path, best.point), "/")
+	return filepath.Join(p.Persist, strings.TrimPrefix(best.root, persist.root), rel)
 }
 
 // restic is the backup engine. ISOTOPE_RESTIC replaces it, so a test can
@@ -211,13 +289,14 @@ var onTmpfs = func(dir string) bool {
 	return unix.Statfs(dir, &st) == nil && st.Type == unix.TMPFS_MAGIC
 }
 
-// onInterrupt runs fn and exits on SIGINT or SIGTERM, until the returned
+// onInterrupt runs fn and exits on SIGINT, SIGTERM or SIGHUP, until the returned
 // stop is called. restic gets the signal too, as it is in the same process
 // group, and stops.
 func onInterrupt(fn func()) (stop func()) {
 	ch := make(chan os.Signal, 1)
 	done := make(chan struct{})
-	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
+	// SIGHUP too: a dropped SSH session sends it.
+	signal.Notify(ch, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	go func() {
 		select {
 		case <-ch:
@@ -352,6 +431,9 @@ func cmdBackup(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 }
 
 func backupStatus(p backupPaths, stdout, stderr io.Writer) int {
+	if r := strings.TrimSpace(readFileString(p.finishResult())); r != "" && r != "ok" {
+		fmt.Fprintf(stdout, "Restore:    after the restart, %s\n", r)
+	}
 	c, err := loadBackupConfig(p)
 	if err != nil {
 		fmt.Fprintln(stderr, "isotope:", err)
@@ -505,7 +587,7 @@ func backupArgs(p backupPaths, target string, containers bool) []string {
 	// What a backup must not hold: its own cache and secrets, a restore's
 	// staging directory, and a target or export on this disk, which would
 	// otherwise be backed up into itself.
-	for _, f := range []string{"cache", "password", "password.new", "env", "export"} {
+	for _, f := range []string{"cache", "password", "password.new", "env", "work-*", "pending"} {
 		ex(filepath.Join(p.State, f))
 	}
 	ex(p.stage())
@@ -595,6 +677,31 @@ func fileUID(info fs.FileInfo) int {
 	return -1
 }
 
+// diskLayout says how this machine boots and is encrypted: the installer's
+// marker, Trusted Boot, and whether the persistent and the OEM partitions
+// are LUKS. A whole-machine restore copies /oem, which only works on a disk
+// set up the same way. A variable for the tests.
+var diskLayout = func(p backupPaths) string {
+	uki := strings.Contains(readFileString("/proc/cmdline"), "rd.immucore.uki")
+	return fmt.Sprintf("encryption=%s uki=%t persistent-luks=%t oem-luks=%t",
+		encryptionMode(p), uki, onLUKS(p.Persist), onLUKS(p.OEM))
+}
+
+func readFileString(path string) string {
+	b, _ := os.ReadFile(path)
+	return string(b)
+}
+
+// onLUKS says whether path is on a dm-crypt device.
+func onLUKS(path string) bool {
+	var st unix.Stat_t
+	if unix.Stat(path, &st) != nil {
+		return false
+	}
+	uuid := readFileString(fmt.Sprintf("/sys/dev/block/%d:%d/dm/uuid", unix.Major(st.Dev), unix.Minor(st.Dev)))
+	return strings.HasPrefix(uuid, "CRYPT-")
+}
+
 // encryptionMode is the mode= of the installer's encryption marker, or
 // "none".
 func encryptionMode(p backupPaths) string {
@@ -648,9 +755,9 @@ func writeManifest(p backupPaths) error {
 			}
 		}
 	}
-	// How the disk is encrypted: a whole-machine restore brings back /oem,
-	// which must match the new disk's encryption.
-	if err := os.WriteFile(filepath.Join(dir, "encryption"), []byte(encryptionMode(p)+"\n"), 0o644); err != nil {
+	// How the disk boots and is encrypted: a whole-machine restore brings
+	// back /oem, which must match the new disk.
+	if err := os.WriteFile(filepath.Join(dir, "layout"), []byte(diskLayout(p)+"\n"), 0o644); err != nil {
 		return err
 	}
 	if host, err := os.Hostname(); err == nil {

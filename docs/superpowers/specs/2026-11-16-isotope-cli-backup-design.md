@@ -133,8 +133,8 @@ its persistent list survive.
 - `env` (0600, optional): credentials for the target.
 - `cache/`: restic's cache.
 - `manifest/` is written before each backup and backed up with it:
-  `release` (a copy of `/etc/isotope/release`), `hostname`, `encryption`
-  (the installer's marker mode, or `none`), `users` (name and uid of every
+  `release` (a copy of `/etc/isotope/release`), `hostname`, `layout`
+  (how the disk boots and is encrypted), `users` (name and uid of every
   home), `flatpak-system` and `flatpak-user-<name>` (installed app IDs and
   their remote), `extensions` (installed system extensions and where each
   came from).
@@ -153,9 +153,11 @@ keyboard, the encryption settings. Without:
 - `/var/log` and `lost+found`;
 - unless `--with-containers`: `/var/lib/docker`, `/var/lib/containerd` and
   each home's `.local/share/containers`;
-- the backup's own cache, password and credentials, a restore's staging
-  directory, and a directory target or export inside the partition, which
-  would otherwise be backed up into itself.
+- the backup's own cache, password, credentials, work directories and
+  restore queue, a restore's staging directory, and a directory target
+  inside the partition, which would otherwise be backed up into itself.
+  The target is mapped through `/proc/self/mountinfo`, so `/root/backups`
+  is excluded as `/usr/local/.state/root.bind/backups`.
 
 Each snapshot is tagged `isotope` and with the hostname. After a backup,
 `restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 12 --prune`
@@ -165,14 +167,14 @@ snapshot of the rest: it counts as a partial backup, and pruning runs.
 
 ### Export
 
-`isotope backup --export FILE` makes a restic repository next to FILE (on
-the same disk, with the same disk checks as `init`), backs up into it, packs
-it into FILE as an uncompressed tar (restic already compresses and
+`isotope backup --export FILE` makes a restic repository in
+`/usr/local/isotope-backup/work-*` (only root can change it; next to FILE a
+user who owns that directory could swap it for a link), backs up into it,
+packs it into FILE (the same disk checks as `init`) as an uncompressed tar (restic already compresses and
 encrypts), and removes the repository. The password is the machine's
 backup password when it has one, so the user keeps one password; otherwise
-a new one, shown once. `isotope restore --from FILE` unpacks it into a
-directory only root can enter (next to the file, or under
-`/usr/local/isotope-backup`), refusing any entry that is not a plain file
+a new one, shown once. `isotope restore --from FILE` unpacks it into
+`/usr/local/isotope-backup/work-*` too, refusing any entry that is not a plain file
 or directory or that leaves the directory, and restores from it with the
 same code as from a target.
 
@@ -204,20 +206,37 @@ types the password. It:
    hosts in the target, `--host` must say which), restores its manifest
    into `/usr/local/.isotope-restore` (root, 0700) and shows what it will
    do. It asks first (`--yes` skips the question).
-2. Refuses when the backed-up disk's encryption mode differs from this
-   one's: the old `/oem` would not unlock the new disk. The user can then
-   reinstall with the same choice, or restore with `--only`.
-3. Restores `/usr/local` and `/oem` into the staging directory, stops
-   Docker, and moves the persistent partition's files into place. The
-   staging directory is on the same partition, so these are renames, made
-   with directory file descriptors that never follow a link (a user's home
-   is on it). A file in the backup replaces the same file; other files
-   stay. The owners are the backup's: `/oem` brings back the same users,
-   with the same IDs, at the next boot.
-4. Copies `/oem` over (another partition, only root's).
-5. Keeps the typed password as the machine's backup password, since the
-   backup does not hold it, and reinstalls the Flatpak apps.
-6. Restarts the machine.
+2. Refuses when the backed-up disk was set up differently: the manifest's
+   `layout` (the installer's encryption marker, Trusted Boot, and whether
+   the persistent and OEM partitions are LUKS) must equal this disk's. The
+   old `/oem` would not boot or unlock another layout. The user can then
+   reinstall with the same choices, or restore with `--only`.
+3. Restores `/usr/local` and `/oem` into the staging directory, leaves out
+   the extension images, queues the app and extension lists in
+   `/usr/local/isotope-backup/pending`, stops Docker, and moves the
+   persistent partition's files into place. The staging directory is on
+   the same partition, so these are renames, made with directory file
+   descriptors that never follow a link (a user's home is on it). A file in
+   the backup replaces the same file; other files stay. The owners are the
+   backup's.
+4. Makes `/oem`'s cloud-configs exactly the backup's: those of the new
+   install that the backup does not have are moved to
+   `/usr/local/isotope-backup/oem-before-restore/<time>/`. A leftover one
+   would still run at boot and create its user first, with the IDs the
+   backed-up users had; with only the backup's, the users come back with
+   the same IDs. Other files in `/oem` stay.
+5. Keeps this machine's backup settings when it had a target (config and
+   password). Otherwise the restored config stays, with the password typed
+   for this backup, which is the old machine's (an export uses it too).
+6. Restarts the machine, even when a part failed: `/usr/local` and `/oem`
+   are already the backup's, and only a restart makes them whole.
+
+At the next boot `isotope-restore-finish.service` (only when `pending/`
+exists) runs `isotope restore --finish`: the restored users exist and the
+network can be up, so it installs the Flatpak apps and, through
+`isotope ext install`, which checks each against this system's `/usr`, the
+system extensions. It then removes `pending/`, and `isotope backup status`
+shows what could not be installed.
 
 With `--only homes,apps,extensions`, it restores into the users this
 machine already has instead:
@@ -231,9 +250,9 @@ machine already has instead:
   came from, system apps as root and user apps as their (mapped) user.
 - **extensions**: each one installed again through `isotope ext install`.
 
-A failure in one part is listed and does not stop the others. Ctrl-C
-removes the staging directory, an unpacked export and the typed password,
-which is kept under `/run`.
+A failure in one part is listed and does not stop the others. Ctrl-C,
+SIGTERM and SIGHUP (a dropped SSH session) remove the staging directory,
+an unpacked export and the typed password, which is kept under `/run`.
 
 ## On each edition
 

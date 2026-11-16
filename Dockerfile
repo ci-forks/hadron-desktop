@@ -4698,8 +4698,9 @@ COPY rootfs/etc/isotope/extensions.conf /etc/isotope/extensions.conf
 COPY rootfs/usr/lib/systemd/system/isotope-updated.service /usr/lib/systemd/system/isotope-updated.service
 COPY rootfs/usr/share/dbus-1/ /usr/share/dbus-1/
 COPY rootfs/usr/share/polkit-1/ /usr/share/polkit-1/
-# Backups: the daily timer of `isotope backup --scheduled`.
-COPY rootfs/usr/lib/systemd/system/isotope-backup.service rootfs/usr/lib/systemd/system/isotope-backup.timer /usr/lib/systemd/system/
+# Backups: the daily timer of `isotope backup --scheduled`, and the one-shot
+# after a whole restore.
+COPY rootfs/usr/lib/systemd/system/isotope-backup.service rootfs/usr/lib/systemd/system/isotope-backup.timer rootfs/usr/lib/systemd/system/isotope-restore-finish.service /usr/lib/systemd/system/
 # Docker: its units, and the boot stage that persists /var/lib/docker and
 # starts the daemon on the installed system only.
 COPY rootfs/usr/lib/systemd/system/docker.service rootfs/usr/lib/systemd/system/docker.socket /usr/lib/systemd/system/
@@ -4992,11 +4993,13 @@ COPY --from=update-build /out/isotope /usr/bin/isotope
 RUN ln -sf isotope /usr/bin/isotope-update
 RUN ln -sf isotope /usr/bin/isotope-ext
 RUN ln -sf isotope /usr/bin/isotope-recovery
-# Backups: restic, and the daily timer that runs `isotope backup --scheduled`
-# (it does nothing until `isotope backup schedule` turns it on).
+# Backups: restic, the daily timer that runs `isotope backup --scheduled`
+# (it does nothing until `isotope backup schedule` turns it on), and the
+# one-shot that installs the apps and extensions after a whole restore.
 COPY --from=restic /restic/ /
-RUN systemctl enable isotope-backup.timer && \
-    test -L /etc/systemd/system/timers.target.wants/isotope-backup.timer
+RUN systemctl enable isotope-backup.timer isotope-restore-finish.service && \
+    test -L /etc/systemd/system/timers.target.wants/isotope-backup.timer && \
+    test -L /etc/systemd/system/multi-user.target.wants/isotope-restore-finish.service
 
 
 # The server edition's image. Keep the binaries at the end in step with
@@ -5045,8 +5048,9 @@ RUN ln -sf isotope /usr/bin/isotope-update
 RUN ln -sf isotope /usr/bin/isotope-ext
 RUN ln -sf isotope /usr/bin/isotope-recovery
 COPY --from=restic /restic/ /
-RUN systemctl enable isotope-backup.timer && \
-    test -L /etc/systemd/system/timers.target.wants/isotope-backup.timer
+RUN systemctl enable isotope-backup.timer isotope-restore-finish.service && \
+    test -L /etc/systemd/system/timers.target.wants/isotope-backup.timer && \
+    test -L /etc/systemd/system/multi-user.target.wants/isotope-restore-finish.service
 
 # The image the kairos stage turns bootable: the desktop for sway, i3, cosmic
 # and niri, the server edition for server.

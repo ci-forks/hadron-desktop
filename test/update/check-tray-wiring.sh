@@ -104,7 +104,7 @@ if [ "$FLAVOR" = agent ]; then
     check "agent: the session does not start snixembed" \
         "! { $(lines "$ALL_SESSION"); } | grep -q 'snixembed'"
     check "agent: no restic and no backup timer" \
-        'test ! -e $R/usr/bin/restic && test ! -e $R/etc/systemd/system/timers.target.wants/isotope-backup.timer'
+        'test ! -e $R/usr/bin/restic && test ! -e $R/etc/systemd/system/timers.target.wants/isotope-backup.timer && test ! -e $R/etc/systemd/system/multi-user.target.wants/isotope-restore-finish.service'
     echo
     [ "$fail" -eq 0 ] && echo "tray-wiring ($FLAVOR): ALL PASS" || echo "tray-wiring ($FLAVOR): FAILURES"
     exit "$fail"
@@ -126,6 +126,7 @@ check_image "isotope-recovery is a link to isotope" 'test "$(readlink /usr/bin/i
 # Backups: restic and the daily timer of `isotope backup --scheduled`.
 check_image "restic runs" '/usr/bin/restic version | grep -q "^restic "'
 check "isotope-backup.timer is enabled" 'test -L $R/etc/systemd/system/timers.target.wants/isotope-backup.timer && test -f $R/usr/lib/systemd/system/isotope-backup.service'
+check "isotope-restore-finish.service is enabled" 'test -L $R/etc/systemd/system/multi-user.target.wants/isotope-restore-finish.service'
 
 # polkitd answers the daemon's checks. It is D-Bus activated, so it needs its
 # activation file and unit, not an enable link.
