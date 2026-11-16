@@ -21,15 +21,15 @@ check() {
   else echo "FAIL: $desc"; fail=1; fi
 }
 
-check "install script present and executable" 'test -x /usr/bin/hadron-agent-browser-install'
-check "launch wrapper present and executable" 'test -x /usr/bin/hadron-agent-browser-run'
-check "install unit present"        'test -f /etc/systemd/system/hadron-agent-browser-install.service'
+check "install script present and executable" 'test -x /usr/bin/isotope-agent-browser-install'
+check "launch wrapper present and executable" 'test -x /usr/bin/isotope-agent-browser-run'
+check "install unit present"        'test -f /etc/systemd/system/isotope-agent-browser-install.service'
 check "install unit enabled (multi-user.target.wants)" \
-  'test -L /etc/systemd/system/multi-user.target.wants/hadron-agent-browser-install.service'
-check "launch user unit present"    'test -f /usr/lib/systemd/user/hadron-agent-browser.service'
-check "signed Flathub descriptor shipped" 'test -f /usr/share/hadron/flathub.flatpakrepo'
+  'test -L /etc/systemd/system/multi-user.target.wants/isotope-agent-browser-install.service'
+check "launch user unit present"    'test -f /usr/lib/systemd/user/isotope-agent-browser.service'
+check "signed Flathub descriptor shipped" 'test -f /usr/share/isotope/flathub.flatpakrepo'
 check "flatpak available in the image" 'command -v flatpak'
 check "session-ready starts the browser unit" \
-  'grep -q "systemctl --user start hadron-agent-browser.service" /usr/bin/hadron-agent-session-ready'
+  'grep -q "systemctl --user start isotope-agent-browser.service" /usr/bin/isotope-agent-session-ready'
 
 exit "$fail"

@@ -1,4 +1,4 @@
-module github.com/kairos-io/hadron-desktop/install-ui
+module github.com/kairos-community/isotope/install-ui
 
 go 1.25
 

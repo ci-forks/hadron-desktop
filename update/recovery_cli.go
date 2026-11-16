@@ -13,7 +13,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const recoveryUsage = `Usage: hadron-recovery [command]
+const recoveryUsage = `Usage: isotope-recovery [command]
 
 Manage the recovery key of the encrypted disk. Runs as root through the
 update service; only members of the admin group may use it.
@@ -102,7 +102,7 @@ type terminal interface {
 var newTerminal = func(out io.Writer) (terminal, error) {
 	f, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
-		return nil, errors.New("hadron-recovery needs a terminal: run it in one")
+		return nil, errors.New("isotope-recovery needs a terminal: run it in one")
 	}
 	return &ttyTerminal{f: f, r: bufio.NewReader(f), out: out}, nil
 }
@@ -190,18 +190,18 @@ func cmdRecovery(args []string, stdout, stderr io.Writer) int {
 		return exitOK
 	case "", "status", "new-key", "reseal":
 	default:
-		fmt.Fprintf(stderr, "hadron-recovery: unknown command %q\n\n%s", sub, recoveryUsage)
+		fmt.Fprintf(stderr, "isotope-recovery: unknown command %q\n\n%s", sub, recoveryUsage)
 		return exitUsage
 	}
 	c, err := dialRecovery()
 	if err != nil {
-		fmt.Fprintf(stderr, "hadron-recovery: cannot reach the update service: %v\n", err)
+		fmt.Fprintf(stderr, "isotope-recovery: cannot reach the update service: %v\n", err)
 		return exitError
 	}
 	defer c.Close()
 	st, err := c.RecoveryStatus()
 	if err != nil {
-		fmt.Fprintf(stderr, "hadron-recovery: %v\n", err)
+		fmt.Fprintf(stderr, "isotope-recovery: %v\n", err)
 		return exitError
 	}
 	if sub == "status" {
@@ -210,7 +210,7 @@ func cmdRecovery(args []string, stdout, stderr io.Writer) int {
 	}
 	t, err := newTerminal(stdout)
 	if err != nil {
-		fmt.Fprintf(stderr, "hadron-recovery: %v\n", err)
+		fmt.Fprintf(stderr, "isotope-recovery: %v\n", err)
 		return exitError
 	}
 	if sub == "" {
@@ -273,7 +273,7 @@ func printRecoveryStatus(w io.Writer, st RecoveryStatus) {
 			if c.TPMWorks {
 				line += "; TPM unlock: works"
 			} else {
-				line += "; TPM unlock: FAILS (run `hadron-recovery reseal`)"
+				line += "; TPM unlock: FAILS (run `isotope-recovery reseal`)"
 			}
 		}
 		fmt.Fprintln(w, line)
@@ -294,7 +294,7 @@ func tpmWorksEverywhere(st RecoveryStatus) bool {
 
 func recoveryReseal(c recoveryClient, t terminal, st RecoveryStatus, stdout, stderr io.Writer) int {
 	if st.Edition != editionTrustedBoot {
-		fmt.Fprintln(stderr, "hadron-recovery: reseal is for Trusted Boot; this disk is not sealed to a TPM")
+		fmt.Fprintln(stderr, "isotope-recovery: reseal is for Trusted Boot; this disk is not sealed to a TPM")
 		return exitError
 	}
 	if tpmWorksEverywhere(st) {
@@ -306,12 +306,12 @@ func recoveryReseal(c recoveryClient, t terminal, st RecoveryStatus, stdout, std
 		return exitError
 	}
 	if strings.TrimSpace(secret) == "" {
-		fmt.Fprintln(stderr, "hadron-recovery: nothing typed; nothing changed")
+		fmt.Fprintln(stderr, "isotope-recovery: nothing typed; nothing changed")
 		return exitError
 	}
 	fmt.Fprintln(stdout, "Sealing the disk to this computer's TPM...")
 	if err := c.RecoveryReseal(secret); err != nil {
-		fmt.Fprintf(stderr, "hadron-recovery: %v\n", err)
+		fmt.Fprintf(stderr, "isotope-recovery: %v\n", err)
 		return exitError
 	}
 	fmt.Fprintln(stdout, "Done. The next start unlocks the disk without the recovery key.")
@@ -332,14 +332,14 @@ func recoveryNewKey(c recoveryClient, t terminal, st RecoveryStatus, stdout, std
 			return exitError
 		}
 		if secret == "" {
-			fmt.Fprintln(stderr, "hadron-recovery: nothing typed; nothing changed")
+			fmt.Fprintln(stderr, "isotope-recovery: nothing typed; nothing changed")
 			return exitError
 		}
 	}
 
 	key, err := makeRecoveryKey()
 	if err != nil {
-		fmt.Fprintf(stderr, "hadron-recovery: %v\n", err)
+		fmt.Fprintf(stderr, "isotope-recovery: %v\n", err)
 		return exitError
 	}
 	fmt.Fprint(stdout, "\nYour new recovery key\n\n")
@@ -364,14 +364,14 @@ func recoveryNewKey(c recoveryClient, t terminal, st RecoveryStatus, stdout, std
 			break
 		}
 		if tries == 2 {
-			fmt.Fprintln(stderr, "hadron-recovery: that does not match; nothing changed, your old key still works")
+			fmt.Fprintln(stderr, "isotope-recovery: that does not match; nothing changed, your old key still works")
 			return exitError
 		}
 		fmt.Fprintln(stdout, "That is not it. Check what you wrote down.")
 	}
 	fmt.Fprintln(stdout, "Adding the new recovery key...")
 	if err := c.RecoveryNewKey(secret, key); err != nil {
-		fmt.Fprintf(stderr, "hadron-recovery: %v\n", err)
+		fmt.Fprintf(stderr, "isotope-recovery: %v\n", err)
 		return exitError
 	}
 	fmt.Fprintln(stdout, "Done. The new recovery key works; the old one does not any more.")

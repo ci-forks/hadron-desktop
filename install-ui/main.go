@@ -9,7 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// installCommand builds the child install process. HADRON_INSTALL_CMD is the
+// installCommand builds the child install process. ISOTOPE_INSTALL_CMD is the
 // single seam through which a disk wipe happens; tests inject a fake here to
 // assert did/didn't install, so it must keep working exactly as in the shell
 // installer this replaces.
@@ -23,7 +23,7 @@ import (
 // manual-install returns instead. --use-default-dirs makes it read the same
 // config directories `install` reads, so the two install the same system.
 func installCommand(manualConfig string) *exec.Cmd {
-	if c := os.Getenv("HADRON_INSTALL_CMD"); c != "" {
+	if c := os.Getenv("ISOTOPE_INSTALL_CMD"); c != "" {
 		return exec.Command("/bin/sh", "-c", c)
 	}
 	if manualConfig != "" {
@@ -37,9 +37,9 @@ func installCommand(manualConfig string) *exec.Cmd {
 type postInstall func(log func(string)) error
 
 // rebootCommand restarts the machine after an install that asked kairos-agent
-// not to (an encrypted one). HADRON_REBOOT_CMD is the test seam.
+// not to (an encrypted one). ISOTOPE_REBOOT_CMD is the test seam.
 func rebootCommand() *exec.Cmd {
-	if c := os.Getenv("HADRON_REBOOT_CMD"); c != "" {
+	if c := os.Getenv("ISOTOPE_REBOOT_CMD"); c != "" {
 		return exec.Command("/bin/sh", "-c", c)
 	}
 	return exec.Command("reboot")
@@ -157,7 +157,7 @@ func main() {
 		case "--progress-only":
 			progressOnly = true
 		default:
-			fmt.Fprintf(os.Stderr, "hadron-install-ui: unknown argument: %s\n", a)
+			fmt.Fprintf(os.Stderr, "isotope-install-ui: unknown argument: %s\n", a)
 			os.Exit(2)
 		}
 	}
@@ -168,7 +168,7 @@ func main() {
 	if !progressOnly {
 		c, err := runWizard()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "hadron-install-ui: %v\n", err)
+			fmt.Fprintf(os.Stderr, "isotope-install-ui: %v\n", err)
 			os.Exit(1)
 		}
 		choice = c
@@ -179,7 +179,7 @@ func main() {
 	if pre != nil {
 		manualConfig = configOut()
 		if err := pre(); err != nil {
-			fmt.Fprintf(os.Stderr, "hadron-install-ui: %v\n", err)
+			fmt.Fprintf(os.Stderr, "isotope-install-ui: %v\n", err)
 			os.Exit(1)
 		}
 	}
@@ -192,13 +192,13 @@ func main() {
 		}
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "hadron-install-ui: %v\n", err)
+		fmt.Fprintf(os.Stderr, "isotope-install-ui: %v\n", err)
 		os.Exit(1)
 	}
 	if post != nil {
 		// The encrypted install told kairos-agent not to reboot.
 		if err := rebootCommand().Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "hadron-install-ui: reboot: %v\n", err)
+			fmt.Fprintf(os.Stderr, "isotope-install-ui: reboot: %v\n", err)
 			os.Exit(1)
 		}
 	}

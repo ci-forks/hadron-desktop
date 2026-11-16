@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mudler/hadron-desktop/agent/internal/api"
+	"github.com/kairos-community/isotope/agent/internal/api"
 )
 
 func newService() *Service { return NewService() }

@@ -1,11 +1,11 @@
-// Package provision parses and validates the hadron_agent provisioning
+// Package provision parses and validates the isotope_agent provisioning
 // section merged from Kairos OEM /oem/*.yaml cloud-config files.
 //
-// hadron-agent ships as a separate, opt-in appliance ISO: choosing that ISO
-// is itself the opt-in, so an ABSENT hadron_agent section resolves to an
+// isotope-agent ships as a separate, opt-in appliance ISO: choosing that ISO
+// is itself the opt-in, so an ABSENT isotope_agent section resolves to an
 // enabled configuration with the documented defaults, and only an explicit
-// "hadron_agent.enabled: false" suppresses the runtime. Ordinary Kairos
-// images carry no hadron_agent key and no provisioning service at all, so
+// "isotope_agent.enabled: false" suppresses the runtime. Ordinary Kairos
+// images carry no isotope_agent key and no provisioning service at all, so
 // this package's default can never affect them.
 //
 // This package only parses, merges, defaults, and validates the schema. It
@@ -26,10 +26,10 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/mudler/hadron-desktop/agent/internal/auth"
+	"github.com/kairos-community/isotope/agent/internal/auth"
 )
 
-// Defaults for the fields of a hadron_agent section left unset across every
+// Defaults for the fields of a isotope_agent section left unset across every
 // merged /oem/*.yaml file.
 const (
 	// DefaultListen is the endpoint.listen default: all interfaces, the
@@ -47,17 +47,17 @@ const (
 // Config
 // ---------------------------------------------------------------------------
 
-// Config is the fully merged, defaulted, and validated hadron_agent
+// Config is the fully merged, defaulted, and validated isotope_agent
 // provisioning configuration.
 type Config struct {
 	// Enabled reports whether the appliance's agent runtime should start at
 	// all. It defaults to true: choosing the agent ISO is the opt-in, so an
-	// absent hadron_agent section (or one that never sets "enabled") still
+	// absent isotope_agent section (or one that never sets "enabled") still
 	// resolves to Enabled == true with every other field at its documented
 	// default.
 	//
 	// When Enabled is false -- which only happens when some /oem/*.yaml file
-	// explicitly sets "hadron_agent.enabled: false" -- callers MUST treat
+	// explicitly sets "isotope_agent.enabled: false" -- callers MUST treat
 	// this Config as fully suppressed: skip starting the gateway, the
 	// session and root brokers, the root-helper, autologin, and the
 	// first-run onboarding panel. The rest of this Config's fields are still
@@ -134,7 +134,7 @@ type Limits struct {
 // ---------------------------------------------------------------------------
 
 // Load reads every *.yaml file directly inside oemDir in sorted filename
-// order, merges their hadron_agent sections (later files win for scalars;
+// order, merges their isotope_agent sections (later files win for scalars;
 // see the package doc and mergeSecret for the stricter rule that applies to
 // auth digest fields), applies defaults to anything no file set, and
 // validates the fully resolved result.
@@ -142,7 +142,7 @@ type Limits struct {
 // oemDir need not exist and may contain no matching files at all -- both
 // cases resolve to the opt-in default (Config.Enabled == true with every
 // other field at its documented default), matching the "absent
-// hadron_agent section" case described in the package doc.
+// isotope_agent section" case described in the package doc.
 func Load(oemDir string) (Config, error) {
 	paths, err := findYAMLFiles(oemDir)
 	if err != nil {
@@ -155,7 +155,7 @@ func Load(oemDir string) (Config, error) {
 		if err != nil {
 			return Config{}, fmt.Errorf("provision: read %s: %w", path, err)
 		}
-		ra, present, err := decodeHadronAgent(data)
+		ra, present, err := decodeIsotopeAgent(data)
 		if err != nil {
 			return Config{}, fmt.Errorf("provision: %s: %w", filepath.Base(path), err)
 		}
@@ -189,35 +189,45 @@ func findYAMLFiles(dir string) ([]string, error) {
 	return matches, nil
 }
 
-// decodeHadronAgent loosely decodes data (a complete Kairos cloud-config
-// document) to isolate its top-level "hadron_agent" node -- every other
+// decodeIsotopeAgent loosely decodes data (a complete Kairos cloud-config
+// document) to isolate its top-level "isotope_agent" node -- every other
 // Kairos key (users, stages, ...) is ignored simply by not appearing in the
 // decode target, so it can never trip strict field checking. If a
-// hadron_agent node is present, decodeHadronAgent then re-encodes just that
+// isotope_agent node is present, decodeIsotopeAgent then re-encodes just that
 // node and decodes it AGAIN, this time with KnownFields(true), so unknown
-// fields INSIDE hadron_agent are rejected while unrelated top-level Kairos
+// fields INSIDE isotope_agent are rejected while unrelated top-level Kairos
 // keys never were part of that second, strict decode at all.
-func decodeHadronAgent(data []byte) (rawAgent, bool, error) {
+func decodeIsotopeAgent(data []byte) (rawAgent, bool, error) {
 	var doc struct {
+		IsotopeAgent yaml.Node `yaml:"isotope_agent"`
+		// HadronAgent is the key's name before the rename to Isotope. A
+		// config written for an older release still provisions the agent;
+		// a file with both keys is ambiguous and refused.
 		HadronAgent yaml.Node `yaml:"hadron_agent"`
 	}
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return rawAgent{}, false, fmt.Errorf("parse yaml: %w", err)
 	}
-	if doc.HadronAgent.Kind == 0 {
-		// The document has no hadron_agent key at all.
+	if doc.HadronAgent.Kind != 0 {
+		if doc.IsotopeAgent.Kind != 0 {
+			return rawAgent{}, false, errors.New("both isotope_agent and hadron_agent are set; keep only isotope_agent")
+		}
+		doc.IsotopeAgent = doc.HadronAgent
+	}
+	if doc.IsotopeAgent.Kind == 0 {
+		// The document has no isotope_agent key at all.
 		return rawAgent{}, false, nil
 	}
 
-	sub, err := yaml.Marshal(&doc.HadronAgent)
+	sub, err := yaml.Marshal(&doc.IsotopeAgent)
 	if err != nil {
-		return rawAgent{}, false, fmt.Errorf("re-encode hadron_agent: %w", err)
+		return rawAgent{}, false, fmt.Errorf("re-encode isotope_agent: %w", err)
 	}
 	dec := yaml.NewDecoder(bytes.NewReader(sub))
 	dec.KnownFields(true)
 	var ra rawAgent
 	if err := dec.Decode(&ra); err != nil {
-		return rawAgent{}, false, fmt.Errorf("hadron_agent: %w", err)
+		return rawAgent{}, false, fmt.Errorf("isotope_agent: %w", err)
 	}
 	return ra, true, nil
 }
@@ -227,7 +237,7 @@ func decodeHadronAgent(data []byte) (rawAgent, bool, error) {
 // ---------------------------------------------------------------------------
 
 // rawAgent is the strict per-file decode target for a single file's
-// hadron_agent node. Every leaf is a pointer so the merge step (accumulator.
+// isotope_agent node. Every leaf is a pointer so the merge step (accumulator.
 // merge) can tell "this file did not mention the field" (nil) apart from
 // "this file set the field to its zero value" (non-nil pointer to zero
 // value), which matters for the last-defined-wins merge rule.
@@ -269,7 +279,7 @@ type rawLimits struct {
 // Merge accumulator
 // ---------------------------------------------------------------------------
 
-// accumulator holds the merged-so-far value of every hadron_agent leaf
+// accumulator holds the merged-so-far value of every isotope_agent leaf
 // across all files processed. A nil pointer means no file processed so far
 // set that field; resolve() applies the documented default to any field
 // still nil once every file has been merged.

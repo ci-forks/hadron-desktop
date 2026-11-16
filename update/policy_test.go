@@ -8,7 +8,7 @@ import (
 const hex64 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 func policyRel() Release {
-	return Release{Flavor: "sway", Version: "v0.0.3", ImageRepo: "ghcr.io/kairos-community/hadron-desktop", GitHubRepo: "kairos-community/hadron-desktop"}
+	return Release{Flavor: "sway", Version: "v0.0.3", ImageRepo: "ghcr.io/kairos-community/isotope", GitHubRepo: "kairos-community/isotope"}
 }
 
 func policyInfo(t *testing.T, ref string, labels map[string]string) ImageInfo {
@@ -24,7 +24,7 @@ func TestClassifyTrustedByName(t *testing.T) {
 	rel := policyRel()
 	info := policyInfo(t, rel.ImageRepo+":niri-v0.0.4", nil)
 	v, err := Classify(info, rel, []Latest{{Tag: "v0.0.4"}})
-	want := Verdict{Flavor: "niri", Version: "v0.0.4", GPU: gpuFull, Trusted: true, Hadron: true}
+	want := Verdict{Flavor: "niri", Version: "v0.0.4", GPU: gpuFull, Trusted: true, Isotope: true}
 	if err != nil || v != want {
 		t.Fatalf("got %+v, %v; want %+v", v, err, want)
 	}
@@ -33,8 +33,8 @@ func TestClassifyTrustedByName(t *testing.T) {
 func TestClassifyUnpublishedTagIsNotTrusted(t *testing.T) {
 	rel := policyRel()
 	info := policyInfo(t, rel.ImageRepo+":niri-v0.0.4", nil)
-	if _, err := Classify(info, rel, []Latest{{Tag: "v0.0.3"}}); !errors.Is(err, ErrNotHadron) {
-		t.Fatalf("got %v, want ErrNotHadron", err)
+	if _, err := Classify(info, rel, []Latest{{Tag: "v0.0.3"}}); !errors.Is(err, ErrNotIsotope) {
+		t.Fatalf("got %v, want ErrNotIsotope", err)
 	}
 }
 
@@ -42,18 +42,18 @@ func TestClassifyTrustedByNameRejectsLookalikes(t *testing.T) {
 	rel := policyRel()
 	pub := []Latest{{Tag: "v0.0.4"}, {Tag: "v0.0.4-rc1"}}
 	for _, ref := range []string{
-		rel.ImageRepo + ":foo-v0.0.4",             // not a desktop flavor
-		rel.ImageRepo + ":niri-v0.0.4-rc1",        // prerelease
-		rel.ImageRepo + ":niri-0.0.4",             // no v
-		rel.ImageRepo + ":niri-vm-v0.0.4-rc1",     // prerelease, vm line
-		rel.ImageRepo + ":niri-gpu-v0.0.4",        // not a line
-		rel.ImageRepo + ":vm-niri-v0.0.4",         // line first
-		rel.ImageRepo + ":niri-vm-vm-v0.0.4",      // line twice
-		"ghcr.io/evil/hadron-desktop:niri-v0.0.4", // other repo
-		rel.ImageRepo + "@sha256:" + hex64,        // digest only
+		rel.ImageRepo + ":foo-v0.0.4",         // not a desktop flavor
+		rel.ImageRepo + ":niri-v0.0.4-rc1",    // prerelease
+		rel.ImageRepo + ":niri-0.0.4",         // no v
+		rel.ImageRepo + ":niri-vm-v0.0.4-rc1", // prerelease, vm line
+		rel.ImageRepo + ":niri-gpu-v0.0.4",    // not a line
+		rel.ImageRepo + ":vm-niri-v0.0.4",     // line first
+		rel.ImageRepo + ":niri-vm-vm-v0.0.4",  // line twice
+		"ghcr.io/evil/isotope:niri-v0.0.4",    // other repo
+		rel.ImageRepo + "@sha256:" + hex64,    // digest only
 	} {
-		if _, err := Classify(policyInfo(t, ref, nil), rel, pub); !errors.Is(err, ErrNotHadron) {
-			t.Errorf("%s: got %v, want ErrNotHadron", ref, err)
+		if _, err := Classify(policyInfo(t, ref, nil), rel, pub); !errors.Is(err, ErrNotIsotope) {
+			t.Errorf("%s: got %v, want ErrNotIsotope", ref, err)
 		}
 	}
 }
@@ -62,7 +62,7 @@ func TestClassifyLabelled(t *testing.T) {
 	labels := map[string]string{labelFlavor: "sway", labelVersion: "v9.9.9"}
 	info := policyInfo(t, "example.com/other/img:latest", labels)
 	v, err := Classify(info, policyRel(), nil)
-	want := Verdict{Flavor: "sway", Version: "v9.9.9", Hadron: true}
+	want := Verdict{Flavor: "sway", Version: "v9.9.9", Isotope: true}
 	if err != nil || v != want {
 		t.Fatalf("got %+v, %v; want %+v", v, err, want)
 	}
@@ -75,8 +75,8 @@ func TestClassifyLabelledNeedsFlavorAndVersion(t *testing.T) {
 		{labelFlavor: "bogus", labelVersion: "v1.0.0"},
 	} {
 		info := policyInfo(t, "example.com/other/img:latest", labels)
-		if _, err := Classify(info, policyRel(), nil); !errors.Is(err, ErrNotHadron) {
-			t.Errorf("%v: got %v, want ErrNotHadron", labels, err)
+		if _, err := Classify(info, policyRel(), nil); !errors.Is(err, ErrNotIsotope) {
+			t.Errorf("%v: got %v, want ErrNotIsotope", labels, err)
 		}
 	}
 }
@@ -95,8 +95,8 @@ func TestClassifyRefusesAgent(t *testing.T) {
 
 func TestClassifyUnlabelledThirdParty(t *testing.T) {
 	info := policyInfo(t, "example.com/other/img:latest", nil)
-	if _, err := Classify(info, policyRel(), nil); !errors.Is(err, ErrNotHadron) {
-		t.Fatalf("got %v, want ErrNotHadron", err)
+	if _, err := Classify(info, policyRel(), nil); !errors.Is(err, ErrNotIsotope) {
+		t.Fatalf("got %v, want ErrNotIsotope", err)
 	}
 }
 
@@ -115,8 +115,8 @@ func TestClassifyTagPlusDigestIsNotTrustedByName(t *testing.T) {
 	rel := policyRel()
 	ref := rel.ImageRepo + ":niri-v0.0.4@sha256:" + hex64
 	pub := []Latest{{Tag: "v0.0.4"}}
-	if _, err := Classify(policyInfo(t, ref, nil), rel, pub); !errors.Is(err, ErrNotHadron) {
-		t.Fatalf("got %v, want ErrNotHadron", err)
+	if _, err := Classify(policyInfo(t, ref, nil), rel, pub); !errors.Is(err, ErrNotIsotope) {
+		t.Fatalf("got %v, want ErrNotIsotope", err)
 	}
 	agent := map[string]string{labelFlavor: "agent", labelVersion: "v0.0.4"}
 	if _, err := Classify(policyInfo(t, ref, agent), rel, pub); !errors.Is(err, ErrAgentImage) {
@@ -124,7 +124,7 @@ func TestClassifyTagPlusDigestIsNotTrustedByName(t *testing.T) {
 	}
 	labelled := map[string]string{labelFlavor: "niri", labelVersion: "v0.0.4"}
 	v, err := Classify(policyInfo(t, ref, labelled), rel, pub)
-	if err != nil || v.Trusted || !v.Hadron {
+	if err != nil || v.Trusted || !v.Isotope {
 		t.Fatalf("got %+v, %v; want labelled, untrusted", v, err)
 	}
 }
@@ -132,8 +132,8 @@ func TestClassifyTagPlusDigestIsNotTrustedByName(t *testing.T) {
 func TestClassifyVersionLabelMustBeStrict(t *testing.T) {
 	for _, v := range []string{"latest", "v1.0", "v1.0.0-rc1", "1.0.0", "v01.0.0"} {
 		info := policyInfo(t, "example.com/o/i:x", map[string]string{labelFlavor: "sway", labelVersion: v})
-		if _, err := Classify(info, policyRel(), nil); !errors.Is(err, ErrNotHadron) {
-			t.Errorf("%q: got %v, want ErrNotHadron", v, err)
+		if _, err := Classify(info, policyRel(), nil); !errors.Is(err, ErrNotIsotope) {
+			t.Errorf("%q: got %v, want ErrNotIsotope", v, err)
 		}
 	}
 }
@@ -180,7 +180,7 @@ func TestLineRef(t *testing.T) {
 
 // The server edition and the desktops never install each other's images,
 // whether the image says so by its tag or by its label, and advanced mode
-// cannot override it (the errors are neither ErrNotHadron nor ErrNotRelease).
+// cannot override it (the errors are neither ErrNotIsotope nor ErrNotRelease).
 func TestClassifyKeepsTheEditionsApart(t *testing.T) {
 	desktop := policyRel()
 	server := policyRel()
@@ -208,7 +208,7 @@ func TestClassifyKeepsTheEditionsApart(t *testing.T) {
 		if !errors.Is(err, c.want) {
 			t.Errorf("%s: got %v, want %v", c.name, err, c.want)
 		}
-		if errors.Is(err, ErrNotHadron) || errors.Is(err, ErrNotRelease) {
+		if errors.Is(err, ErrNotIsotope) || errors.Is(err, ErrNotRelease) {
 			t.Errorf("%s: %v would be overridable", c.name, err)
 		}
 	}
@@ -219,22 +219,48 @@ func TestClassifyServerTrustsServerReleases(t *testing.T) {
 	rel.Flavor = flavorServer
 	pub := []Latest{{Tag: "v0.0.4"}}
 	v, err := Classify(policyInfo(t, rel.ImageRepo+":server-v0.0.4", nil), rel, pub)
-	want := Verdict{Flavor: flavorServer, Version: "v0.0.4", GPU: gpuFull, Trusted: true, Hadron: true}
+	want := Verdict{Flavor: flavorServer, Version: "v0.0.4", GPU: gpuFull, Trusted: true, Isotope: true}
 	if err != nil || v != want {
 		t.Fatalf("got %+v, %v; want %+v", v, err, want)
 	}
 	// There is no server vm line.
-	if _, err := Classify(policyInfo(t, rel.ImageRepo+":server-vm-v0.0.4", nil), rel, pub); !errors.Is(err, ErrNotHadron) {
-		t.Fatalf("server-vm tag: got %v, want ErrNotHadron", err)
+	if _, err := Classify(policyInfo(t, rel.ImageRepo+":server-vm-v0.0.4", nil), rel, pub); !errors.Is(err, ErrNotIsotope) {
+		t.Fatalf("server-vm tag: got %v, want ErrNotIsotope", err)
 	}
-	// A labelled server image from elsewhere is Hadron, not trusted.
+	// A labelled server image from elsewhere is Isotope, not trusted.
 	v, err = Classify(policyInfo(t, "example.com/other/img:latest",
 		map[string]string{labelFlavor: "server", labelVersion: "v0.0.5"}), rel, pub)
-	if err != nil || v.Trusted || !v.Hadron || v.Flavor != flavorServer {
+	if err != nil || v.Trusted || !v.Isotope || v.Flavor != flavorServer {
 		t.Fatalf("labelled: got %+v, %v", v, err)
 	}
 	// Images from other repositories are not judged by their tag.
-	if _, err := Classify(policyInfo(t, "example.com/other/img:sway-v0.0.4", nil), rel, pub); !errors.Is(err, ErrNotHadron) {
-		t.Fatalf("other repo: got %v, want ErrNotHadron", err)
+	if _, err := Classify(policyInfo(t, "example.com/other/img:sway-v0.0.4", nil), rel, pub); !errors.Is(err, ErrNotIsotope) {
+		t.Fatalf("other repo: got %v, want ErrNotIsotope", err)
+	}
+}
+
+// Images built before the rename to Isotope carry only the old labels.
+func TestClassifyReadsTheLabelsFromBeforeTheRename(t *testing.T) {
+	labels := map[string]string{"io.kairos.hadron-desktop.flavor": "sway", "io.kairos.hadron-desktop.version": "v9.9.9", "io.kairos.hadron-desktop.gpu": "vm"}
+	v, err := Classify(policyInfo(t, "example.com/other/img:latest", labels), policyRel(), nil)
+	want := Verdict{Flavor: "sway", Version: "v9.9.9", GPU: "vm", Isotope: true}
+	if err != nil || v != want {
+		t.Fatalf("got %+v, %v; want %+v", v, err, want)
+	}
+}
+
+func TestClassifyRefusesAnOldAgentImage(t *testing.T) {
+	labels := map[string]string{"io.kairos.hadron-desktop.flavor": "agent", "io.kairos.hadron-desktop.version": "v9.9.9"}
+	if _, err := Classify(policyInfo(t, "example.com/other/img:latest", labels), policyRel(), nil); !errors.Is(err, ErrAgentImage) {
+		t.Fatalf("err = %v, want ErrAgentImage", err)
+	}
+}
+
+// The new label wins when an image carries both.
+func TestClassifyPrefersTheNewLabel(t *testing.T) {
+	labels := map[string]string{labelFlavor: "i3", "io.kairos.hadron-desktop.flavor": "sway", labelVersion: "v9.9.9"}
+	v, err := Classify(policyInfo(t, "example.com/other/img:latest", labels), policyRel(), nil)
+	if err != nil || v.Flavor != "i3" {
+		t.Fatalf("got %+v, %v; want flavor i3", v, err)
 	}
 }

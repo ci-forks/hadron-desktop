@@ -1,7 +1,7 @@
 // This file is the redacted status publisher: the gateway serializes an
 // 11-field, secret-free snapshot to a world-readable status.json that the
-// appliance's i3 status bar (hadron-status) and one-shot first-run panel
-// (hadron-agent-first-run) read. The FIELD NAMES here are a frozen contract
+// appliance's i3 status bar (isotope-status) and one-shot first-run panel
+// (isotope-agent-first-run) read. The FIELD NAMES here are a frozen contract
 // with those two shell scripts -- see their header comments -- and must never
 // drift.
 //
@@ -28,14 +28,14 @@ import (
 const (
 	// DefaultStatusFile is the standard path the redacted status.json is
 	// published to. The gateway unit grants ReadWritePaths on its parent dir.
-	DefaultStatusFile = "/run/hadron-agent/status/status.json"
+	DefaultStatusFile = "/run/isotope-agent/status/status.json"
 	// DefaultStatusInterval is how often the writer republishes the snapshot.
 	DefaultStatusInterval = time.Second
 )
 
 // RedactedStatus is the fully redacted, 11-field snapshot published to
-// status.json. Every field name here is depended on VERBATIM by hadron-status
-// and hadron-agent-first-run; do not rename them. It carries only a version
+// status.json. Every field name here is depended on VERBATIM by isotope-status
+// and isotope-agent-first-run; do not rename them. It carries only a version
 // string, the public listen address, the redacted fingerprint, and booleans --
 // never a bearer, token, user, or private path.
 type RedactedStatus struct {

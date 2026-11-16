@@ -1,5 +1,5 @@
 #!/bin/sh
-# Write the emoji list that hadron-emoji shows, from Unicode's emoji-test.txt.
+# Write the emoji list that isotope-emoji shows, from Unicode's emoji-test.txt.
 #
 #   tools/gen-emoji-list.sh emoji-test.txt > emoji.txt
 #

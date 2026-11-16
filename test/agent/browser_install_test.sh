@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Tests for hadron-agent-browser-install: installs org.chromium.Chromium
-# system-wide on first boot, idempotently, through the HADRON_FLATPAK seam.
+# Tests for isotope-agent-browser-install: installs org.chromium.Chromium
+# system-wide on first boot, idempotently, through the ISOTOPE_FLATPAK seam.
 #
 # The real flatpak is intercepted by a fake that appends each invocation to
 # $CALLS and answers `info` from a control file, so a test can assert exactly
@@ -8,7 +8,7 @@
 set -u
 
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
-script="$repo_root/rootfs-agent/usr/bin/hadron-agent-browser-install"
+script="$repo_root/rootfs-agent/usr/bin/isotope-agent-browser-install"
 
 fail=0
 err() { echo "FAIL: $*" >&2; fail=1; }
@@ -40,7 +40,7 @@ EOF
 
 # 2. already installed -> no remote-add, no install
 d="$(mktemp -d)"; make_fake_flatpak "$d"; : > "$d/installed"
-HADRON_FLATPAK="$d/flatpak" HADRON_PROFILE_MARKER=/dev/null \
+ISOTOPE_FLATPAK="$d/flatpak" ISOTOPE_PROFILE_MARKER=/dev/null \
   sh "$script" >/dev/null 2>&1
 if grep -q "install" "$d/calls" 2>/dev/null; then
   err "already-installed run must not call install"
@@ -49,7 +49,7 @@ rm -rf "$d"
 
 # 3. not installed -> adds the remote then installs
 d="$(mktemp -d)"; make_fake_flatpak "$d"
-HADRON_FLATPAK="$d/flatpak" HADRON_PROFILE_MARKER=/dev/null \
+ISOTOPE_FLATPAK="$d/flatpak" ISOTOPE_PROFILE_MARKER=/dev/null \
   sh "$script" >/dev/null 2>&1
 if grep -q "remote-add" "$d/calls" && grep -q "install" "$d/calls"; then
   ok "absent -> remote-add + install"
@@ -58,7 +58,7 @@ rm -rf "$d"
 
 # 4. install failure -> script exits non-zero (unit will retry next boot)
 d="$(mktemp -d)"; make_fake_flatpak "$d"; : > "$d/fail_install"
-if HADRON_FLATPAK="$d/flatpak" HADRON_PROFILE_MARKER=/dev/null \
+if ISOTOPE_FLATPAK="$d/flatpak" ISOTOPE_PROFILE_MARKER=/dev/null \
      sh "$script" >/dev/null 2>&1; then
   err "a failed install must make the script exit non-zero"
 else ok "install failure -> non-zero exit"; fi
@@ -67,7 +67,7 @@ rm -rf "$d"
 # 5. marker absent -> clean no-op: exit 0 and flatpak never invoked at all.
 # Guards the defence that stops a manual run on a non-appliance from pulling 2 GB.
 d="$(mktemp -d)"; make_fake_flatpak "$d"
-if HADRON_FLATPAK="$d/flatpak" HADRON_PROFILE_MARKER="$d/nonexistent-marker" \
+if ISOTOPE_FLATPAK="$d/flatpak" ISOTOPE_PROFILE_MARKER="$d/nonexistent-marker" \
      sh "$script" >/dev/null 2>&1; then
   if [ -e "$d/calls" ]; then
     err "marker absent must not invoke flatpak at all (got: $(cat "$d/calls"))"

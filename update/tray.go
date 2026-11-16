@@ -38,7 +38,7 @@ func runTray(noIcon bool, stderr io.Writer) int {
 	// whenever a watcher takes the name, so a bar that starts after the tray
 	// still shows it.
 	systray.Run(func() {
-		systray.SetTitle("Hadron Desktop updates")
+		systray.SetTitle("Isotope updates")
 		app.ui = newSystrayUI(app.clicks)
 		go app.run(context.Background())
 	}, nil)

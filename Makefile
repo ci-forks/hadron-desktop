@@ -1,4 +1,4 @@
-# Build either Hadron desktop variant, the opt-in agent overlay, and bootable
+# Build either Isotope variant, the opt-in agent overlay, and bootable
 # installer ISOs.
 #
 #   make image        # build the desktop image (Kairos init layer folded in)
@@ -101,7 +101,7 @@ CACHE_NAME = $(DESKTOP)$(if $(filter full,$(GPU)),-full)
 # place of the llvm stage. The tag from `make print-llvm-tag` is a hash of the
 # Hadron release and the llvm stage text, so a stale image is never used: any
 # change to either gives a new tag. Release builds publish it as
-# ghcr.io/kairos-community/hadron-desktop:<print-llvm-tag>, which a local
+# ghcr.io/kairos-community/isotope:<print-llvm-tag>, which a local
 # build can use too.
 LLVM_IMAGE ?=
 ifdef LLVM_IMAGE
@@ -201,7 +201,7 @@ iso: image
 # The image is built on hadron-trusted, the Hadron base without dracut (a UKI
 # carries the whole image as its initramfs). UKI_FROM skips the desktop build:
 # it re-runs only the kairos stage, with TRUSTED_BOOT=true, on a published
-# image such as ghcr.io/kairos-community/hadron-desktop:sway-vm-v0.0.8. Changes
+# image such as ghcr.io/kairos-community/isotope:sway-vm-v0.0.8. Changes
 # to rootfs/ in this tree are then not in the ISO, only the kairos stage's.
 KEYS_DIR  ?= build/uki-keys
 UKI_IMAGE ?= $(DESKTOP)-desktop:uki
@@ -213,7 +213,7 @@ uki-keys:
 	@[ ! -e $(KEYS_DIR)/db.key ] || { echo "$(KEYS_DIR) already holds keys; machines enrolled with them need them" >&2; exit 1; }
 	mkdir -p $(KEYS_DIR)
 	docker run --rm -u $$(id -u):$$(id -g) -v $(abspath $(KEYS_DIR)):/keys $(AURORA_IMAGE) \
-	  genkey -e 365 --output /keys "Hadron Desktop local"
+	  genkey -e 365 --output /keys "Isotope local"
 
 uki-image:
 ifdef UKI_FROM

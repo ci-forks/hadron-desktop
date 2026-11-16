@@ -194,7 +194,7 @@ NAME="/dev/vda2" FSTYPE="crypto_LUKS" LABEL="COS_OEM_LUKS"
 
 func TestEnrollRecoveryKey(t *testing.T) {
 	old := recoveryKeyFile
-	recoveryKeyFile = filepath.Join(t.TempDir(), "hadron-install", "recovery-key")
+	recoveryKeyFile = filepath.Join(t.TempDir(), "isotope-install", "recovery-key")
 	t.Cleanup(func() { recoveryKeyFile = old })
 	key, _ := newRecoveryKey()
 
@@ -251,7 +251,7 @@ func TestEnrollRecoveryKey(t *testing.T) {
 
 func TestEnrollRecoveryKeyFailures(t *testing.T) {
 	old := recoveryKeyFile
-	recoveryKeyFile = filepath.Join(t.TempDir(), "hadron-install", "recovery-key")
+	recoveryKeyFile = filepath.Join(t.TempDir(), "isotope-install", "recovery-key")
 	t.Cleanup(func() { recoveryKeyFile = old })
 	key, _ := newRecoveryKey()
 	for _, step := range []string{"luksAddKey", "token", "open"} {
@@ -310,11 +310,11 @@ func TestWizardRecoveryKeyAfterThePassphrase(t *testing.T) {
 
 func TestEnrollRecoveryKeyWithThePassphrase(t *testing.T) {
 	old := recoveryKeyFile
-	recoveryKeyFile = filepath.Join(t.TempDir(), "hadron-install", "recovery-key")
+	recoveryKeyFile = filepath.Join(t.TempDir(), "isotope-install", "recovery-key")
 	t.Cleanup(func() { recoveryKeyFile = old })
 	key, _ := newRecoveryKey()
 	f := &fakeTB{added: map[string]bool{}}
-	pass := "/run/hadron-install/passphrase"
+	pass := "/run/isotope-install/passphrase"
 	if err := enrollRecoveryKeyWith(f.run, "/dev/vda", key, &pass, func(string) {}); err != nil {
 		t.Fatal(err)
 	}

@@ -9,7 +9,7 @@ import (
 )
 
 // validDigest is a syntactically valid "sha256:<64 lowercase hex>" digest,
-// taken verbatim from the phase3-task-1 brief's example hadron_agent block.
+// taken verbatim from the phase3-task-1 brief's example isotope_agent block.
 const validDigest = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
 // anotherValidDigest is a second, DIFFERENT valid digest used to exercise
@@ -32,7 +32,7 @@ func TestLoadMergesFilesInSortedOrderLastScalarWins(t *testing.T) {
 	// Filenames deliberately sort as 01 < 02 alphabetically; the LATER file
 	// (02-override.yaml) must win for the scalars it redefines.
 	writeOEMFile(t, dir, "01-base.yaml", `
-hadron_agent:
+isotope_agent:
   endpoint:
     listen: "127.0.0.1:9000"
     mdns: true
@@ -40,7 +40,7 @@ hadron_agent:
     max_processes: 4
 `)
 	writeOEMFile(t, dir, "02-override.yaml", `
-hadron_agent:
+isotope_agent:
   endpoint:
     listen: "0.0.0.0:8000"
     mdns: false
@@ -68,12 +68,12 @@ func TestLoadProcessesFilesInLexicalFilenameOrderRegardlessOfCreationOrder(t *te
 	// Create the file that should win FIRST on disk, but give it a filename
 	// that sorts LAST, to prove ordering is by filename, not mtime/creation.
 	writeOEMFile(t, dir, "a-first-created-sorts-last.yaml", `
-hadron_agent:
+isotope_agent:
   endpoint:
     mdns: true
 `)
 	writeOEMFile(t, dir, "0-created-second-sorts-first.yaml", `
-hadron_agent:
+isotope_agent:
   endpoint:
     mdns: false
 `)
@@ -99,7 +99,7 @@ stages:
     - name: "setup"
       commands:
         - echo hello
-hadron_agent:
+isotope_agent:
   endpoint:
     listen: "0.0.0.0:7443"
   auth:
@@ -117,15 +117,44 @@ hadron_agent:
 	}
 }
 
-func TestLoadRejectsConflictingSecretAcrossFiles(t *testing.T) {
+func TestLoadAcceptsTheKeyFromBeforeTheRename(t *testing.T) {
 	dir := t.TempDir()
-	writeOEMFile(t, dir, "01-first.yaml", `
+	writeOEMFile(t, dir, "99_hadron_embedded_config.yaml", `
 hadron_agent:
   auth:
     user_token_hash: "`+validDigest+`"
 `)
-	writeOEMFile(t, dir, "02-second.yaml", `
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.Enabled || cfg.Auth.UserTokenHash != validDigest {
+		t.Errorf("Enabled = %v, UserTokenHash = %q; want the hadron_agent section", cfg.Enabled, cfg.Auth.UserTokenHash)
+	}
+}
+
+func TestLoadRejectsBothKeysInOneFile(t *testing.T) {
+	dir := t.TempDir()
+	writeOEMFile(t, dir, "99.yaml", `
+isotope_agent:
+  enabled: true
 hadron_agent:
+  enabled: false
+`)
+	if _, err := Load(dir); err == nil || !strings.Contains(err.Error(), "hadron_agent") {
+		t.Fatalf("Load = %v, want an error naming both keys", err)
+	}
+}
+
+func TestLoadRejectsConflictingSecretAcrossFiles(t *testing.T) {
+	dir := t.TempDir()
+	writeOEMFile(t, dir, "01-first.yaml", `
+isotope_agent:
+  auth:
+    user_token_hash: "`+validDigest+`"
+`)
+	writeOEMFile(t, dir, "02-second.yaml", `
+isotope_agent:
   auth:
     user_token_hash: "`+anotherValidDigest+`"
 `)
@@ -141,12 +170,12 @@ hadron_agent:
 func TestLoadAllowsSameSecretRepeatedAcrossFiles(t *testing.T) {
 	dir := t.TempDir()
 	writeOEMFile(t, dir, "01-first.yaml", `
-hadron_agent:
+isotope_agent:
   auth:
     user_token_hash: "`+validDigest+`"
 `)
 	writeOEMFile(t, dir, "02-second.yaml", `
-hadron_agent:
+isotope_agent:
   auth:
     user_token_hash: "`+validDigest+`"
 `)
@@ -221,7 +250,7 @@ func TestLoadMissingOEMDirResolvesEnabledWithDefaults(t *testing.T) {
 func TestLoadExplicitDisabledSuppressesConfig(t *testing.T) {
 	dir := t.TempDir()
 	writeOEMFile(t, dir, "01-disable.yaml", `
-hadron_agent:
+isotope_agent:
   enabled: false
 `)
 	cfg, err := Load(dir)
@@ -240,7 +269,7 @@ hadron_agent:
 func TestValidateRejectsNonLoopbackListenerWithInsecureLoopback(t *testing.T) {
 	dir := t.TempDir()
 	writeOEMFile(t, dir, "01.yaml", `
-hadron_agent:
+isotope_agent:
   endpoint:
     listen: "0.0.0.0:7443"
     insecure_loopback: true
@@ -253,7 +282,7 @@ hadron_agent:
 func TestValidateAllowsLoopbackListenerWithInsecureLoopback(t *testing.T) {
 	dir := t.TempDir()
 	writeOEMFile(t, dir, "01.yaml", `
-hadron_agent:
+isotope_agent:
   endpoint:
     listen: "127.0.0.1:7443"
     insecure_loopback: true
@@ -286,7 +315,7 @@ func TestValidateRejectsBadDigestPrefix(t *testing.T) {
 				extra = "\n    " + class + "_token_hash: \"" + validDigest + "\"\n    " + class + "_previous_valid_until: \"" + time.Now().Add(time.Hour).Format(time.RFC3339) + "\""
 			}
 			writeOEMFile(t, dir, "01.yaml", `
-hadron_agent:
+isotope_agent:
   auth:
     `+field+`: "`+bad+`"`+extra+`
 `)
@@ -300,7 +329,7 @@ hadron_agent:
 func TestValidateAllowsEmptyDigestFields(t *testing.T) {
 	dir := t.TempDir()
 	writeOEMFile(t, dir, "01.yaml", `
-hadron_agent:
+isotope_agent:
   enabled: true
 `)
 	if _, err := Load(dir); err != nil {
@@ -312,7 +341,7 @@ func TestValidateRejectsRotationOverlapOverTwentyFourHours(t *testing.T) {
 	dir := t.TempDir()
 	tooFar := time.Now().Add(25 * time.Hour).Format(time.RFC3339)
 	writeOEMFile(t, dir, "01.yaml", `
-hadron_agent:
+isotope_agent:
   auth:
     user_token_hash: "`+validDigest+`"
     user_previous_token_hash: "`+anotherValidDigest+`"
@@ -327,7 +356,7 @@ func TestValidateAllowsRotationOverlapUnderTwentyFourHours(t *testing.T) {
 	dir := t.TempDir()
 	fine := time.Now().Add(23 * time.Hour).Format(time.RFC3339)
 	writeOEMFile(t, dir, "01.yaml", `
-hadron_agent:
+isotope_agent:
   auth:
     user_token_hash: "`+validDigest+`"
     user_previous_token_hash: "`+anotherValidDigest+`"
@@ -341,7 +370,7 @@ hadron_agent:
 func TestValidateRejectsPortZero(t *testing.T) {
 	dir := t.TempDir()
 	writeOEMFile(t, dir, "01.yaml", `
-hadron_agent:
+isotope_agent:
   endpoint:
     listen: "0.0.0.0:0"
 `)
@@ -353,23 +382,23 @@ hadron_agent:
 func TestValidateRejectsUnknownTopLevelField(t *testing.T) {
 	dir := t.TempDir()
 	writeOEMFile(t, dir, "01.yaml", `
-hadron_agent:
+isotope_agent:
   enabled: true
   bogus_field: true
 `)
 	if _, err := Load(dir); err == nil {
-		t.Fatalf("Load: want error for unknown top-level hadron_agent field, got nil")
+		t.Fatalf("Load: want error for unknown top-level isotope_agent field, got nil")
 	}
 }
 
 // TestValidateRejectsUnknownNestedField locks in a byproduct of decoding
-// hadron_agent with yaml.Decoder.KnownFields(true): strictness applies to
+// isotope_agent with yaml.Decoder.KnownFields(true): strictness applies to
 // every nested struct in the subtree, not only the top level, so a typo
 // inside e.g. "endpoint" is caught too.
 func TestValidateRejectsUnknownNestedField(t *testing.T) {
 	dir := t.TempDir()
 	writeOEMFile(t, dir, "01.yaml", `
-hadron_agent:
+isotope_agent:
   endpoint:
     listen: "0.0.0.0:7443"
     bogus_nested_field: true
@@ -382,7 +411,7 @@ hadron_agent:
 func TestValidateRejectsTLSOnlyCertificateSet(t *testing.T) {
 	dir := t.TempDir()
 	writeOEMFile(t, dir, "01.yaml", `
-hadron_agent:
+isotope_agent:
   tls:
     certificate_pem: "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----"
 `)
@@ -394,7 +423,7 @@ hadron_agent:
 func TestValidateRejectsTLSOnlyPrivateKeySet(t *testing.T) {
 	dir := t.TempDir()
 	writeOEMFile(t, dir, "01.yaml", `
-hadron_agent:
+isotope_agent:
   tls:
     private_key_pem: "-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----"
 `)
@@ -406,7 +435,7 @@ hadron_agent:
 func TestValidateAllowsTLSBothSet(t *testing.T) {
 	dir := t.TempDir()
 	writeOEMFile(t, dir, "01.yaml", `
-hadron_agent:
+isotope_agent:
   tls:
     certificate_pem: "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----"
     private_key_pem: "-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----"
@@ -419,7 +448,7 @@ hadron_agent:
 func TestValidateAllowsTLSNeitherSet(t *testing.T) {
 	dir := t.TempDir()
 	writeOEMFile(t, dir, "01.yaml", `
-hadron_agent:
+isotope_agent:
   enabled: true
 `)
 	if _, err := Load(dir); err != nil {
@@ -434,7 +463,7 @@ hadron_agent:
 func TestLoadFullBriefExampleRoundTrips(t *testing.T) {
 	dir := t.TempDir()
 	writeOEMFile(t, dir, "01.yaml", `
-hadron_agent:
+isotope_agent:
   enabled: true
   endpoint:
     listen: "0.0.0.0:7443"

@@ -1,6 +1,6 @@
-Welcome to Hadron Server, the headless edition of Hadron Desktop, built from source on Kairos.
+Welcome to Isotope Server, the headless edition of Isotope, built from source on Kairos.
 
   Network    : nmcli device status   ·   sudo nmcli connection modify …
-  Updates    : hadron-update   ·   hadron-update upgrade
-  Extensions : hadron-ext list   ·   hadron-ext browse
+  Updates    : isotope-update   ·   isotope-update upgrade
+  Extensions : isotope-ext list   ·   isotope-ext browse
   Containers : docker ps   ·   docker run --rm hello-world

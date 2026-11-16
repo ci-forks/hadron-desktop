@@ -1,4 +1,4 @@
-// This file turns a parsed, validated hadron_agent Config (see config.go)
+// This file turns a parsed, validated isotope_agent Config (see config.go)
 // into the persistent machine state the appliance's services read at boot:
 // the gateway's TLS identity and service config, the session broker's config,
 // and -- only when an admin bearer is provisioned -- the root helper's config.
@@ -35,7 +35,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/mudler/hadron-desktop/agent/internal/auth"
+	"github.com/kairos-community/isotope/agent/internal/auth"
 )
 
 // Default locations for the persistent state dir and the ephemeral runtime
@@ -44,10 +44,10 @@ const (
 	// DefaultStateDir is the persistent machine-state root. Its subtrees
 	// (gateway/, session/, root/) hold digests and TLS material, never a
 	// plaintext bearer.
-	DefaultStateDir = "/var/lib/hadron-agent"
+	DefaultStateDir = "/var/lib/isotope-agent"
 	// DefaultRuntimeDir is the tmpfs runtime root. The one-shot plaintext
 	// first-run token is the only thing this package writes here.
-	DefaultRuntimeDir = "/run/hadron-agent"
+	DefaultRuntimeDir = "/run/isotope-agent"
 )
 
 // certValidity is the lifetime of a generated self-signed certificate: 397
@@ -59,7 +59,7 @@ const certValidity = 397 * 24 * time.Hour
 const (
 	ownerRoot    = "root"
 	ownerAgent   = "agent"
-	ownerGateway = "hadron-agent-gateway"
+	ownerGateway = "isotope-agent-gateway"
 )
 
 // ---------------------------------------------------------------------------
@@ -185,7 +185,7 @@ type ServiceLimits struct {
 	MaxRequestBytes    int `json:"max_request_bytes"`
 }
 
-// GatewayConfig is /var/lib/hadron-agent/gateway/config.json: everything the
+// GatewayConfig is /var/lib/isotope-agent/gateway/config.json: everything the
 // public gateway process needs. It carries only digests, never bearers. The
 // gateway service loads it via LoadGatewayConfig at startup.
 type GatewayConfig struct {
@@ -200,13 +200,13 @@ type GatewayConfig struct {
 	Limits           ServiceLimits `json:"limits"`
 }
 
-// SessionConfig is /var/lib/hadron-agent/session/config.json: the unprivileged
+// SessionConfig is /var/lib/isotope-agent/session/config.json: the unprivileged
 // broker's limits. It holds no credentials.
 type SessionConfig struct {
 	Limits ServiceLimits `json:"limits"`
 }
 
-// RootConfig is /var/lib/hadron-agent/root/config.json: the admin digest the
+// RootConfig is /var/lib/isotope-agent/root/config.json: the admin digest the
 // root helper independently re-verifies. Written only when admin is enabled.
 type RootConfig struct {
 	Admin Rotation `json:"admin"`
@@ -704,7 +704,7 @@ func generateSelfSignedCert(now time.Time, hostname string, extraIPs []net.IP) (
 
 	cn := hostname
 	if cn == "" {
-		cn = "hadron-agent"
+		cn = "isotope-agent"
 	}
 	tmpl := &x509.Certificate{
 		SerialNumber:          serial,

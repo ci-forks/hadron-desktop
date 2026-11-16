@@ -1,7 +1,7 @@
-// hadron-update keeps a Hadron Desktop install current.
+// isotope-update keeps an Isotope install current.
 //
-// It looks up the newest hadron-desktop release on GitHub, compares it with
-// /etc/hadron-desktop/release, and upgrades by handing the matching OCI image to
+// It looks up the newest isotope release on GitHub, compares it with
+// /etc/isotope/release, and upgrades by handing the matching OCI image to
 // `kairos-agent upgrade`. The image is A/B: the running system is untouched
 // until the reboot, and the previous one stays selectable in the boot menu.
 package main
@@ -28,7 +28,7 @@ const (
 	exitUpdate = 100
 )
 
-const usage = `Usage: hadron-update [command] [flags]
+const usage = `Usage: isotope-update [command] [flags]
 
 Commands:
   status            show the installed and the latest release (default)
@@ -55,28 +55,28 @@ Commands:
   notify            the same as tray --no-icon
       --once             check once and exit
   ext [command]     system extensions: list, browse, info, install, enable,
-                    disable, remove; see "hadron-update ext help". Also
-                    installed as hadron-ext
+                    disable, remove; see "isotope-update ext help". Also
+                    installed as isotope-ext
   daemon            run the root update service on the system bus; started
                     by D-Bus activation, not by hand
 `
 
-// kairosAgent is the upgrade backend. HADRON_UPDATE_AGENT replaces it, so a
+// kairosAgent is the upgrade backend. ISOTOPE_UPDATE_AGENT replaces it, so a
 // test can assert what would have been run without touching a disk.
 func kairosAgent() string {
-	if p := os.Getenv("HADRON_UPDATE_AGENT"); p != "" {
+	if p := os.Getenv("ISOTOPE_UPDATE_AGENT"); p != "" {
 		return p
 	}
 	return "/usr/bin/kairos-agent"
 }
 
 func main() {
-	// hadron-ext is a link to this binary.
-	if filepath.Base(os.Args[0]) == "hadron-ext" {
+	// isotope-ext is a link to this binary.
+	if filepath.Base(os.Args[0]) == "isotope-ext" {
 		os.Exit(cmdExt(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 	}
-	// So is hadron-recovery.
-	if filepath.Base(os.Args[0]) == "hadron-recovery" {
+	// So is isotope-recovery.
+	if filepath.Base(os.Args[0]) == "isotope-recovery" {
 		os.Exit(cmdRecovery(os.Args[1:], os.Stdout, os.Stderr))
 	}
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
@@ -113,13 +113,13 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprint(stdout, usage)
 		return exitOK
 	default:
-		fmt.Fprintf(stderr, "hadron-update: unknown command %q\n\n%s", cmd, usage)
+		fmt.Fprintf(stderr, "isotope-update: unknown command %q\n\n%s", cmd, usage)
 		return exitUsage
 	}
 }
 
 func newFlags(name string, stderr io.Writer) *flag.FlagSet {
-	fs := flag.NewFlagSet("hadron-update "+name, flag.ContinueOnError)
+	fs := flag.NewFlagSet("isotope-update "+name, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() { fmt.Fprint(stderr, usage) }
 	return fs
@@ -132,11 +132,11 @@ func cmdStatus(name string, args []string, stdout, stderr io.Writer) int {
 	}
 	rel, err := LoadRelease(releaseFile())
 	if err != nil {
-		fmt.Fprintln(stderr, "hadron-update:", err)
+		fmt.Fprintln(stderr, "isotope-update:", err)
 		return exitError
 	}
 
-	fmt.Fprintf(stdout, "Installed:  Hadron Desktop %s (%s, Hadron %s)\n",
+	fmt.Fprintf(stdout, "Installed:  Isotope %s (%s, Hadron %s)\n",
 		rel.Version, rel.Flavor, orUnknown(rel.HadronVersion))
 	switch rel.Flavor {
 	case flavorAgent:
@@ -152,7 +152,7 @@ func cmdStatus(name string, args []string, stdout, stderr io.Writer) int {
 
 	latest, err := FetchLatest(context.Background(), rel.GitHubRepo)
 	if err != nil {
-		fmt.Fprintln(stderr, "hadron-update: could not check for updates:", err)
+		fmt.Fprintln(stderr, "isotope-update: could not check for updates:", err)
 		return exitError
 	}
 	if !Newer(latest.Tag, rel.Version) {
@@ -161,7 +161,7 @@ func cmdStatus(name string, args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "Latest:     %s is available.\n", latest.Tag)
 	fmt.Fprintf(stdout, "            What's new: %s\n", latest.URL)
-	fmt.Fprintln(stdout, "            Run `hadron-update upgrade` to install it.")
+	fmt.Fprintln(stdout, "            Run `isotope-update upgrade` to install it.")
 	if name == "check" {
 		return exitUpdate
 	}
@@ -200,17 +200,17 @@ func cmdUpgrade(args []string, stdin io.Reader, stdout, stderr io.Writer) (code 
 
 	rel, err := LoadRelease(releaseFile())
 	if err != nil {
-		fmt.Fprintln(stderr, "hadron-update:", err)
+		fmt.Fprintln(stderr, "isotope-update:", err)
 		return exitError
 	}
 
 	if *version != "" && *imageFlag != "" {
-		fmt.Fprintln(stderr, "hadron-update: --version and --image cannot be combined")
+		fmt.Fprintln(stderr, "isotope-update: --version and --image cannot be combined")
 		return exitUsage
 	}
 	if *version != "" {
 		if _, ok := parseSemver(*version); !ok {
-			fmt.Fprintf(stderr, "hadron-update: %q is not a release tag like v1.2.3\n", *version)
+			fmt.Fprintf(stderr, "isotope-update: %q is not a release tag like v1.2.3\n", *version)
 			return exitUsage
 		}
 	}
@@ -218,7 +218,7 @@ func cmdUpgrade(args []string, stdin io.Reader, stdout, stderr io.Writer) (code 
 		return upgradeViaDaemon(rel, *version, *imageFlag, *yes, *reboot, in, stdout, stderr)
 	}
 	if *imageFlag != "" {
-		fmt.Fprintln(stderr, "hadron-update: --image is not available on the agent flavor")
+		fmt.Fprintln(stderr, "isotope-update: --image is not available on the agent flavor")
 		return exitUsage
 	}
 
@@ -226,22 +226,22 @@ func cmdUpgrade(args []string, stdin io.Reader, stdout, stderr io.Writer) (code 
 	if tag == "" {
 		latest, err := FetchLatest(context.Background(), rel.GitHubRepo)
 		if err != nil {
-			fmt.Fprintln(stderr, "hadron-update: could not check for updates:", err)
+			fmt.Fprintln(stderr, "isotope-update: could not check for updates:", err)
 			return exitError
 		}
 		if !Newer(latest.Tag, rel.Version) {
-			fmt.Fprintf(stdout, "Hadron Desktop %s is the latest release, nothing to do.\n", rel.Version)
+			fmt.Fprintf(stdout, "Isotope %s is the latest release, nothing to do.\n", rel.Version)
 			return exitOK
 		}
 		tag = latest.Tag
 	} else if _, ok := parseSemver(tag); !ok {
-		fmt.Fprintf(stderr, "hadron-update: %q is not a release tag like v1.2.3\n", tag)
+		fmt.Fprintf(stderr, "isotope-update: %q is not a release tag like v1.2.3\n", tag)
 		return exitUsage
 	}
 
 	image := rel.ImageFor(tag)
 	if !*asRootChild {
-		fmt.Fprintf(stdout, "Upgrading Hadron Desktop %s -> %s\n  image: %s\n", rel.Version, tag, image)
+		fmt.Fprintf(stdout, "Upgrading Isotope %s -> %s\n  image: %s\n", rel.Version, tag, image)
 		fmt.Fprintln(stdout, "The running system is not touched; the new one is used from the next boot.")
 
 		// Ask before escalating, so the question is asked once, as the user.
@@ -251,7 +251,7 @@ func cmdUpgrade(args []string, stdin io.Reader, stdout, stderr io.Writer) (code 
 		}
 
 		if err := ImagePullable(context.Background(), image); err != nil {
-			fmt.Fprintf(stderr, "hadron-update: cannot pull the %s image: %v\n", tag, err)
+			fmt.Fprintf(stderr, "isotope-update: cannot pull the %s image: %v\n", tag, err)
 			fmt.Fprintln(stderr, "Releases before upgrade images were published have none; otherwise try again later.")
 			return exitError
 		}
@@ -270,16 +270,16 @@ func cmdUpgrade(args []string, stdin io.Reader, stdout, stderr io.Writer) (code 
 		agent := exec.Command(kairosAgent(), "upgrade", "--source", "oci:"+image)
 		agent.Stdout, agent.Stderr = stdout, stderr
 		if err := agent.Run(); err != nil {
-			fmt.Fprintln(stderr, "hadron-update: the upgrade failed:", err)
+			fmt.Fprintln(stderr, "isotope-update: the upgrade failed:", err)
 			fmt.Fprintln(stderr, "Nothing changed on the running system; you can retry safely.")
 			return exitError
 		}
-		fmt.Fprintf(stdout, "\nHadron Desktop %s is installed and starts on the next boot.\n", tag)
+		fmt.Fprintf(stdout, "\nIsotope %s is installed and starts on the next boot.\n", tag)
 	}
 
 	if *reboot || (!*yes && confirm(in, stdout, "Reboot now?", false)) {
 		if err := rebootCommand().Run(); err != nil {
-			fmt.Fprintln(stderr, "hadron-update: reboot failed:", err)
+			fmt.Fprintln(stderr, "isotope-update: reboot failed:", err)
 			return exitError
 		}
 	}
@@ -294,7 +294,7 @@ var needRoot = func() bool { return os.Geteuid() != 0 }
 func asRoot(args ...string) *exec.Cmd {
 	self, err := os.Executable()
 	if err != nil {
-		self = "/usr/bin/hadron-update"
+		self = "/usr/bin/isotope-update"
 	}
 	c := exec.Command("sudo", append([]string{self}, args...)...)
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
@@ -350,7 +350,7 @@ func cmdNotify(args []string, stderr io.Writer) int {
 		return runTray(true, stderr)
 	}
 	if err := notifyOnce(); err != nil {
-		fmt.Fprintln(stderr, "hadron-update:", err)
+		fmt.Fprintln(stderr, "isotope-update:", err)
 		return exitError
 	}
 	return exitOK
@@ -454,7 +454,7 @@ func retryBusy(f func() error) error {
 
 // daemonFail prints what went wrong with a daemon call and returns the exit code.
 func daemonFail(stderr io.Writer, what string, err error) int {
-	fmt.Fprintf(stderr, "hadron-update: %s%s\n", what, describeDaemonError(err))
+	fmt.Fprintf(stderr, "isotope-update: %s%s\n", what, describeDaemonError(err))
 	return exitError
 }
 
@@ -462,7 +462,7 @@ func daemonFail(stderr io.Writer, what string, err error) int {
 // the retries means another check or inspection holds the service's network slot.
 func netFail(stderr io.Writer, what string, err error) int {
 	if daemonErrName(err) == "Busy" {
-		fmt.Fprintln(stderr, "hadron-update: the update service is busy with another check; try again in a moment.")
+		fmt.Fprintln(stderr, "isotope-update: the update service is busy with another check; try again in a moment.")
 		return exitError
 	}
 	return daemonFail(stderr, what, err)
@@ -471,7 +471,7 @@ func netFail(stderr io.Writer, what string, err error) int {
 func dialOrExplain(stderr io.Writer) (daemonClient, bool) {
 	c, err := dialDaemon()
 	if err != nil {
-		fmt.Fprintln(stderr, "hadron-update: The update service is not available (hadron-updated).")
+		fmt.Fprintln(stderr, "isotope-update: The update service is not available (isotope-updated).")
 		return nil, false
 	}
 	return c, true
@@ -490,7 +490,7 @@ func upgradeViaDaemon(rel Release, version, image string, yes, reboot bool, in *
 	}
 	if image != "" {
 		if !st.Advanced {
-			fmt.Fprintln(stderr, "hadron-update: advanced mode is off; installing an arbitrary image is not allowed on this system.")
+			fmt.Fprintln(stderr, "isotope-update: advanced mode is off; installing an arbitrary image is not allowed on this system.")
 			return exitUsage
 		}
 		if image == "-" {
@@ -511,14 +511,14 @@ func upgradeViaDaemon(rel Release, version, image string, yes, reboot bool, in *
 			return code
 		}
 		if !Newer(newest, rel.Version) && st.Pin == "" {
-			fmt.Fprintf(stdout, "Hadron Desktop %s is up to date.\n", rel.Version)
+			fmt.Fprintf(stdout, "Isotope %s is up to date.\n", rel.Version)
 			return exitOK
 		}
 		tag = newest
 	}
 	ref, err := ReleaseRef(rel, rel.Flavor, tag)
 	if err != nil {
-		fmt.Fprintln(stderr, "hadron-update:", err)
+		fmt.Fprintln(stderr, "isotope-update:", err)
 		return exitError
 	}
 	return installFlow(c, rel, ref.String(), false, yes, reboot, in, stdout, stderr)
@@ -538,7 +538,7 @@ func newestRelease(c daemonClient, stderr io.Writer) (string, int) {
 		}
 	}
 	if newest == "" {
-		fmt.Fprintln(stderr, "hadron-update: no releases found.")
+		fmt.Fprintln(stderr, "isotope-update: no releases found.")
 		return "", exitError
 	}
 	return newest, exitOK
@@ -568,12 +568,12 @@ func cmdSwitch(args []string, stdin io.Reader, stdout, stderr io.Writer) (code i
 		return exitUsage
 	}
 	if *gpu != "" && *gpu != gpuFull && *gpu != gpuVM {
-		fmt.Fprintf(stderr, "hadron-update: --gpu is %q; choose %s or %s.\n", *gpu, gpuFull, gpuVM)
+		fmt.Fprintf(stderr, "isotope-update: --gpu is %q; choose %s or %s.\n", *gpu, gpuFull, gpuVM)
 		return exitUsage
 	}
 	rel, err := LoadRelease(releaseFile())
 	if err != nil {
-		fmt.Fprintln(stderr, "hadron-update:", err)
+		fmt.Fprintln(stderr, "isotope-update:", err)
 		return exitError
 	}
 	if flavor == "" {
@@ -584,7 +584,7 @@ func cmdSwitch(args []string, stdin io.Reader, stdout, stderr io.Writer) (code i
 		line = rel.Line()
 	}
 	if rel.Flavor == flavorServer {
-		fmt.Fprintln(stderr, "hadron-update: the server edition has no desktop to switch; it upgrades only to server images.")
+		fmt.Fprintln(stderr, "isotope-update: the server edition has no desktop to switch; it upgrades only to server images.")
 		return exitUsage
 	}
 	known := false
@@ -592,18 +592,18 @@ func cmdSwitch(args []string, stdin io.Reader, stdout, stderr io.Writer) (code i
 		known = known || f == flavor
 	}
 	if !known {
-		fmt.Fprintf(stderr, "hadron-update: %q is not a desktop flavor; choose one of %s.\n", flavor, strings.Join(switchable, ", "))
+		fmt.Fprintf(stderr, "isotope-update: %q is not a desktop flavor; choose one of %s.\n", flavor, strings.Join(switchable, ", "))
 		return exitUsage
 	}
 	if rel.Flavor == flavorAgent {
-		fmt.Fprintln(stderr, "hadron-update: the agent flavor has no desktop to switch.")
+		fmt.Fprintln(stderr, "isotope-update: the agent flavor has no desktop to switch.")
 		return exitUsage
 	}
 	if flavor == rel.Flavor && line == rel.Line() {
 		if *gpu != "" {
-			fmt.Fprintf(stderr, "hadron-update: this system already runs the %s image.\n", lineLabels[line])
+			fmt.Fprintf(stderr, "isotope-update: this system already runs the %s image.\n", lineLabels[line])
 		} else {
-			fmt.Fprintf(stderr, "hadron-update: this system already runs the %s flavor.\n", flavor)
+			fmt.Fprintf(stderr, "isotope-update: this system already runs the %s flavor.\n", flavor)
 		}
 		return exitUsage
 	}
@@ -619,7 +619,7 @@ func cmdSwitch(args []string, stdin io.Reader, stdout, stderr io.Writer) (code i
 	}
 	ref, err := LineRef(rel, flavor, line, newest)
 	if err != nil {
-		fmt.Fprintln(stderr, "hadron-update:", err)
+		fmt.Fprintln(stderr, "isotope-update:", err)
 		return exitError
 	}
 	if line != rel.Line() {
@@ -643,7 +643,7 @@ func cmdReboot(args []string, stdout, stderr io.Writer) int {
 	}
 	if rel, err := LoadRelease(releaseFile()); err == nil && rel.Flavor == flavorAgent {
 		if err := rebootCommand().Run(); err != nil {
-			fmt.Fprintln(stderr, "hadron-update: reboot failed:", err)
+			fmt.Fprintln(stderr, "isotope-update: reboot failed:", err)
 			return exitError
 		}
 		return exitOK
@@ -670,11 +670,11 @@ func cmdRollback(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 	if fs.NArg() > 0 {
-		fmt.Fprintf(stderr, "hadron-update rollback: unexpected argument %q\n", fs.Arg(0))
+		fmt.Fprintf(stderr, "isotope-update rollback: unexpected argument %q\n", fs.Arg(0))
 		return exitUsage
 	}
 	if rel, err := LoadRelease(releaseFile()); err == nil && rel.Flavor == flavorAgent {
-		fmt.Fprintf(stderr, "hadron-update: rollback is not available on the agent flavor; run `sudo kairos-agent bootentry --select %s` and then `sudo systemctl reboot`.\n", previousEntry)
+		fmt.Fprintf(stderr, "isotope-update: rollback is not available on the agent flavor; run `sudo kairos-agent bootentry --select %s` and then `sudo systemctl reboot`.\n", previousEntry)
 		return exitUsage
 	}
 	if !*yes && !confirm(bufio.NewReader(stdin), stdout, "Restart into the previous system? It is used for the next boot only.", false) {
@@ -693,7 +693,7 @@ func cmdRollback(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 				pending = st.Pending
 			}
 		}
-		fmt.Fprintln(stderr, "hadron-update:", describeRollbackError(err, pending))
+		fmt.Fprintln(stderr, "isotope-update:", describeRollbackError(err, pending))
 		return exitError
 	}
 	fmt.Fprintln(stdout, "Restarting into the previous system.")
@@ -725,23 +725,23 @@ func installFlow(c daemonClient, rel Release, ref string, advanced, yes, reboot 
 	}
 	switch {
 	case info.Trusted:
-		fmt.Fprintln(stdout, "Source:   a published Hadron Desktop release (trusted)")
-	case info.Hadron:
+		fmt.Fprintln(stdout, "Source:   a published Isotope release (trusted)")
+	case info.Isotope:
 		fmt.Fprintln(stdout, "Source:   labelled by its publisher, not a published release")
 	default:
-		fmt.Fprintln(stdout, "Source:   not a Hadron Desktop image")
+		fmt.Fprintln(stdout, "Source:   not an Isotope image")
 	}
 
 	override := false
 	if info.Refusal != "" {
 		if !info.Overridable || !advanced {
-			fmt.Fprintln(stderr, "hadron-update:", info.Refusal)
+			fmt.Fprintln(stderr, "isotope-update:", info.Refusal)
 			return exitError
 		}
 		fmt.Fprintln(stdout, info.Refusal)
-		question := "This is not a Hadron Desktop image. Install it anyway?"
-		if info.Hadron {
-			question = "This is not a published Hadron Desktop release. Install it anyway?"
+		question := "This is not an Isotope image. Install it anyway?"
+		if info.Isotope {
+			question = "This is not a published Isotope release. Install it anyway?"
 		}
 		// --yes never answers this one: it is the question that stops a
 		// mistyped image from replacing the system.
@@ -764,7 +764,7 @@ func installFlow(c daemonClient, rel Release, ref string, advanced, yes, reboot 
 
 	events, stop, err := c.Watch()
 	if err != nil {
-		fmt.Fprintln(stderr, "hadron-update:", err)
+		fmt.Fprintln(stderr, "isotope-update:", err)
 		return exitError
 	}
 	defer stop()
@@ -793,13 +793,13 @@ func installFlow(c daemonClient, rel Release, ref string, advanced, yes, reboot 
 		case StateIdle, StateUpToDate, StateUpdateAvailable:
 			// No job passes through these: it was cancelled elsewhere (the
 			// tray) or the daemon restarted and forgot it.
-			fmt.Fprintln(stderr, "hadron-update: lost the update job: it was cancelled or the update service restarted.")
+			fmt.Fprintln(stderr, "isotope-update: lost the update job: it was cancelled or the update service restarted.")
 			return exitError
 		case StateRebootPending:
 			if p := ev.Status.Pending; p == pendingFailed || p == pendingStarted {
 				// kairos-agent may have swapped the slots before it failed;
 				// the service refuses another install until a restart.
-				fmt.Fprintln(stderr, "hadron-update: the update failed after it started writing.")
+				fmt.Fprintln(stderr, "isotope-update: the update failed after it started writing.")
 				fmt.Fprintln(stderr, pendingDetail(p))
 				return exitError
 			}
@@ -807,12 +807,12 @@ func installFlow(c daemonClient, rel Release, ref string, advanced, yes, reboot 
 			return offerReboot(c, reboot, in, stdout, stderr)
 		case StateError:
 			// Only a failure before kairos-agent started ends here.
-			fmt.Fprintln(stderr, "hadron-update: the update failed:", ev.Status.Detail)
+			fmt.Fprintln(stderr, "isotope-update: the update failed:", ev.Status.Detail)
 			fmt.Fprintln(stderr, "Nothing changed on the running system; you can retry safely.")
 			return exitError
 		}
 	}
-	fmt.Fprintln(stderr, "hadron-update: lost the connection to the update service before the update finished.")
+	fmt.Fprintln(stderr, "isotope-update: lost the connection to the update service before the update finished.")
 	return exitError
 }
 

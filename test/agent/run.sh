@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Visible-desktop compatibility gate for the Hadron Cua agent appliance.
+# Visible-desktop compatibility gate for the Isotope Cua agent appliance.
 #
 #   build i3 desktop -> agent overlay -> compat test image -> wrap with
 #   AuroraBoot -> boot GRAPHICAL OVMF QEMU (virtio-vga + VNC) -> let the
@@ -249,7 +249,7 @@ _agent_guest_diag() {
       echo "===== $f"; tail -n 300 "$f" 2>&1
     done
     echo "===== systemctl status"
-    systemctl status --no-pager --full ly@tty1.service hadron-agent-display-watchdog.service kairos-splash.service 2>&1
+    systemctl status --no-pager --full ly@tty1.service isotope-agent-display-watchdog.service kairos-splash.service 2>&1
     echo "===== systemctl list-jobs"; systemctl list-jobs --no-pager 2>&1
     echo "===== loginctl"; loginctl list-sessions --no-pager 2>&1
     echo "===== active VT"; cat /sys/class/tty/tty0/active 2>&1
@@ -337,7 +337,7 @@ _agent_wait_down() {
 }
 
 # cmd_contract [IMAGE] -- NON-DESTRUCTIVE live gate. Build a LIVE provisioning
-# ISO (hadron_agent digests embedded, NO install block) from IMAGE, boot it via
+# ISO (isotope_agent digests embedded, NO install block) from IMAGE, boot it via
 # direct-kernel in kairos.boot_live_mode against a BLANK qcow2, prove the blank
 # disk is never written (sha256 before/after AND QMP write-op count == 0), then
 # TOFU the leaf, emit the descriptor, and run the mcp-smoke contract suite with
@@ -506,7 +506,7 @@ cmd_install() {
   mkdir -p "$runtime" "$art"; chmod 700 "$runtime" "$art" 2>/dev/null || true
 
   # 1. mint creds + an INSTALL cloud-config. Only install.{auto,device,reboot}
-  #    and the hadron_agent digests are needed: hadron-agent-install injects the
+  #    and the isotope_agent digests are needed: isotope-agent-install injects the
   #    required install.nousers:true into its own generated /oem config.
   local seed_dir="$runtime/seed" seed_out="$runtime/make-seed.env"
   finfo "Minting install credentials + install cloud-config"
@@ -543,7 +543,7 @@ cmd_install() {
   # UEFI-CD boot of the DEFAULT entry. UEFI honours bootindex: the empty disk
   # (0) is skipped so the CD (1) boots and installs; once the disk is bootable
   # it wins, so the post-install reboot lands in the INSTALLED appliance. The
-  # config authorizes hadron-agent-install's zero-touch path to /dev/vda.
+  # config authorizes isotope-agent-install's zero-touch path to /dev/vda.
   finfo "Booting install ISO default entry (MCP 127.0.0.1:$mcp_port -> :7443, VNC 127.0.0.1:$vnc_port)"
   qemu-system-x86_64 "${AGENT_ACCEL[@]}" -m "${MEM:-4096}" -smp "${CPUS:-4}" \
     "${AGENT_OVMF_ARGS[@]}" \
@@ -1205,7 +1205,7 @@ cmd_recovery() {
   # --- scenario 2: kill the unprivileged session broker --------------------
   finfo "[2/6] kill the session broker"
   _rec_exec "$smoke" "$descriptor" "$admin_token" admin \
-    'pkill -KILL -f "hadron-agent session" || true' >/dev/null
+    'pkill -KILL -f "isotope-agent session" || true' >/dev/null
   if _rec_wait_degraded "$ca" "$mcp_port" $((SECONDS + scenario_timeout)) "$art"; then
     _rec_wait_recovered "$ca" "$mcp_port" $((SECONDS + scenario_timeout)) "$art" \
       || { err "[2/6] the user systemd unit did not restart the broker in time"; failures=$((failures+1)); }
@@ -1219,7 +1219,7 @@ cmd_recovery() {
   # the call itself may not return; that is expected, not a failure.
   finfo "[3/6] kill the gateway"
   _rec_exec "$smoke" "$descriptor" "$admin_token" admin \
-    'systemctl kill --signal=SIGKILL hadron-agent-gateway || true' >/dev/null 2>&1 || true
+    'systemctl kill --signal=SIGKILL isotope-agent-gateway || true' >/dev/null 2>&1 || true
   if _rec_wait_degraded "$ca" "$mcp_port" $((SECONDS + scenario_timeout)) "$art"; then
     if _rec_wait_recovered "$ca" "$mcp_port" $((SECONDS + scenario_timeout)) "$art"; then
       # The SAME bearer must still be accepted: a restart must not rotate or
@@ -1496,7 +1496,7 @@ cmd_ui() {
     || { err "fixture upload failed"; _agent_screenshot "$qmp" "$art/fail-upload.ppm"; return 1; }
 
   _ui_exec "$smoke" "$descriptor" "$admin_token" user \
-    'set -e; cd /home/agent/e2e; tar -xf ui-fixtures.tar; chmod 0755 bin/hadron-cua-gtk; ls -l bin web' \
+    'set -e; cd /home/agent/e2e; tar -xf ui-fixtures.tar; chmod 0755 bin/isotope-cua-gtk; ls -l bin web' \
     > "$art/fixture-install.log" 2>&1 \
     || { err "unpacking the fixtures failed (see $art/fixture-install.log)"; return 1; }
 
@@ -1532,7 +1532,7 @@ cmd_ui() {
   finfo "Launching the GTK fixture (held open by its own call)"
   setsid "$smoke" --descriptor "$descriptor" --admin-bearer-file "$admin_token" \
     --mode exec --call-timeout "${UI_FIXTURE_LIFETIME:-30m}" \
-    --command 'cd /home/agent/e2e && exec ./bin/hadron-cua-gtk' \
+    --command 'cd /home/agent/e2e && exec ./bin/isotope-cua-gtk' \
     </dev/null >"$art/gtk-launch.log" 2>&1 &
   hdn_agent_track_pid $! 2>/dev/null || true
   sleep 8
@@ -1733,11 +1733,11 @@ _agent_require_bins qemu-system-x86_64 qemu-img openssl curl python3 docker sha2
 
 # --- image chain (confirmed against Makefile + the two Dockerfiles) ----------
 # make DESKTOP=i3 image  => i3-desktop:dev  (IMAGE defaults to $(DESKTOP)-desktop:dev)
-# Dockerfile.agent --target agent, BASE_IMAGE=i3-desktop:dev => hadron-agent:compat
-# test/agent/Dockerfile.compat (final `test` stage), BASE_IMAGE=hadron-agent:compat
+# Dockerfile.agent --target agent, BASE_IMAGE=i3-desktop:dev => isotope-agent:compat
+# test/agent/Dockerfile.compat (final `test` stage), BASE_IMAGE=isotope-agent:compat
 I3_IMAGE="i3-desktop:dev"
-AGENT_IMAGE="hadron-agent:compat"
-COMPAT_IMAGE="hadron-agent-compat:test"
+AGENT_IMAGE="isotope-agent:compat"
+COMPAT_IMAGE="isotope-agent-compat:test"
 AURORA_IMAGE="${AURORA_IMAGE:-quay.io/kairos/auroraboot:v0.21.0-alpha.4}"
 
 # --- paths -------------------------------------------------------------------
@@ -1833,10 +1833,10 @@ log "Extracted kernel ($(stat -c%s "$KERNEL") B) + initrd ($(stat -c%s "$INITRD"
 # 3. Create the 256 MiB raw artifact disk
 # ---------------------------------------------------------------------------
 # CROSS-TASK CONTRACT: the Task 4 reporter (cua-compat-report) writes its tar to
-# /dev/disk/by-id/virtio-hadronagentartifacts. That by-id path only exists in
+# /dev/disk/by-id/virtio-isotopeagentartifacts. That by-id path only exists in
 # the guest when this disk is attached as virtio-blk with serial EXACTLY
-# "hadronagentartifacts". Do not change this serial.
-ARTIFACTS_SERIAL="hadronagentartifacts"
+# "isotopeagentartifacts". Do not change this serial.
+ARTIFACTS_SERIAL="isotopeagentartifacts"
 log "Creating 256 MiB artifact disk ($ARTDISK, serial=$ARTIFACTS_SERIAL)"
 qemu-img create -f raw "$ARTDISK" 256M >/dev/null \
   || { err "failed to create artifact disk"; exit 14; }

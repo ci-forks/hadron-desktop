@@ -10,9 +10,9 @@ func TestParseRef(t *testing.T) {
 		reference string
 		repo      string
 	}{
-		{"ghcr.io/kairos-community/hadron-desktop:sway-v0.0.5",
-			ImageRef{Host: "ghcr.io", Name: "kairos-community/hadron-desktop", Tag: "sway-v0.0.5"},
-			"sway-v0.0.5", "ghcr.io/kairos-community/hadron-desktop"},
+		{"ghcr.io/kairos-community/isotope:sway-v0.0.5",
+			ImageRef{Host: "ghcr.io", Name: "kairos-community/isotope", Tag: "sway-v0.0.5"},
+			"sway-v0.0.5", "ghcr.io/kairos-community/isotope"},
 		{"ghcr.io/a/b@sha256:" + hex,
 			ImageRef{Host: "ghcr.io", Name: "a/b", Digest: "sha256:" + hex},
 			"sha256:" + hex, "ghcr.io/a/b"},

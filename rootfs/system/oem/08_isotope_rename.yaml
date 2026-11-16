@@ -1,0 +1,31 @@
+# Isotope was called Hadron Desktop. A system installed before
+# the rename keeps some state under the old names:
+#
+#   /oem/99_hadron-user.yaml   the installer's cloud-config. It still runs at
+#                              every boot and writes /etc/hadron-desktop/keyboard
+#                              and /etc/hadron-desktop/encryption, which this
+#                              image reads as /etc/isotope/keyboard and
+#                              /etc/isotope/encryption.
+#   /var/lib/hadron-update     the updater's pin and where each extension came
+#                              from.
+#
+# Both are copied to the new names here. boot.after runs after every boot-stage
+# file, those in /oem included, so the installer's files are already written.
+# Nothing is copied over a file that exists under the new name.
+name: "Isotope: state from before the rename"
+stages:
+  boot.after:
+  - name: "Read the installer's settings from /etc/hadron-desktop"
+    if: '[ -d /etc/hadron-desktop ]'
+    commands:
+    - |
+        mkdir -p /etc/isotope
+        for f in keyboard encryption; do
+            if [ -e "/etc/hadron-desktop/$f" ] && [ ! -e "/etc/isotope/$f" ]; then
+                cp -p "/etc/hadron-desktop/$f" "/etc/isotope/$f"
+            fi
+        done
+  - name: "Move the updater's state from /var/lib/hadron-update"
+    if: '[ -d /var/lib/hadron-update ] && [ ! -e /var/lib/isotope-update ]'
+    commands:
+    - mv /var/lib/hadron-update /var/lib/isotope-update

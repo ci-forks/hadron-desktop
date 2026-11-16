@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mudler/hadron-desktop/agent/internal/api"
+	"github.com/kairos-community/isotope/agent/internal/api"
 )
 
 // ExecResult is the outcome of one exec-mode run.

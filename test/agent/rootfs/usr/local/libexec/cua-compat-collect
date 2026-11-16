@@ -2,7 +2,7 @@
 
 set -u
 
-runtime_dir=/run/user/1000/hadron-cua-compat
+runtime_dir=/run/user/1000/isotope-cua-compat
 collection_status=FAIL
 
 umask 077

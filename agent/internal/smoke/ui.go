@@ -45,11 +45,11 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/mudler/hadron-desktop/agent/internal/api"
+	"github.com/kairos-community/isotope/agent/internal/api"
 )
 
 // gtkStatePath is where the GTK fixture atomically persists its own counters.
-const gtkStatePath = "/run/user/1000/hadron-cua-gtk-state.json"
+const gtkStatePath = "/run/user/1000/isotope-cua-gtk-state.json"
 
 // chromiumFixtureURL is the page the browser half drives.
 const chromiumFixtureURL = "file:///home/agent/e2e/web/index.html"
@@ -57,14 +57,14 @@ const chromiumFixtureURL = "file:///home/agent/e2e/web/index.html"
 // Application names list_applications reports. These are NOT window titles:
 // Cua derives the name from WM_CLASS, so Chromium reports "Chromium" whatever
 // the document is called, and the GTK fixture reports what GTK made of its
-// prgname ("Hadron-cua-gtk" on a live run). Matched case-insensitively.
+// prgname ("Isotope-cua-gtk" on a live run). Matched case-insensitively.
 const (
-	gtkAppName      = "hadron-cua-gtk"
+	gtkAppName      = "isotope-cua-gtk"
 	chromiumAppName = "chromium"
 )
 
 // uiTypedText is the literal string both type actions send.
-const uiTypedText = "hadron"
+const uiTypedText = "isotope"
 
 // uiSettleMs is how long the desktop is given after a gesture, through the
 // public wait action rather than a local sleep so a paused or wedged session

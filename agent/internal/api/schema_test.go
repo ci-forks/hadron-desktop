@@ -11,7 +11,7 @@ import (
 )
 
 // TestToolNamesSortedSet is the contract test the brief calls out explicitly:
-// hadron-agent exposes exactly these seven tools, no more, no fewer. The
+// isotope-agent exposes exactly these seven tools, no more, no fewer. The
 // browser was added by the 2026-07-20 amendment; terminal and process were
 // replaced by a single unbounded bash tool.
 func TestToolNamesSortedSet(t *testing.T) {
@@ -41,7 +41,7 @@ func TestToolNamesSortedSet(t *testing.T) {
 func TestRegisterAllExposesExactlySevenTools(t *testing.T) {
 	ctx := context.Background()
 
-	s := mcp.NewServer(&mcp.Implementation{Name: "hadron-agent-test", Version: "v0.0.0"}, nil)
+	s := mcp.NewServer(&mcp.Implementation{Name: "isotope-agent-test", Version: "v0.0.0"}, nil)
 	RegisterAll(s)
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()

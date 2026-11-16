@@ -19,7 +19,7 @@ type Latest struct {
 }
 
 func apiBase() string {
-	if u := os.Getenv("HADRON_UPDATE_API"); u != "" {
+	if u := os.Getenv("ISOTOPE_UPDATE_API"); u != "" {
 		return strings.TrimRight(u, "/")
 	}
 	return "https://api.github.com"
@@ -38,7 +38,7 @@ func getJSON(ctx context.Context, repo, path string, out any) error {
 		return err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "hadron-update")
+	req.Header.Set("User-Agent", "isotope-update")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

@@ -1,7 +1,7 @@
 package smoke
 
 // smoke_test wires the REAL agent stack together and exercises the contract
-// suite against it with no VM, mirroring cmd/hadron-agent/contract_test.go:
+// suite against it with no VM, mirroring cmd/isotope-agent/contract_test.go:
 //
 //   - the real *session.Broker and *roothelper.Helper, each behind the real
 //     Unix-socket rpc.Server (the root socket with RequireAuth), reached by the
@@ -40,13 +40,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mudler/hadron-desktop/agent/internal/api"
-	"github.com/mudler/hadron-desktop/agent/internal/auth"
-	"github.com/mudler/hadron-desktop/agent/internal/control"
-	"github.com/mudler/hadron-desktop/agent/internal/gateway"
-	"github.com/mudler/hadron-desktop/agent/internal/roothelper"
-	"github.com/mudler/hadron-desktop/agent/internal/rpc"
-	"github.com/mudler/hadron-desktop/agent/internal/session"
+	"github.com/kairos-community/isotope/agent/internal/api"
+	"github.com/kairos-community/isotope/agent/internal/auth"
+	"github.com/kairos-community/isotope/agent/internal/control"
+	"github.com/kairos-community/isotope/agent/internal/gateway"
+	"github.com/kairos-community/isotope/agent/internal/roothelper"
+	"github.com/kairos-community/isotope/agent/internal/rpc"
+	"github.com/kairos-community/isotope/agent/internal/session"
 )
 
 // unusableDigest mirrors the main package's disabled-class placeholder.
@@ -78,7 +78,7 @@ func newFakeProc(uid int, user string, groups []string) *fakeProc {
 		uid:        uid,
 		user:       user,
 		groups:     groups,
-		cgroupLine: "0::/system.slice/hadron-agent-session.slice/hadron-proc-abc123def",
+		cgroupLine: "0::/system.slice/isotope-agent-session.slice/isotope-proc-abc123def",
 		lastWrite:  map[string]string{},
 	}
 }
@@ -228,7 +228,7 @@ type fakeIdentity struct{ id api.Identity }
 func (f fakeIdentity) Identity() api.Identity { return f.id }
 
 // ---------------------------------------------------------------------------
-// RPC + handler adapters (mirrors cmd/hadron-agent)
+// RPC + handler adapters (mirrors cmd/isotope-agent)
 // ---------------------------------------------------------------------------
 
 type sessionHandler struct{ broker *session.Broker }
@@ -941,7 +941,7 @@ func (d *uiFakeDesktop) computerUse(in api.ComputerUseInput) api.ComputerUseOutp
 	case api.ActionListApplications:
 		var apps []api.ApplicationInfo
 		if d.gtkPresent {
-			apps = append(apps, api.ApplicationInfo{PID: 111, Name: "Hadron-cua-gtk", WindowID: 9001})
+			apps = append(apps, api.ApplicationInfo{PID: 111, Name: "Isotope-cua-gtk", WindowID: 9001})
 		}
 		if d.chromiumPresent {
 			apps = append(apps, api.ApplicationInfo{PID: 222, Name: "Chromium", WindowID: 9002})
@@ -975,7 +975,7 @@ func (d *uiFakeDesktop) browser(in api.BrowserInput) api.BrowserOutput {
 	d.sawBrowser[in.Action]++
 	switch in.Action {
 	case api.BrowserNavigate:
-		return api.BrowserOutput{URL: "file:///home/agent/e2e/web/index.html", Title: "Hadron Cua Chromium Fixture"}
+		return api.BrowserOutput{URL: "file:///home/agent/e2e/web/index.html", Title: "Isotope Cua Chromium Fixture"}
 	case api.BrowserSnapshot:
 		return api.BrowserOutput{Elements: []api.BrowserElement{
 			{Ref: "e1", Role: "button", Name: "click count"},

@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=hadron-agent:compat
+ARG BASE_IMAGE=isotope-agent:compat
 # Same Hadron release as the image under test; scripts/bump-hadron.sh keeps it in step.
 ARG HADRON_VERSION=v0.6.4
 FROM ${BASE_IMAGE} AS fixture-runtime
@@ -18,7 +18,7 @@ ARG XRANDR_SHA256=2cafccb2aaf2491a4068676117a0d4f90ab307724b96fffc54cd1da9537794
 COPY test/agent/fixtures/gtk3/main.c /src/main.c
 RUN mkdir -p /out
 RUN cc -O2 -Wall -Wextra $(pkg-config --cflags gtk+-3.0) \
-  /src/main.c -o /out/hadron-cua-gtk-fixture \
+  /src/main.c -o /out/isotope-cua-gtk-fixture \
   $(pkg-config --libs gtk+-3.0)
 RUN curl -fL --retry 5 \
       "https://www.x.org/releases/individual/app/xprop-${XPROP_VERSION}.tar.xz" \
@@ -54,17 +54,17 @@ COPY test/agent/cmd/cua-compat-probe/ /build/agent/cmd/cua-compat-probe/
 RUN go build -trimpath -o /out/cua-compat-probe ./cmd/cua-compat-probe
 
 FROM ${BASE_IMAGE} AS test
-COPY --from=fixture-build /out/hadron-cua-gtk-fixture /usr/local/libexec/hadron-cua-gtk-fixture
+COPY --from=fixture-build /out/isotope-cua-gtk-fixture /usr/local/libexec/isotope-cua-gtk-fixture
 COPY --from=fixture-build /out/xprop /usr/bin/xprop
 COPY --from=fixture-build /out/xrandr /usr/bin/xrandr
-COPY test/agent/fixtures/chromium/index.html /opt/hadron-agent-fixtures/chromium/index.html
+COPY test/agent/fixtures/chromium/index.html /opt/isotope-agent-fixtures/chromium/index.html
 COPY test/agent/fixtures/chromium.commit /src/chromium.commit
 RUN commit="$(cat /src/chromium.commit)" && \
     test "${#commit}" -eq 64 && \
     printf '%s\n' "$commit" | grep -Eq '^[0-9a-f]{64}$' && \
     gpgconf --list-components | grep -E '^gpg:OpenPGP:' >/dev/null && \
     flatpak --system remote-add flathub \
-      /usr/share/hadron/flathub.flatpakrepo && \
+      /usr/share/isotope/flathub.flatpakrepo && \
     details="$(flatpak remotes --system --columns=name,url,options)" && \
     printf '%s\n' "$details" | awk -F '\t' \
       '$1 == "flathub" && $2 == "https://dl.flathub.org/repo/" && \
@@ -78,10 +78,10 @@ RUN commit="$(cat /src/chromium.commit)" && \
     test "$(flatpak info --system --show-commit org.chromium.Chromium)" = \
       "$commit" && \
     install -Dm644 /src/chromium.commit \
-      /etc/hadron-agent-test/chromium-commit && \
+      /etc/isotope-agent-test/chromium-commit && \
     flatpak list --system --all --columns=ref,origin,runtime \
       > /tmp/flatpak-refs.tsv && \
-    : > /etc/hadron-agent-test/flatpak-refs.tsv && \
+    : > /etc/isotope-agent-test/flatpak-refs.tsv && \
     while IFS="$(printf '\t')" read -r ref origin runtime; do \
       test -n "$ref" || continue; \
       active="$(flatpak info --system --show-commit "$ref")" || exit 1; \
@@ -89,34 +89,34 @@ RUN commit="$(cat /src/chromium.commit)" && \
       printf '%s\n' "$active" | grep -Eq '^[0-9a-f]{64}$' || exit 1; \
       printf '%s\t%s\t%s\t%s\n' \
         "$ref" "$active" "$origin" "$runtime" \
-        >> /etc/hadron-agent-test/flatpak-refs.tsv || exit 1; \
+        >> /etc/isotope-agent-test/flatpak-refs.tsv || exit 1; \
     done < /tmp/flatpak-refs.tsv && \
     rm -f /tmp/flatpak-refs.tsv && \
-    test -s /etc/hadron-agent-test/flatpak-refs.tsv && \
+    test -s /etc/isotope-agent-test/flatpak-refs.tsv && \
     awk -F '\t' 'NF != 4 || $2 !~ /^[0-9a-f]{64}$/ || \
       $3 != "flathub" { bad=1 } \
       END { exit (NR == 0 || bad) }' \
-      /etc/hadron-agent-test/flatpak-refs.tsv
+      /etc/isotope-agent-test/flatpak-refs.tsv
 COPY --from=probe-build /out/cua-compat-probe /usr/local/libexec/cua-compat-probe
 # The compat probe launches its own Chromium with the fixture's flags (see
 # etc/i3/config.d/99-cua-compat.conf). The agent's Chromium unit, started by
-# hadron-agent-session-ready at login, would take the same profile first, and
+# isotope-agent-session-ready at login, would take the same profile first, and
 # the fixture launch would only hand its URL to that instance ("Opening in
 # existing browser session"), losing the /opt fixture mount. rootfs masks it.
 COPY test/agent/rootfs/ /
-RUN test "$(readlink /etc/systemd/user/hadron-agent-browser.service)" = /dev/null
+RUN test "$(readlink /etc/systemd/user/isotope-agent-browser.service)" = /dev/null
 RUN uid_owner="$(awk -F: '$3 == 1000 { print $1 }' /etc/passwd)" && \
     if [ -n "$uid_owner" ]; then \
       printf 'UID 1000 already belongs to %s\n' "$uid_owner" >&2; \
       exit 1; \
     fi && \
     for group in audio video render input bluetooth seat \
-      hadron-agent-control; do \
+      isotope-agent-control; do \
       grep -Eq "^${group}:" /etc/group || groupadd "$group"; \
     done && \
     grep -Eq '^agent:' /etc/group || groupadd agent && \
     useradd --create-home --uid 1000 --gid agent --shell /bin/sh \
-      --groups audio,video,render,input,bluetooth,seat,hadron-agent-control \
+      --groups audio,video,render,input,bluetooth,seat,isotope-agent-control \
       agent && \
     test "$(id -u agent)" -eq 1000 && \
     test "$(id -gn agent)" = agent && \
@@ -125,7 +125,7 @@ RUN uid_owner="$(awk -F: '$3 == 1000 { print $1 }' /etc/passwd)" && \
     groups="$(id -nG agent)" && \
     test "$(printf '%s\n' "$groups" | wc -w)" -eq 8 && \
     for group in agent audio video render input bluetooth seat \
-      hadron-agent-control; do \
+      isotope-agent-control; do \
       case " $groups " in *" $group "*) ;; *) exit 1 ;; esac; \
     done && \
     ! printf '%s\n' "$groups" | grep -Eq \

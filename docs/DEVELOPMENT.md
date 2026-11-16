@@ -1,4 +1,4 @@
-# Developing Hadron Desktop
+# Developing Isotope
 
 Four desktop variants plus an opt-in agent overlay built on top of the
 minimal [Hadron](https://github.com/kairos-io/hadron) base image. COSMIC is the
@@ -49,8 +49,8 @@ kairos-init from the Kairos monorepo (`ghcr.io/kairos-io/kairos/kairos-init:mast
   the agent services on top of the XLibre desktop.
 - **Server edition** (`DESKTOP=server`): no desktop at all. The kernel,
   network card firmware and CPU microcode, NetworkManager and nmcli, the
-  OpenSSH server, a console login, the Hadron installer with disk encryption,
-  `hadron-update` and `hadron-ext`, and Docker (no Distrobox). It is built from its own Dockerfile
+  OpenSSH server, a console login, the Isotope installer with disk encryption,
+  `isotope-update` and `isotope-ext`, and Docker (no Distrobox). It is built from its own Dockerfile
   stage (`server-default`), so no graphics, audio or Flatpak stage is built.
   The table in AGENTS.md lists what it has and lacks.
 - **Login:** on Sway, i3 and niri, `ly` runs on `tty1`. It launches Sway directly for
@@ -62,11 +62,11 @@ kairos-init from the Kairos monorepo (`ghcr.io/kairos-io/kairos/kairos-init:mast
 - **Bluetooth:** BlueZ. On Sway and i3, Super+Shift+B opens a menu to turn
   the adapter on or off and to pair, connect, disconnect or forget a device;
   niri and COSMIC use the Bluetooth panel of their shell.
-- **Hadron menu:** Super+Escape on every variant opens one menu for apps,
+- **Isotope menu:** Super+Escape on every variant opens one menu for apps,
   Wi-Fi, Bluetooth, audio, screenshots, updates, the shortcut sheet and the
   power actions.
 - **Night light:** on Sway, i3 and niri, Super+Alt+N (or "Night light" in
-  the Hadron menu) turns on a warmer screen from 20:00 to 07:00, and the
+  the Isotope menu) turns on a warmer screen from 20:00 to 07:00, and the
   setting is kept across logins. COSMIC has no night light yet.
 - **Hardware keys:** volume, mute, screen brightness and play/pause/next/previous
   work on every variant and show the new level on screen.
@@ -123,28 +123,28 @@ kept under `build/sway-desktop/` and `build/i3-desktop/`.
   points at all three. In Sway, i3 and niri, `Super+Alt+L` locks the screen
   and `Print` takes a screenshot. Sway and i3 also lock the screen when idle
   and before suspend.
-- **Apps:** Hadron includes no browser. At your first login, when the
+- **Apps:** Isotope includes no browser. At your first login, when the
   network is up, a short checklist offers a browser (Firefox, Chromium, Brave
   or LibreWolf) and some essential apps, and installs them from Flathub for
-  your user. Skip it if you like; "Install apps" in the Hadron menu or
-  `hadron-first-run-apps` opens it again. Anything else:
+  your user. Skip it if you like; "Install apps" in the Isotope menu or
+  `isotope-first-run-apps` opens it again. Anything else:
   `flatpak install flathub <app>`; `distrobox` for a mutable Linux to tinker
   in.
 - **Updates:** a tray icon shows the installed release and tells you when a
-  new Hadron Desktop release is out; its menu checks, installs, reboots and
+  new Isotope release is out; its menu checks, installs, reboots and
   pins. Everything the icon does is also in the terminal:
 
   ```sh
-  hadron-update                 # installed vs latest release (same as `status`)
-  hadron-update upgrade         # install the latest; asks, then offers a reboot
-  hadron-update upgrade --version v0.1.2   # a specific release (also rolls back)
-  hadron-update switch <flavor> # move to another flavor's image line
-  hadron-update switch --gpu vm # move to the VM image (--gpu full: back)
-  hadron-update reboot          # reboot into the installed upgrade
-  hadron-update rollback        # boot the previous system once (no download)
+  isotope-update                 # installed vs latest release (same as `status`)
+  isotope-update upgrade         # install the latest; asks, then offers a reboot
+  isotope-update upgrade --version v0.1.2   # a specific release (also rolls back)
+  isotope-update switch <flavor> # move to another flavor's image line
+  isotope-update switch --gpu vm # move to the VM image (--gpu full: back)
+  isotope-update reboot          # reboot into the installed upgrade
+  isotope-update rollback        # boot the previous system once (no download)
   ```
 
-  Installing and rebooting go through a root service, `hadron-updated`, and
+  Installing and rebooting go through a root service, `isotope-updated`, and
   polkit allows them for members of the `admin` group only; other users get a
   refusal, not a password prompt. The terminal and the tray use the same
   service, so a job started in one shows in the other.
@@ -154,14 +154,14 @@ kept under `build/sway-desktop/` and `build/i3-desktop/`.
   is kept as the fallback boot entry.
 
   Advanced mode is on by default: it lets you install any OCI image, not only
-  a Hadron Desktop release (`hadron-update upgrade --image REF`, or "Install
+  an Isotope release (`isotope-update upgrade --image REF`, or "Install
   an image..." in the tray menu). To allow releases only, put `advanced=false`
-  in `/etc/hadron-desktop/update.conf`. An image you install on purpose is
-  pinned (`/var/lib/hadron-update/pin`): the tray shows it as pinned and stops
+  in `/etc/isotope/update.conf`. An image you install on purpose is
+  pinned (`/var/lib/isotope-update/pin`): the tray shows it as pinned and stops
   offering "updates" over it until you pick the latest release again.
   Upgrade images are signed with cosign (keyless) and carry the labels
-  `io.kairos.hadron-desktop.{flavor,version,hadron-version,gpu,firmware}`, which the
-  updater uses to recognise a Hadron Desktop image. The agent flavor has no
+  `io.kairos.isotope.{flavor,version,hadron-version,gpu,firmware}`, which the
+  updater uses to recognise an Isotope image. The agent flavor has no
   tray and no service; its CLI keeps the direct `sudo` path.
 
 ## Boot splash
@@ -175,10 +175,10 @@ driver takes over) over the same gradient as the GRUB theme, and falls back to
 a text animation on a console without one. Add `kairos.splash=0` at the boot
 menu to turn it off for one boot. See [`splash/README.md`](../splash/README.md).
 
-The boot menu also sets the Linux console's 16 colours to the Hadron palette
+The boot menu also sets the Linux console's 16 colours to the Isotope palette
 (`vt.default_red/grn/blu` on the kernel command line, generated from
 `theme/palette.toml`), so the boot messages, the ly login and the installer
-sit on the desktop's navy rather than black.
+sit on the desktop's violet ink rather than black.
 
 ## Following Hadron
 
@@ -208,7 +208,7 @@ builds the agent ISO in a job that first runs all five agent gates. It then veri
 asset and creates a GitHub Release:
 
 ```sh
-git tag -a v1.0.0 -m "Hadron Desktop v1.0.0"
+git tag -a v1.0.0 -m "Isotope v1.0.0"
 git push origin v1.0.0
 ```
 
@@ -216,27 +216,27 @@ Every desktop flavor is released in two lines:
 
 | Line | Build | ISO and upgrade image | For |
 | --- | --- | --- | --- |
-| full | `GPU=full FIRMWARE=true` | `hadron-desktop-<flavor>-<tag>-amd64.iso`, `:<flavor>-<tag>` | desktops and laptops: Intel and AMD GPU drivers, Wi-Fi, Bluetooth, GPU and audio firmware, CPU microcode. Also runs in a VM (llvmpipe, virgl) |
-| vm | `GPU=vm` | `hadron-desktop-<flavor>-vm-<tag>-amd64.iso`, `:<flavor>-vm-<tag>` | virtual machines: about 0.3 GB smaller, no hardware GPU drivers, no firmware |
+| full | `GPU=full FIRMWARE=true` | `isotope-<flavor>-<tag>-amd64.iso`, `:<flavor>-<tag>` | desktops and laptops: Intel and AMD GPU drivers, Wi-Fi, Bluetooth, GPU and audio firmware, CPU microcode. Also runs in a VM (llvmpipe, virgl) |
+| vm | `GPU=vm` | `isotope-<flavor>-vm-<tag>-amd64.iso`, `:<flavor>-vm-<tag>` | virtual machines: about 0.3 GB smaller, no hardware GPU drivers, no firmware |
 
 The agent is a VM appliance and has one line, built with `GPU=vm`:
-`hadron-desktop-agent-<tag>-amd64.iso` and `:agent-<tag>`.
+`isotope-agent-<tag>-amd64.iso` and `:agent-<tag>`.
 
-The server edition has one line too: `hadron-desktop-server-<tag>-amd64.iso`
+The server edition has one line too: `isotope-server-<tag>-amd64.iso`
 and `:server-<tag>`. It is built with `GPU=full FIRMWARE=true` (the Makefile
 sets both for `DESKTOP=server`), which names the line; it has no Mesa, and its
 firmware is the network card set. A server upgrades only to server images,
-and a desktop never installs one: `hadron-update` refuses both, and `switch`
+and a desktop never installs one: `isotope-update` refuses both, and `switch`
 refuses on a server.
 
 Every release also pushes the upgrade images above to
-`ghcr.io/kairos-community/hadron-desktop` (the agent image only after all five
-gates pass). `hadron-update` installs those; it only considers tags GitHub
+`ghcr.io/kairos-community/isotope` (the agent image only after all five
+gates pass). `isotope-update` installs those; it only considers tags GitHub
 reports as the latest *published* release. An installed system stays on its
-line: `/etc/hadron-desktop/release` records `GPU=full` or `GPU=vm`, and upgrades
+line: `/etc/isotope/release` records `GPU=full` or `GPU=vm`, and upgrades
 pull the image of that line. Systems installed from v0.0.7 or earlier have no
 `GPU` key and follow the full line (their own updater already pulls
-`<flavor>-<tag>`). `hadron-update switch --gpu vm|full` or the tray menu moves a
+`<flavor>-<tag>`). `isotope-update switch --gpu vm|full` or the tray menu moves a
 system to the other line. Each pushed image is signed with cosign (keyless, by
 digest) and labelled with its flavor, line and release tag;
 `scripts/release-manifest.sh` fails the release if they disagree.
@@ -247,7 +247,7 @@ manifest:
 
 | Asset | Contents |
 | --- | --- |
-| `hadron-desktop-<flavor>[-vm]-<tag>-amd64.iso` | the bootable installer |
+| `isotope-<flavor>[-vm]-<tag>-amd64.iso` | the bootable installer |
 | `….iso.sha256` | its SHA-256, in `sha256sum --check` format |
 | `….iso.spdx.json` | SPDX JSON SBOM of the OCI image the ISO wraps, produced by `anchore/syft:v1.29.0` |
 | `….iso.build.json` | the build manifest described below |
@@ -262,7 +262,7 @@ went into the image, so a downloaded ISO can be traced back to its sources:
   "hadron_base_reference": "ghcr.io/kairos-io/hadron:v0.6.3",
   "hadron_base_digest": "sha256:…",
   "image_id": "sha256:…",
-  "iso": "hadron-desktop-agent-v1.0.0-amd64.iso",
+  "iso": "isotope-agent-v1.0.0-amd64.iso",
   "iso_sha256": "…",
   "desktop_flavor": "agent",
   "gpu": "vm",
@@ -372,7 +372,7 @@ i3 image, `ly` starts XLibre and then launches i3.
 There are two ways to create that user:
 
 - **Interactive installer (default).** Boot the live ISO with nothing else and
-  `hadron-install-ui` — a Go TUI at `/usr/bin/hadron-install-ui`, wired in via
+  `isotope-install-ui` — a Go TUI at `/usr/bin/isotope-install-ui`, wired in via
   `system/oem/90_desktop_installer.yaml` — runs on tty1. It collects **hostname,
   username, password, optional GitHub SSH keys and target disk** behind a review
   gate, assigns the desktop groups (admin, audio, video, render, input,
@@ -397,7 +397,7 @@ make agent-iso VERSION=v1.2.3
 top to produce the opt-in agent appliance. The agent ISO still uses the same
 unattended install mechanism: if the datasource already contains `users:` and
 `install:` the wizard skips the prompt path. For the agent appliance, the seed
-also needs `hadron_agent.enabled=true` so the overlay starts its agent profile
+also needs `isotope_agent.enabled=true` so the overlay starts its agent profile
 instead of the plain desktop path.
 
 Minimal unattended agent seed:
@@ -411,7 +411,7 @@ install:
 users:
   - name: agent
     passwd: "$6$..."
-hadron_agent:
+isotope_agent:
   enabled: true
   auth:
     user_token_hash: "sha256:..."
@@ -530,18 +530,18 @@ llvmpipe or virgl while the hardware drivers ride along for real metal.
 ## Layout
 
 ```
-hadron-desktop/
+isotope/
   Dockerfile          # multi-stage build of the whole desktop stack
   cloud-config.yaml   # example Kairos install config (creates the desktop user)
   rootfs/             # shared OS, installer and service overlay
-  install-ui/         # Go TUI installer (-> /usr/bin/hadron-install-ui)
-  update/             # update checker / notifier / upgrade CLI (-> /usr/bin/hadron-update)
+  install-ui/         # Go TUI installer (-> /usr/bin/isotope-install-ui)
+  update/             # update checker / notifier / upgrade CLI (-> /usr/bin/isotope-update)
   scripts/            # release manifest, Hadron pin bump
   rootfs-sway/        # Wayland/Sway session config and native tools
   rootfs-i3/          # XLibre/i3 session config and native tools
   tools/
-    hadron-xroot.c    # i3 wallpaper: a PNG scaled to fill each monitor, or a colour
-    gen-wallpaper.py  # draws the Hadron wallpapers from theme/palette.toml (at build time)
+    isotope-xroot.c    # i3 wallpaper: a PNG scaled to fill each monitor, or a colour
+    gen-wallpaper.py  # draws the Isotope wallpapers from theme/palette.toml (at build time)
     vm.sh             # variant-aware QEMU launcher
   test/
     run.sh            # default Sway build -> ISO -> QEMU -> assert

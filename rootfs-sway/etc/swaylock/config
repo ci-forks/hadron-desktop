@@ -1,29 +1,29 @@
-# swaylock for Hadron Desktop: the Hadron palette, matching the Sway theme.
+# swaylock for Isotope: the Isotope palette, matching the Sway theme.
 # Colours: generated from theme/palette.toml by tools/gen-theme.py.
 # A user's ~/.config/swaylock/config replaces this file.
-# The plain Hadron background, scaled to fill; `color` shows if it is missing.
-image=/usr/share/backgrounds/hadron/hadron-plain-night-1920x1080.png
+# The plain Isotope background, scaled to fill; `color` shows if it is missing.
+image=/usr/share/backgrounds/isotope/isotope-plain-night-1920x1080.png
 scaling=fill
-color=1a1b26
+color=15141c
 font=Inter Variable
 indicator-radius=90
 indicator-thickness=8
 show-failed-attempts
 ignore-empty-password
 
-inside-color=1a1b26
-inside-clear-color=1a1b26
-inside-caps-lock-color=1a1b26
-inside-ver-color=1a1b26
-inside-wrong-color=1a1b26
+inside-color=15141c
+inside-clear-color=15141c
+inside-caps-lock-color=15141c
+inside-ver-color=15141c
+inside-wrong-color=15141c
 
-ring-color=414868
-ring-clear-color=7dcfff
+ring-color=3c3a49
+ring-clear-color=c6f36b
 ring-caps-lock-color=e0af68
-ring-ver-color=7aa2f7
+ring-ver-color=8fd12e
 ring-wrong-color=f7768e
 
-key-hl-color=7aa2f7
+key-hl-color=8fd12e
 bs-hl-color=f7768e
 caps-lock-key-hl-color=e0af68
 caps-lock-bs-hl-color=f7768e
@@ -35,11 +35,11 @@ line-ver-color=00000000
 line-wrong-color=00000000
 separator-color=00000000
 
-text-color=c0caf5
-text-clear-color=7dcfff
+text-color=f2f1f5
+text-clear-color=c6f36b
 text-caps-lock-color=e0af68
-text-ver-color=7aa2f7
+text-ver-color=8fd12e
 text-wrong-color=f7768e
-layout-text-color=c0caf5
-layout-bg-color=1a1b26
+layout-text-color=f2f1f5
+layout-bg-color=15141c
 layout-border-color=00000000

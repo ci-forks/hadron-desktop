@@ -7,11 +7,11 @@ import (
 )
 
 func TestPinRoundTrip(t *testing.T) {
-	t.Setenv("HADRON_UPDATE_PIN_FILE", filepath.Join(t.TempDir(), "sub", "pin"))
+	t.Setenv("ISOTOPE_UPDATE_PIN_FILE", filepath.Join(t.TempDir(), "sub", "pin"))
 	if got, err := LoadPin(); err != nil || got != "" {
 		t.Fatalf("empty LoadPin = %q, %v", got, err)
 	}
-	const ref = "ghcr.io/kairos-community/hadron-desktop@sha256:abc"
+	const ref = "ghcr.io/kairos-community/isotope@sha256:abc"
 	if err := SavePin(ref); err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +27,7 @@ func TestPinRoundTrip(t *testing.T) {
 }
 
 func TestClearPinMissingFileIsNotAnError(t *testing.T) {
-	t.Setenv("HADRON_UPDATE_PIN_FILE", filepath.Join(t.TempDir(), "pin"))
+	t.Setenv("ISOTOPE_UPDATE_PIN_FILE", filepath.Join(t.TempDir(), "pin"))
 	if err := ClearPin(); err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestClearPinMissingFileIsNotAnError(t *testing.T) {
 
 func TestSavePinLeavesNoTempFile(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HADRON_UPDATE_PIN_FILE", filepath.Join(dir, "pin"))
+	t.Setenv("ISOTOPE_UPDATE_PIN_FILE", filepath.Join(dir, "pin"))
 	if err := SavePin("x"); err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func TestAdvancedEnabled(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			conf := filepath.Join(t.TempDir(), "update.conf")
-			t.Setenv("HADRON_UPDATE_CONF", conf)
+			t.Setenv("ISOTOPE_UPDATE_CONF", conf)
 			if c.content != nil {
 				if err := os.WriteFile(conf, []byte(*c.content), 0o644); err != nil {
 					t.Fatal(err)
@@ -91,7 +91,7 @@ func TestAdvancedOffWhenUpdateConfIsUnreadable(t *testing.T) {
 	if err := os.Mkdir(conf, 0o755); err != nil { // reading a directory fails
 		t.Fatal(err)
 	}
-	t.Setenv("HADRON_UPDATE_CONF", conf)
+	t.Setenv("ISOTOPE_UPDATE_CONF", conf)
 	if AdvancedEnabled() {
 		t.Fatal("advanced mode on with an unreadable update.conf")
 	}

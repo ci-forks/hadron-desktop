@@ -196,10 +196,10 @@ grep -Fq '  device: /dev/vda' "$user_data" && ok "install.device: /dev/vda prese
   || err "install.device: /dev/vda missing"
 grep -Fq '  reboot: true' "$user_data" && ok "install.reboot: true present" \
   || err "install.reboot: true missing"
-grep -Fq 'hadron_agent:' "$user_data" && ok "hadron_agent: present" \
-  || err "hadron_agent: missing"
-grep -Fq '  enabled: true' "$user_data" && ok "hadron_agent.enabled: true present" \
-  || err "hadron_agent.enabled: true missing"
+grep -Fq 'isotope_agent:' "$user_data" && ok "isotope_agent: present" \
+  || err "isotope_agent: missing"
+grep -Fq '  enabled: true' "$user_data" && ok "isotope_agent.enabled: true present" \
+  || err "isotope_agent.enabled: true missing"
 grep -Fq 'listen: "0.0.0.0:7443"' "$user_data" && ok "endpoint.listen 0.0.0.0:7443 present" \
   || err "endpoint.listen 0.0.0.0:7443 missing"
 grep -Fq 'mdns: false' "$user_data" && ok "endpoint.mdns: false present" \
@@ -293,8 +293,8 @@ for needle in 'auto: true' 'device: /dev/vda' 'reboot: true'; do
     ok "--live: user-data omits install field '$needle'"
   fi
 done
-grep -Fq 'hadron_agent:' "$seed4/user-data" && ok "--live: hadron_agent: still present" \
-  || err "--live: hadron_agent: missing"
+grep -Fq 'isotope_agent:' "$seed4/user-data" && ok "--live: isotope_agent: still present" \
+  || err "--live: isotope_agent: missing"
 assert_no_token_leak "$seed4/user-data" "--live user-data"
 
 # ===========================================================================

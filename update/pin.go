@@ -10,17 +10,17 @@ import (
 )
 
 func pinFile() string {
-	if p := os.Getenv("HADRON_UPDATE_PIN_FILE"); p != "" {
+	if p := os.Getenv("ISOTOPE_UPDATE_PIN_FILE"); p != "" {
 		return p
 	}
-	return "/var/lib/hadron-update/pin"
+	return "/var/lib/isotope-update/pin"
 }
 
 func confFile() string {
-	if p := os.Getenv("HADRON_UPDATE_CONF"); p != "" {
+	if p := os.Getenv("ISOTOPE_UPDATE_CONF"); p != "" {
 		return p
 	}
-	return "/etc/hadron-desktop/update.conf"
+	return "/etc/isotope/update.conf"
 }
 
 // LoadPin returns the image reference the user deliberately installed, or ""
@@ -95,7 +95,7 @@ func AdvancedEnabled() bool {
 		// The file is there but unreadable: the admin set something, and
 		// off is the reading that installs nothing unexpected.
 		logBadAdvanced("unreadable: "+err.Error(), func() {
-			fmt.Fprintf(os.Stderr, "hadron-update: cannot read %s: %v; advanced mode is off\n", confFile(), err)
+			fmt.Fprintf(os.Stderr, "isotope-update: cannot read %s: %v; advanced mode is off\n", confFile(), err)
 		})
 		return false
 	}
@@ -113,7 +113,7 @@ func AdvancedEnabled() bool {
 		default:
 			enabled = false
 			logBadAdvanced(v, func() {
-				fmt.Fprintf(os.Stderr, "hadron-update: %s: advanced=%q is not true or false; advanced mode is off\n", confFile(), v)
+				fmt.Fprintf(os.Stderr, "isotope-update: %s: advanced=%q is not true or false; advanced mode is off\n", confFile(), v)
 			})
 		}
 	}

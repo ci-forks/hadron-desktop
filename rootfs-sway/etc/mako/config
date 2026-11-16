@@ -1,10 +1,10 @@
-# mako notifications for the Sway variant: the Hadron palette.
+# mako notifications for the Sway variant: the Isotope palette.
 # Colours: generated from theme/palette.toml by tools/gen-theme.py.
 font=Inter Variable 10.5
-background-color=#1a1b26f2
-text-color=#c0caf5
-border-color=#7aa2f7
-progress-color=over #7aa2f755
+background-color=#15141cf2
+text-color=#f2f1f5
+border-color=#8fd12e
+progress-color=over #8fd12e55
 border-size=2
 border-radius=10
 width=360
@@ -14,7 +14,7 @@ default-timeout=6000
 max-visible=5
 anchor=top-right
 
-# Do not disturb (hadron-notify-key dnd): nothing is shown; the notifications
+# Do not disturb (isotope-notify-key dnd): nothing is shown; the notifications
 # are kept and appear when the mode is turned off.
 [mode=do-not-disturb]
 invisible=1

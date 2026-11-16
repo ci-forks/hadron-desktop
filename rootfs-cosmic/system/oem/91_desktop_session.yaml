@@ -2,7 +2,7 @@
 # overlay's ly version of this file for the cosmic variant; see it for why a
 # boot stage is needed at all (Kairos' /etc overlay shadows baked enablement
 # and forces multi-user.target).
-name: "Hadron desktop session"
+name: "Isotope session"
 stages:
   boot:
     - if: '! grep -q "install-mode" /proc/cmdline && [ ! -f /run/cos/live_mode ]'

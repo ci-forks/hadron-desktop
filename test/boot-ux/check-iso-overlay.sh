@@ -21,7 +21,7 @@ set -euo pipefail
 DIR="${1:-build/sway-desktop/iso/iso-overlay}"
 EXPECTED_SUBTITLE="${2:-sway · wayland · kairos}"
 CFG="$DIR/boot/grub2/grub.cfg"
-THEME="$DIR/boot/grub2/themes/hadron/theme.txt"
+THEME="$DIR/boot/grub2/themes/isotope/theme.txt"
 QUIET='quiet splash loglevel=3 udev.log_level=3 systemd.show_status=false rd.systemd.show_status=false'
 fail=0
 check() {
@@ -33,9 +33,9 @@ check() {
 entry() { awk -v pat="menuentry \"$1\"" 'index($0, pat)==1, /^}/' "$CFG"; }
 
 check "grub.cfg staged"                 "test -f '$CFG'"
-check "theme.txt staged"                "test -f '$DIR/boot/grub2/themes/hadron/theme.txt'"
-check "font staged"                     "test -f '$DIR/boot/grub2/themes/hadron/unicode.pf2'"
-check "background staged"               "test -f '$DIR/boot/grub2/themes/hadron/background.tga'"
+check "theme.txt staged"                "test -f '$DIR/boot/grub2/themes/isotope/theme.txt'"
+check "font staged"                     "test -f '$DIR/boot/grub2/themes/isotope/unicode.pf2'"
+check "background staged"               "test -f '$DIR/boot/grub2/themes/isotope/background.tga'"
 check "no unrendered placeholders in grub.cfg" \
     "test -f '$CFG' && ! grep -q '{{' '$CFG'"
 check "no unrendered placeholder in theme.txt" \
@@ -45,25 +45,25 @@ check "no unrendered placeholder in theme.txt" \
 # menu claiming "agent · xlibre · kairos" while the installed system said i3.
 check "theme subtitle is '$EXPECTED_SUBTITLE'" \
     "test -f '$THEME' && grep -qF '$EXPECTED_SUBTITLE' '$THEME'"
-check "menu is retitled to hadron"      "grep -q 'menuentry \"hadron-desktop\"' '$CFG'"
+check "menu is retitled to isotope"      "grep -q 'menuentry \"isotope\"' '$CFG'"
 check "no stale Kairos titles"          "test -f '$CFG' && ! grep -q 'menuentry \"Kairos' '$CFG'"
 check "default entry carries install-mode" \
-    "entry 'hadron-desktop' | grep -q ' install-mode '"
+    "entry 'isotope' | grep -q ' install-mode '"
 check "quiet cmdline on the default entry" \
-    "entry 'hadron-desktop' | grep -qF '$QUIET'"
+    "entry 'isotope' | grep -qF '$QUIET'"
 check "console palette on the default entry" \
-    "grep -q '^set hadron_vt_palette=\"vt.default_red=' '$CFG' && entry 'hadron-desktop' | grep -qF ' \$hadron_vt_palette'"
+    "grep -q '^set isotope_vt_palette=\"vt.default_red=' '$CFG' && entry 'isotope' | grep -qF ' \$isotope_vt_palette'"
 # The normal entries load the graphics driver and its firmware; "safe
 # graphics" is the same install with nomodeset, for machines where that driver
 # hangs or shows nothing.
 check "no nomodeset on the default entry" \
-    "test -f '$CFG' && ! entry 'hadron-desktop' | grep -q nomodeset"
+    "test -f '$CFG' && ! entry 'isotope' | grep -q nomodeset"
 check "safe graphics entry installs with nomodeset" \
-    "entry 'hadron-desktop (safe graphics)' | grep -q 'vga=795 nomodeset install-mode '"
+    "entry 'isotope (safe graphics)' | grep -q 'vga=795 nomodeset install-mode '"
 check "debug entry left verbose" \
-    "entry 'hadron-desktop (debug)' | grep -q 'rd.debug' && ! entry 'hadron-desktop (debug)' | grep -q 'quiet'"
+    "entry 'isotope (debug)' | grep -q 'rd.debug' && ! entry 'isotope (debug)' | grep -q 'quiet'"
 check "recovery entry left verbose" \
-    "entry 'hadron-desktop (remote recovery mode)' | grep -q 'kairos.remote_recovery_mode' && ! entry 'hadron-desktop (remote recovery mode)' | grep -q 'quiet'"
+    "entry 'isotope (remote recovery mode)' | grep -q 'kairos.remote_recovery_mode' && ! entry 'isotope (remote recovery mode)' | grep -q 'quiet'"
 # GRUB has no hiddenentry command: on EFI it printed "can't find command".
 check "no hiddenentry"                  "test -f '$CFG' && ! grep -q hiddenentry '$CFG'"
 # Each echo opens a text box over the theme.
@@ -71,7 +71,7 @@ check "no echo in the menu entries"     "test -f '$CFG' && ! grep -q '^[^#]*echo
 # Unquoted, an empty model makes the Thor test true on every machine.
 check "Thor test is quoted"             "grep -qF 'if [ \"\${model}\" = \"Thor\" ]' '$CFG'"
 check "smbios runs only on arm64"       "grep -B1 '^ *smbios ' '$CFG' | grep -qF '\${grub_cpu}\" = \"arm64\"'"
-check "theme load is guarded"           "grep -q 'if \[ -f (\$root)/boot/grub2/themes/hadron/theme.txt \]' '$CFG'"
+check "theme load is guarded"           "grep -q 'if \[ -f (\$root)/boot/grub2/themes/isotope/theme.txt \]' '$CFG'"
 # The ISO's GRUB core has no gfxmenu built in: without these the live menu prints
 # "file `/boot/grub2/x86_64-efi/gfxmenu.mod' not found" and drops to text mode.
 check "gfxmenu module staged (EFI)"     "test -f '$DIR/boot/grub2/x86_64-efi/gfxmenu.mod'"

@@ -8,8 +8,8 @@
  * This file has no drawing and no terminal code, so test_agent.c can check it
  * on its own. C99, libc and Linux headers only.
  */
-#ifndef HADRON_AGENT_H
-#define HADRON_AGENT_H
+#ifndef ISOTOPE_AGENT_H
+#define ISOTOPE_AGENT_H
 
 #include <stddef.h>
 #include <stdint.h>

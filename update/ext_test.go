@@ -97,10 +97,10 @@ func extEnv(t *testing.T, fe *fakeExt) *Daemon {
 	t.Helper()
 	daemonEnv(t, "v0.0.5")
 	dir := t.TempDir()
-	t.Setenv("HADRON_UPDATE_EXT_DIR", filepath.Join(dir, "ext"))
-	t.Setenv("HADRON_UPDATE_EXT_RUN_DIR", filepath.Join(dir, "merged"))
-	t.Setenv("HADRON_UPDATE_EXT_STATE", filepath.Join(dir, "state"))
-	t.Setenv("HADRON_UPDATE_EXT_CONF", filepath.Join(dir, "extensions.conf"))
+	t.Setenv("ISOTOPE_UPDATE_EXT_DIR", filepath.Join(dir, "ext"))
+	t.Setenv("ISOTOPE_UPDATE_EXT_RUN_DIR", filepath.Join(dir, "merged"))
+	t.Setenv("ISOTOPE_UPDATE_EXT_STATE", filepath.Join(dir, "state"))
+	t.Setenv("ISOTOPE_UPDATE_EXT_CONF", filepath.Join(dir, "extensions.conf"))
 	root := filepath.Join(dir, "root")
 	if err := os.MkdirAll(filepath.Join(root, "usr/lib"), 0o755); err != nil {
 		t.Fatal(err)
@@ -143,7 +143,7 @@ func runExtJob(t *testing.T, d *Daemon, start func() error) Status {
 
 func TestCatalogsConf(t *testing.T) {
 	conf := filepath.Join(t.TempDir(), "extensions.conf")
-	t.Setenv("HADRON_UPDATE_EXT_CONF", conf)
+	t.Setenv("ISOTOPE_UPDATE_EXT_CONF", conf)
 	if got := Catalogs(); len(got) != 1 || got[0] != defaultCatalog {
 		t.Fatalf("no file: %v", got)
 	}
@@ -200,7 +200,7 @@ func TestDaemonCatalogMergesAndMarks(t *testing.T) {
 	t.Cleanup(down.Close)
 	second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, testCatalog) }))
 	t.Cleanup(second.Close)
-	os.WriteFile(os.Getenv("HADRON_UPDATE_EXT_CONF"),
+	os.WriteFile(os.Getenv("ISOTOPE_UPDATE_EXT_CONF"),
 		[]byte("catalog="+first.URL+"\ncatalog="+down.URL+"\ncatalog="+second.URL+"\n"), 0o644)
 	os.MkdirAll(extDir(), 0o755)
 	os.WriteFile(filepath.Join(extDir(), "tailscale.sysext.raw"), nil, 0o644)
@@ -218,7 +218,7 @@ func TestDaemonCatalogMergesAndMarks(t *testing.T) {
 		t.Fatalf("catalog %q", s)
 	}
 
-	os.WriteFile(os.Getenv("HADRON_UPDATE_EXT_CONF"), []byte("catalog="+down.URL+"\n"), 0o644)
+	os.WriteFile(os.Getenv("ISOTOPE_UPDATE_EXT_CONF"), []byte("catalog="+down.URL+"\n"), 0o644)
 	if _, err := d.Catalog(t.Context()); err == nil {
 		t.Fatal("no readable catalog is not an error")
 	}
@@ -255,7 +255,7 @@ func TestCheckRelease(t *testing.T) {
 		ok  bool
 	}{
 		{goodRel, true},
-		{map[string]string{"ID": "hadron", "ARCHITECTURE": "x86-64"}, true},
+		{map[string]string{"ID": "isotope", "ARCHITECTURE": "x86-64"}, true},
 		{map[string]string{"ID": "_any", "ARCHITECTURE": "arm64"}, false},
 		{map[string]string{"ID": "_any"}, false},
 		{map[string]string{"ID": "fedora", "ARCHITECTURE": "x86-64"}, false},
@@ -400,14 +400,14 @@ func TestExtInstallRefusals(t *testing.T) {
 		}
 	}
 	// A reference needs advanced mode.
-	os.WriteFile(os.Getenv("HADRON_UPDATE_CONF"), []byte("advanced=false\n"), 0o644)
+	os.WriteFile(os.Getenv("ISOTOPE_UPDATE_CONF"), []byte("advanced=false\n"), 0o644)
 	if err := d.InstallExtension("oci:ghcr.io/x/y:1", "", false); !errors.Is(err, errExtNeedsAdvanced) {
 		t.Fatalf("reference without advanced mode: %v", err)
 	}
 	if err := d.InstallExtension("/tmp/x.raw", "", false); !errors.Is(err, errExtNeedsAdvanced) {
 		t.Fatalf("path without advanced mode: %v", err)
 	}
-	os.WriteFile(os.Getenv("HADRON_UPDATE_CONF"), []byte("advanced=true\n"), 0o644)
+	os.WriteFile(os.Getenv("ISOTOPE_UPDATE_CONF"), []byte("advanced=true\n"), 0o644)
 	st := runExtJob(t, d, func() error { return d.InstallExtension("oci:ghcr.io/x/y:1", "", false) })
 	if st.ExtResult != extResultOK {
 		t.Fatalf("reference in advanced mode: %+v", st)
@@ -417,7 +417,7 @@ func TestExtInstallRefusals(t *testing.T) {
 	}
 
 	// No release file: nothing is installed.
-	t.Setenv("HADRON_UPDATE_RELEASE_FILE", filepath.Join(t.TempDir(), "missing"))
+	t.Setenv("ISOTOPE_UPDATE_RELEASE_FILE", filepath.Join(t.TempDir(), "missing"))
 	u := NewDaemon(&fakeBackend{})
 	u.ext = fe
 	if err := u.InstallExtension("y", "", false); !errors.Is(err, errUnmanaged) {
@@ -543,7 +543,7 @@ func TestFindInstalledIsNotAPrefixGuess(t *testing.T) {
 // and a fake systemd-dissect.
 func TestKairosBackendExtArgv(t *testing.T) {
 	agent, argv := fakeTool(t, 0)
-	t.Setenv("HADRON_UPDATE_AGENT", agent)
+	t.Setenv("ISOTOPE_UPDATE_AGENT", agent)
 	read := func() string { b, _ := os.ReadFile(argv); return strings.TrimSpace(string(b)) }
 	var kb kairosBackend
 	var lines []string
@@ -570,7 +570,7 @@ func TestKairosBackendExtArgv(t *testing.T) {
 		t.Fatalf("remove argv %q", got)
 	}
 	failing, _ := fakeTool(t, 3)
-	t.Setenv("HADRON_UPDATE_AGENT", failing)
+	t.Setenv("ISOTOPE_UPDATE_AGENT", failing)
 	if err := kb.EnableExt("t.raw", func(string) {}); err == nil || !strings.Contains(err.Error(), "kairos-agent sysext enable") {
 		t.Fatalf("a failing kairos-agent: %v", err)
 	}
@@ -585,7 +585,7 @@ case "$*" in
 esac
 `
 	os.WriteFile(dissect, []byte(script), 0o755)
-	t.Setenv("HADRON_UPDATE_DISSECT", dissect)
+	t.Setenv("ISOTOPE_UPDATE_DISSECT", dissect)
 	img, err := kb.Dissect("/var/lib/kairos/extensions/t.raw")
 	if err != nil {
 		t.Fatal(err)

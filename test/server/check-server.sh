@@ -20,14 +20,14 @@ libs() { # DESC PATH: PATH runs its loader and every library resolves
     check "$1" "test -x $2 && ldd $2 >/tmp/ldd 2>&1 && ! grep -q 'not found' /tmp/ldd"
 }
 
-R=/etc/hadron-desktop/release
+R=/etc/isotope/release
 check "release file names the server line" \
     "grep -qx FLAVOR=server $R && grep -qx GPU=full $R"
 check "the image is labelled as the server edition" \
     "true" # labels are checked from outside below
 for l in flavor=server gpu=full firmware=true; do
     k="${l%%=*}" v="${l#*=}"
-    got="$(docker image inspect --format "{{index .Config.Labels \"io.kairos.hadron-desktop.$k\"}}" "$IMAGE")"
+    got="$(docker image inspect --format "{{index .Config.Labels \"io.kairos.isotope.$k\"}}" "$IMAGE")"
     if [ "$got" = "$v" ]; then echo "PASS: label $k is $v"; else echo "FAIL: label $k is '$got', want $v"; fail=1; fi
 done
 
@@ -38,7 +38,7 @@ done
 check "no Mesa or LLVM" "! ls /usr/lib/libGL* /usr/lib/libEGL* /usr/lib/libLLVM* /usr/lib/dri 2>/dev/null | grep -q ."
 check "no GTK or Qt" "! ls /usr/lib/libgtk* /usr/lib/libQt* 2>/dev/null | grep -q ."
 check "no fontconfig fonts" "! test -d /usr/share/fonts"
-check "no desktop scripts" "! ls /usr/bin/hadron-menu /usr/bin/hadron-pick /usr/bin/start-desktop 2>/dev/null | grep -q ."
+check "no desktop scripts" "! ls /usr/bin/isotope-menu /usr/bin/isotope-pick /usr/bin/start-desktop 2>/dev/null | grep -q ."
 check "no ly unit or session" "! test -e /usr/lib/systemd/system/ly@.service && ! test -d /usr/share/wayland-sessions"
 check "tty1 has a console login (getty not masked)" \
     "! test -L /etc/systemd/system/getty@tty1.service"
@@ -54,19 +54,19 @@ check "sshd is installed" "test -x /usr/sbin/sshd || test -x /usr/bin/sshd"
 libs "polkitd finds its libraries" /usr/lib/polkit-1/polkitd
 check "polkit agent helper is setuid" "test -u /usr/lib/polkit-1/polkit-agent-helper-1"
 check "the admin rule answers the update service" \
-    "grep -q 'isInGroup(\"admin\")' /usr/share/polkit-1/rules.d/50-hadron-update.rules"
+    "grep -q 'isInGroup(\"admin\")' /usr/share/polkit-1/rules.d/50-isotope-update.rules"
 check "polkitd user exists" "getent passwd polkitd"
 check "the update service is D-Bus activated" \
-    "test -f /usr/share/dbus-1/system-services/io.kairos.HadronUpdate1.service && test -f /usr/lib/systemd/system/hadron-updated.service"
-check "hadron-update and hadron-ext run" \
-    "hadron-update help | grep -q upgrade && test \"\$(readlink /usr/bin/hadron-ext)\" = hadron-update"
-check "hadron-recovery links to hadron-update" \
-    "test \"\$(readlink /usr/bin/hadron-recovery)\" = hadron-update"
+    "test -f /usr/share/dbus-1/system-services/io.kairos.IsotopeUpdate1.service && test -f /usr/lib/systemd/system/isotope-updated.service"
+check "isotope-update and isotope-ext run" \
+    "isotope-update help | grep -q upgrade && test \"\$(readlink /usr/bin/isotope-ext)\" = isotope-update"
+check "isotope-recovery links to isotope-update" \
+    "test \"\$(readlink /usr/bin/isotope-recovery)\" = isotope-update"
 check "the installer's groups exist" \
     "for g in admin audio video render input bluetooth seat docker; do getent group \$g || exit 1; done"
-check "the installer is wired" "grep -q /usr/bin/hadron-install-ui /system/oem/90_desktop_installer.yaml"
+check "the installer is wired" "grep -q /usr/bin/isotope-install-ui /system/oem/90_desktop_installer.yaml"
 check "the passphrase prompt modules are in the initramfs" \
-    "lsinitrd /boot/initrd | grep -q hadron-unlock && lsinitrd /boot/initrd | grep -q usr/libexec/hadron-ask-gate && lsinitrd /boot/initrd | grep -q usr/bin/kairos-splash"
+    "lsinitrd /boot/initrd | grep -q isotope-unlock && lsinitrd /boot/initrd | grep -q usr/libexec/isotope-ask-gate && lsinitrd /boot/initrd | grep -q usr/bin/kairos-splash"
 
 # Docker, as on the desktop: disabled in the image (the live ISO's /var is an
 # overlayfs), started by 92_docker.yaml on the installed system, with

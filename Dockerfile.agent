@@ -5,7 +5,7 @@ ARG HADRON_VERSION=v0.6.4
 FROM ${BASE_IMAGE} AS xlibre-desktop
 FROM rust:1.97.0-alpine3.22 AS rust-toolchain
 
-# hadron-agent: the single static MCP service binary (Phase 2/3 Go module at
+# isotope-agent: the single static MCP service binary (Phase 2/3 Go module at
 # agent/). go.mod/go.sum are copied and downloaded before the rest of the
 # module source so an unrelated source edit does not invalidate the module
 # cache layer.
@@ -20,8 +20,8 @@ COPY agent/ ./
 # buildinfo.Version/buildinfo.CuaRevision), not from package main.
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -trimpath \
-    -ldflags="-s -w -X github.com/mudler/hadron-desktop/agent/internal/buildinfo.Version=${VERSION} -X github.com/mudler/hadron-desktop/agent/internal/buildinfo.CuaRevision=${CUA_COMMIT}" \
-    -o /out/hadron-agent ./cmd/hadron-agent
+    -ldflags="-s -w -X github.com/kairos-community/isotope/agent/internal/buildinfo.Version=${VERSION} -X github.com/kairos-community/isotope/agent/internal/buildinfo.CuaRevision=${CUA_COMMIT}" \
+    -o /out/isotope-agent ./cmd/isotope-agent
 
 FROM ghcr.io/kairos-io/hadron-toolchain:${HADRON_VERSION} AS agent-native
 # The desktop root has the canonical /usr/lib/firmware symlink while the
@@ -160,17 +160,17 @@ ENV CUA_DRIVER_RS_TELEMETRY_ENABLED=false \
 COPY rootfs-agent/ /
 COPY --from=agent-runtime-build /agent-runtime/ /
 COPY --from=cua-build /cua/ /
-COPY --from=agent-gobuild /out/hadron-agent /usr/bin/hadron-agent
-# Identities for the opt-in appliance overlay only. hadron-agent-gateway is a
+COPY --from=agent-gobuild /out/isotope-agent /usr/bin/isotope-agent
+# Identities for the opt-in appliance overlay only. isotope-agent-gateway is a
 # locked, no-login system account that serves the public HTTPS MCP gateway;
-# hadron-agent-control is a bare group used to gate the local control socket.
+# isotope-agent-control is a bare group used to gate the local control socket.
 # The human `agent` account is intentionally NOT created here — it is created
 # by the OEM/install paths (Task 5) on the live/installed system.
-RUN groupadd -r hadron-agent-control && \
-    groupadd -r hadron-agent-gateway && \
-    useradd -r -M -N -g hadron-agent-gateway -s /usr/sbin/nologin \
-      -c "Hadron agent gateway" hadron-agent-gateway && \
-    chmod +x /usr/bin/hadron-agent && \
+RUN groupadd -r isotope-agent-control && \
+    groupadd -r isotope-agent-gateway && \
+    useradd -r -M -N -g isotope-agent-gateway -s /usr/sbin/nologin \
+      -c "Isotope agent gateway" isotope-agent-gateway && \
+    chmod +x /usr/bin/isotope-agent && \
     glib-compile-schemas /usr/share/glib-2.0/schemas && \
     ldconfig && \
     ldd /usr/bin/cua-driver | tee /tmp/cua-ldd.txt && \
@@ -178,20 +178,20 @@ RUN groupadd -r hadron-agent-control && \
     rm /tmp/cua-ldd.txt && \
     ! getent passwd agent
 # The appliance upgrades along its own image line, not the i3 one it is built on.
-RUN sed -i 's/^FLAVOR=.*/FLAVOR=agent/' /etc/hadron-desktop/release && \
-    grep -qx 'FLAVOR=agent' /etc/hadron-desktop/release
+RUN sed -i 's/^FLAVOR=.*/FLAVOR=agent/' /etc/isotope/release && \
+    grep -qx 'FLAVOR=agent' /etc/isotope/release
 # The label follows the file: inherited from the i3 base it would say `i3`.
-LABEL io.kairos.hadron-desktop.flavor="agent"
-# No update service: hadron-update upgrade keeps its direct sudo path on the
+LABEL io.kairos.isotope.flavor="agent" io.kairos.hadron-desktop.flavor="agent"
+# No update service: isotope-update upgrade keeps its direct sudo path on the
 # appliance, so the root daemon, its D-Bus policy and activation, and its
 # polkit action and rule from the i3 image go. The update icon that talks to
 # it is shadowed by rootfs-agent/etc/i3/config.d/30-update-tray.conf.
-RUN rm -f /usr/share/dbus-1/system.d/io.kairos.HadronUpdate1.conf \
-      /usr/share/dbus-1/system-services/io.kairos.HadronUpdate1.service \
-      /usr/lib/systemd/system/hadron-updated.service \
-      /usr/share/polkit-1/actions/io.kairos.hadron-update.policy \
-      /usr/share/polkit-1/rules.d/50-hadron-update.rules && \
-    ! grep -rhsv '^[[:space:]]*#' /etc/i3 /etc/xdg/autostart | grep -q 'hadron-update'
+RUN rm -f /usr/share/dbus-1/system.d/io.kairos.IsotopeUpdate1.conf \
+      /usr/share/dbus-1/system-services/io.kairos.IsotopeUpdate1.service \
+      /usr/lib/systemd/system/isotope-updated.service \
+      /usr/share/polkit-1/actions/io.kairos.isotope-update.policy \
+      /usr/share/polkit-1/rules.d/50-isotope-update.rules && \
+    ! grep -rhsv '^[[:space:]]*#' /etc/i3 /etc/xdg/autostart | grep -q 'isotope-update'
 # No keyring: the appliance logs in automatically, so no password ever
 # unlocks it, and there is no dialog that could. Without the Secret Service,
 # apps use their own plain store, as before.
@@ -206,26 +206,26 @@ RUN rm -f /etc/systemd/user/sockets.target.wants/gnome-keyring-daemon.socket \
     ! ls /usr/share/dbus-1/services | grep -q -e secrets -e keyring
 # No first-run app picker: the appliance is driven by an agent, not a person
 # picking apps at first login. Remove the script and the i3 line that starts
-# it; hadron-menu hides its entry when the script is missing.
-RUN rm -f /usr/bin/hadron-first-run-apps && \
-    sed -i '/hadron-first-run-apps/d' /etc/i3/config && \
-    ! grep -rhsv '^[[:space:]]*#' /etc/i3 /etc/xdg/autostart | grep -q 'hadron-first-run-apps'
+# it; isotope-menu hides its entry when the script is missing.
+RUN rm -f /usr/bin/isotope-first-run-apps && \
+    sed -i '/isotope-first-run-apps/d' /etc/i3/config && \
+    ! grep -rhsv '^[[:space:]]*#' /etc/i3 /etc/xdg/autostart | grep -q 'isotope-first-run-apps'
 # No clipboard history. An AI agent drives the appliance: a history would keep
 # every token, password or key that the agent or a person copies, and give it
 # back to anything that can run a command or read the screen, the agent
 # itself included in a later, unrelated task. The i3 image's
 # config.d/40-clipboard.conf (the recorder and Super+Ctrl+V) is shadowed by
-# rootfs-agent's empty file; hadron-menu and hadron-help hide the entry when
-# hadron-clipboard is gone.
-RUN rm -f /usr/bin/hadron-clipboard /usr/bin/clipnotify && \
-    ! grep -rhsv '^[[:space:]]*#' /etc/i3 /etc/xdg/autostart | grep -q 'hadron-clipboard'
+# rootfs-agent's empty file; isotope-menu and isotope-help hide the entry when
+# isotope-clipboard is gone.
+RUN rm -f /usr/bin/isotope-clipboard /usr/bin/clipnotify && \
+    ! grep -rhsv '^[[:space:]]*#' /etc/i3 /etc/xdg/autostart | grep -q 'isotope-clipboard'
 # No system extensions. An appliance must not take root code from a menu: the
-# hadron-ext command goes (hadron-menu and hadron-help hide it then), and so
+# isotope-ext command goes (isotope-menu and isotope-help hide it then), and so
 # do its catalog list and the setting that merges unsigned extensions. Their
-# polkit action went with the policy file above, and `hadron-update ext`
+# polkit action went with the policy file above, and `isotope-update ext`
 # refuses on the agent flavor.
-RUN rm -f /usr/bin/hadron-ext /etc/hadron-desktop/extensions.conf /etc/kairos/90_hadron_extensions.yaml /system/oem/93_hadron_extensions.yaml && \
-    ! test -e /usr/bin/hadron-ext
+RUN rm -f /usr/bin/isotope-ext /etc/isotope/extensions.conf /etc/kairos/90_isotope_extensions.yaml /system/oem/93_isotope_extensions.yaml && \
+    ! test -e /usr/bin/isotope-ext
 # No recovery key manager either: it talks to the update service, which the
-# agent does not have, and hadron-menu hides its entry without the command.
-RUN rm -f /usr/bin/hadron-recovery && ! test -e /usr/bin/hadron-recovery
+# agent does not have, and isotope-menu hides its entry without the command.
+RUN rm -f /usr/bin/isotope-recovery && ! test -e /usr/bin/isotope-recovery

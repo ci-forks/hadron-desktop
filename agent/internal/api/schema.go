@@ -1,4 +1,4 @@
-// Package api freezes the public MCP contract exposed by the hadron-agent
+// Package api freezes the public MCP contract exposed by the isotope-agent
 // service binary: the seven authenticated tool names, their typed
 // input/output schemas (inferred by the MCP SDK from the Go types below),
 // and the stable error codes every tool result may carry.
@@ -19,7 +19,7 @@ import (
 )
 
 // Tool names. The sorted set of these seven values is the entire public
-// surface of hadron-agent; no eighth tool may be added without a deliberate,
+// surface of isotope-agent; no eighth tool may be added without a deliberate,
 // reviewed contract change.
 const (
 	ToolComputerUse = "computer_use"
@@ -58,7 +58,7 @@ const (
 	// field/action combination).
 	CodeInvalidArgument ErrorCode = "INVALID_ARGUMENT"
 	// CodeUnauthenticated means the caller did not present a valid
-	// credential for the hadron-agent MCP endpoint.
+	// credential for the isotope-agent MCP endpoint.
 	CodeUnauthenticated ErrorCode = "UNAUTHENTICATED"
 	// CodeForbidden means the caller authenticated but is not permitted to
 	// perform the requested action.

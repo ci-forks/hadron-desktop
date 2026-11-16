@@ -1,0 +1,59 @@
+# Isotope's defaults for the Noctalia shell.
+#
+# isotope-noctalia copies this file to ~/.config/noctalia/00-isotope-defaults.toml
+# on every session start, so an image upgrade can change it; do not edit that
+# copy. Noctalia merges every *.toml in ~/.config/noctalia in name order, so a
+# config.toml there overrides these, and changes made in Noctalia's Settings
+# window are kept in a separate file that overrides both.
+
+[shell]
+# The Isotope interface font, as on the other variants. Monospace text (the
+# tooltips' values, code in notes) asks fontconfig for `monospace`, which
+# /etc/fonts/conf.d/60-isotope.conf makes JetBrains Mono.
+font_family = "Inter Variable"
+# Show the password prompt when an app asks for privileges (date and time,
+# Flatpak system installs). Without an agent those requests fail.
+polkit_agent = true
+# Clipboard history (Super+Ctrl+V, isotope-clipboard): the same 200 entries as
+# the other variants keep. Noctalia does not record a copy that a password
+# manager marks with x-kde-passwordManagerHint.
+clipboard_history_max_entries = 200
+
+# The blurred wallpaper behind niri's overview (Super+O); /etc/niri/config.kdl
+# places it in the overview backdrop.
+[backdrop]
+enabled = true
+
+# The Isotope palette, so the bar, panels and launcher match the other variants.
+# isotope-noctalia copies it to ~/.config/noctalia/palettes/Isotope.json. It is
+# generated from theme/palette.toml.
+[theme]
+source = "custom"
+custom_palette = "Isotope"
+
+# The Isotope wallpaper on every output, and the Isotope images in the wallpaper
+# picker. Noctalia reads wallpaper.default.path from these files (docs/user/
+# desktop/wallpaper.mdx, v5.4); picking a wallpaper in Noctalia writes the same
+# key to settings.toml, which overrides this one. Noctalia does not change the
+# wallpaper when it switches to light mode, so the day tiles are a choice in
+# the picker, next to the night ones.
+[wallpaper]
+directory = "/usr/share/backgrounds/isotope"
+
+[wallpaper.default]
+path = "/usr/share/backgrounds/isotope/isotope-tiles-night-3840x2160.png"
+
+# Night light: the same as isotope-night-light on the other variants, 4500 K
+# from 20:00 to 07:00. It starts off; Super+Alt+N and the Isotope menu turn it
+# on and off through `noctalia msg nightlight-enable|disable`, and
+# isotope-night-light turns it back on at session start if the user left it on
+# (Noctalia does not keep that switch across restarts). Hadron has no location
+# service, so the schedule uses fixed times; a location set in Noctalia's
+# Settings window is used once the custom schedule there is turned off.
+[nightlight]
+temperature_night = 4500
+
+[location]
+custom_schedule = true
+sunset = "20:00"
+sunrise = "07:00"

@@ -1,4 +1,4 @@
-module github.com/kairos-io/hadron-desktop/update
+module github.com/kairos-community/isotope/update
 
 go 1.25
 

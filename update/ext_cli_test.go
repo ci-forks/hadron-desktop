@@ -124,7 +124,7 @@ func TestExtCLIBrowse(t *testing.T) {
 	if _, out, _ := runCLI("", "ext", "browse", "nothing"); !strings.Contains(out, `No extension in the catalogs matches "nothing"`) {
 		t.Fatalf("browse nothing %q", out)
 	}
-	// The lines hadron-menu shows: a mark, the name, the description, and
+	// The lines isotope-menu shows: a mark, the name, the description, and
 	// the URL item in advanced mode only.
 	_, out, _ = runCLI("", "ext", "browse", "--menu")
 	if out != "  tailscale — VPN\n✓ gpg — GnuPG\n"+menuURLItem+"\n" {
@@ -188,7 +188,7 @@ func TestExtCLIConflictSuggestsForce(t *testing.T) {
 	f.script = extDone(extResultConflict, "it replaces files ...: /usr/lib/libgcrypt.so.20")
 	useExt(t, f)
 	code, _, errOut := runCLI("", "ext", "install", "tailscale", "--yes")
-	if code != exitError || !strings.Contains(errOut, "refused: it replaces") || !strings.Contains(errOut, "`hadron-ext install tailscale --force`") {
+	if code != exitError || !strings.Contains(errOut, "refused: it replaces") || !strings.Contains(errOut, "`isotope-ext install tailscale --force`") {
 		t.Fatalf("conflict: %d %q", code, errOut)
 	}
 	f.script = extDone(extResultOK, "ok")
@@ -197,7 +197,7 @@ func TestExtCLIConflictSuggestsForce(t *testing.T) {
 		t.Fatalf("forced: %d %q %q", code, out, f.calls)
 	}
 	f.script = extDone(extResultConflict, "it replaces files")
-	if code, _, errOut := runCLI("", "ext", "enable", "gpg"); code != exitError || !strings.Contains(errOut, "`hadron-ext enable gpg --force`") {
+	if code, _, errOut := runCLI("", "ext", "enable", "gpg"); code != exitError || !strings.Contains(errOut, "`isotope-ext enable gpg --force`") {
 		t.Fatalf("enable conflict: %d %q", code, errOut)
 	}
 	f.script = extDone(extResultFailed, "pull failed")
@@ -266,7 +266,7 @@ func TestExtCLIUsage(t *testing.T) {
 	if f.startedAny() {
 		t.Fatalf("a usage error reached the service: %q", f.calls)
 	}
-	if code, out, _ := runCLI("", "ext", "help"); code != exitOK || !strings.Contains(out, "hadron-ext [command]") {
+	if code, out, _ := runCLI("", "ext", "help"); code != exitOK || !strings.Contains(out, "isotope-ext [command]") {
 		t.Fatalf("help: %d %q", code, out)
 	}
 }
@@ -281,7 +281,7 @@ func TestExtCLIOnAgentAndWithoutTheService(t *testing.T) {
 		t.Fatalf("agent: %d %q dialed=%v", code, errOut, dialed)
 	}
 	setup(t, "v0.1.0", "v0.1.0")
-	if code, _, errOut := runCLI("", "ext", "browse"); code != exitError || !strings.Contains(errOut, "not available (hadron-updated)") {
+	if code, _, errOut := runCLI("", "ext", "browse"); code != exitError || !strings.Contains(errOut, "not available (isotope-updated)") {
 		t.Fatalf("no service: %d %q", code, errOut)
 	}
 }

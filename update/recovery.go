@@ -15,8 +15,8 @@ import (
 	"strings"
 )
 
-// Recovery keys of the disk encryption, run as root by hadron-updated for
-// `hadron-recovery`. See the Trusted Boot design note,
+// Recovery keys of the disk encryption, run as root by isotope-updated for
+// `isotope-recovery`. See the Trusted Boot design note,
 // docs/superpowers/specs/2026-11-07-trusted-boot-edition-design.md.
 //
 // A recovery key is a LUKS2 keyslot with a systemd-recovery token next to it,
@@ -42,11 +42,11 @@ var (
 	tpmPCRPublicKey = "/run/systemd/tpm2-pcr-public-key.pem"
 	tpmPCRSignature = "/run/systemd/tpm2-pcr-signature.json"
 	tpmSRKPublicKey = "/run/systemd/tpm2-srk-public-key.tpm2b_public"
-	recoveryRunDir  = "/run/hadron-recovery"
+	recoveryRunDir  = "/run/isotope-recovery"
 	procCmdline     = "/proc/cmdline"
 )
 
-// Editions, as `hadron-recovery status` names them.
+// Editions, as `isotope-recovery status` names them.
 const (
 	editionTrustedBoot = "trusted-boot"
 	editionNormal      = "normal"
@@ -71,7 +71,7 @@ func execCmd(name string, args []string, stdin []byte) ([]byte, error) {
 	return out, nil
 }
 
-// recovery is the root side of hadron-recovery.
+// recovery is the root side of isotope-recovery.
 type recovery struct {
 	run cmdRunner
 }
@@ -86,7 +86,7 @@ type ContainerStatus struct {
 	TPMWorks   bool // the TPM unseals the key now (only when TPM > 0)
 }
 
-// RecoveryStatus is what `hadron-recovery status` shows.
+// RecoveryStatus is what `isotope-recovery status` shows.
 type RecoveryStatus struct {
 	Edition    string
 	Containers []ContainerStatus

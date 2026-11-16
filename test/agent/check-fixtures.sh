@@ -9,7 +9,7 @@ if grep -F -- '--no-gpg-verify' "$dockerfile"; then
     echo 'unsigned remote flag still present' >&2
     exit 1
 fi
-grep -F '/usr/share/hadron/flathub.flatpakrepo' "$dockerfile" >/dev/null
+grep -F '/usr/share/isotope/flathub.flatpakrepo' "$dockerfile" >/dev/null
 grep -F 'remotes --system --columns=name,url,options' \
     "$dockerfile" >/dev/null
 grep -F 'flatpak-refs.tsv' "$dockerfile" >/dev/null

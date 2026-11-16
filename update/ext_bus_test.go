@@ -90,7 +90,7 @@ func TestBusExtensionInstall(t *testing.T) {
 	d := extEnv(t, fe)
 	cat := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, testCatalog) }))
 	t.Cleanup(cat.Close)
-	os.WriteFile(os.Getenv("HADRON_UPDATE_EXT_CONF"), []byte("catalog="+cat.URL+"\n"), 0o644)
+	os.WriteFile(os.Getenv("ISOTOPE_UPDATE_EXT_CONF"), []byte("catalog="+cat.URL+"\n"), 0o644)
 	f := startService(t, d, &fakeAuth{allow: true})
 
 	var entries []map[string]dbus.Variant
@@ -140,7 +140,7 @@ func TestBusExtensionInstall(t *testing.T) {
 		t.Fatalf("bad name: %s", got)
 	}
 	// Advanced mode off refuses a URL by name Refused.
-	os.WriteFile(os.Getenv("HADRON_UPDATE_CONF"), []byte("advanced=false\n"), 0o644)
+	os.WriteFile(os.Getenv("ISOTOPE_UPDATE_CONF"), []byte("advanced=false\n"), 0o644)
 	if got := errName(f.call("InstallExtension", "oci:x/y:1", "", false).Err); got != busInterface+".Error.Refused" {
 		t.Fatalf("URL without advanced mode: %s", got)
 	}

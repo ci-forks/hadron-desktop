@@ -1,0 +1,10 @@
+#!/bin/sh
+# Start the Noctalia shell with Isotope's defaults. Noctalia has no
+# system-wide config, so the defaults are refreshed into the user's config
+# directory as one file that sorts before any config the user writes. The
+# Isotope palette those defaults select goes to palettes/, where Noctalia looks
+# for custom palettes.
+d="${XDG_CONFIG_HOME:-$HOME/.config}/noctalia"
+mkdir -p "$d/palettes" && cp /usr/share/isotope/noctalia-defaults.toml "$d/00-isotope-defaults.toml"
+cp /usr/share/isotope/noctalia-palettes/Isotope.json "$d/palettes/Isotope.json"
+exec noctalia "$@"

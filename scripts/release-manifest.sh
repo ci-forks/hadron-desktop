@@ -25,14 +25,14 @@ set -euo pipefail
 
 die() { echo "release-manifest: $*" >&2; exit 1; }
 
-# hadron-update decides an image is a Hadron Desktop one from these labels (the
+# isotope-update decides an image is an Isotope one from these labels (the
 # keys equal the constants in update/policy.go), so an image whose labels
 # disagree with where it is published would make every installed system
 # mis-detect it. Fail the release instead.
-label_flavor=io.kairos.hadron-desktop.flavor
-label_version=io.kairos.hadron-desktop.version
-label_gpu=io.kairos.hadron-desktop.gpu
-label_firmware=io.kairos.hadron-desktop.firmware
+label_flavor=io.kairos.isotope.flavor
+label_version=io.kairos.isotope.version
+label_gpu=io.kairos.isotope.gpu
+label_firmware=io.kairos.isotope.firmware
 
 image_label() { # image, key
   docker image inspect --format "{{index .Config.Labels \"$2\"}}" "$1" \

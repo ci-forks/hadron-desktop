@@ -7,12 +7,12 @@
 #
 # Unlike the base launcher, this deliberately does NOT call dbus-run-session.
 # The `agent` account lingers, so its `systemd --user` manager (and the
-# hadron-agent-session.service broker it starts before the display exists)
+# isotope-agent-session.service broker it starts before the display exists)
 # already owns a user bus at /run/user/$(id -u)/bus. The graphical session must
 # SHARE that one bus -- a fresh dbus-run-session bus would isolate Cua from the
 # broker, defeating the whole point. So we wait for the user-manager bus, point
 # DBUS_SESSION_BUS_ADDRESS at it, publish DISPLAY/XAUTHORITY/DBUS into the user
-# manager and restart the broker (via hadron-agent-session-ready), then exec i3
+# manager and restart the broker (via isotope-agent-session-ready), then exec i3
 # on that shared bus.
 #
 # Like the base launcher, this runs without `set -u` so a user-provided
@@ -42,6 +42,6 @@ export DBUS_SESSION_BUS_ADDRESS
 # Import the live session environment into the user manager and restart the
 # broker so Cua re-parents onto this display. Failures here are logged by the
 # helper but must not block the desktop from coming up.
-hadron-agent-session-ready || true
+isotope-agent-session-ready || true
 
 exec i3 --config /etc/i3/config

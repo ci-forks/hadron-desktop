@@ -1,4 +1,4 @@
-// Package gateway implements hadron-agent's public front door: a stateless
+// Package gateway implements isotope-agent's public front door: a stateless
 // HTTPS MCP endpoint that authenticates every /mcp request, routes each tool
 // call to the correct broker over the internal Unix-socket RPC, and exposes
 // fully redacted health and readiness endpoints.
@@ -42,10 +42,10 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/mudler/hadron-desktop/agent/internal/api"
-	appauth "github.com/mudler/hadron-desktop/agent/internal/auth"
-	"github.com/mudler/hadron-desktop/agent/internal/control"
-	"github.com/mudler/hadron-desktop/agent/internal/rpc"
+	"github.com/kairos-community/isotope/agent/internal/api"
+	appauth "github.com/kairos-community/isotope/agent/internal/auth"
+	"github.com/kairos-community/isotope/agent/internal/control"
+	"github.com/kairos-community/isotope/agent/internal/rpc"
 )
 
 // Defaults for the gateway's operational bounds and behavior.
@@ -255,7 +255,7 @@ func (g *Gateway) Handler() http.Handler { return g.handler }
 // ---------------------------------------------------------------------------
 
 func (g *Gateway) buildHandler() http.Handler {
-	server := mcp.NewServer(&mcp.Implementation{Name: "hadron-agent", Version: g.version}, nil)
+	server := mcp.NewServer(&mcp.Implementation{Name: "isotope-agent", Version: g.version}, nil)
 	g.registerTools(server)
 
 	streamable := mcp.NewStreamableHTTPHandler(

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mudler/hadron-desktop/agent/internal/api"
+	"github.com/kairos-community/isotope/agent/internal/api"
 )
 
 // ---------------------------------------------------------------------------
@@ -253,8 +253,8 @@ func TestVerify_AcceptsCurrentDigest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Verify: %v", err)
 	}
-	if len(info.Scopes) != 1 || info.Scopes[0] != "hadron:user" {
-		t.Fatalf("Scopes = %v, want [hadron:user]", info.Scopes)
+	if len(info.Scopes) != 1 || info.Scopes[0] != "isotope:user" {
+		t.Fatalf("Scopes = %v, want [isotope:user]", info.Scopes)
 	}
 	wantUserID := string(userDigest)[len("sha256:") : len("sha256:")+16]
 	if info.UserID != wantUserID {
@@ -282,8 +282,8 @@ func TestVerify_AcceptsAdminCurrentDigest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Verify: %v", err)
 	}
-	if len(info.Scopes) != 1 || info.Scopes[0] != "hadron:admin" {
-		t.Fatalf("Scopes = %v, want [hadron:admin]", info.Scopes)
+	if len(info.Scopes) != 1 || info.Scopes[0] != "isotope:admin" {
+		t.Fatalf("Scopes = %v, want [isotope:admin]", info.Scopes)
 	}
 }
 

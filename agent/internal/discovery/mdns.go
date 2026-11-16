@@ -1,9 +1,9 @@
 // Package discovery provides OPTIONAL mDNS/DNS-SD advertisement of
-// hadron-agent's MCP endpoint on the local network, so a LAN client can find
+// isotope-agent's MCP endpoint on the local network, so a LAN client can find
 // the gateway without being told its address up front.
 //
 // This package advertises exactly three non-sensitive facts under the
-// service "_hadron-agent._tcp" in the "local." domain: the fixed request
+// service "_isotope-agent._tcp" in the "local." domain: the fixed request
 // path ("path=/mcp"), that the endpoint requires TLS ("tls=1"), and the
 // running binary's build version ("version=..."). It NEVER advertises a
 // token ID, a certificate fingerprint, an IP address (zeroconf resolves
@@ -46,14 +46,14 @@ import (
 )
 
 const (
-	// ServiceType is the DNS-SD service type hadron-agent advertises.
-	ServiceType = "_hadron-agent._tcp"
+	// ServiceType is the DNS-SD service type isotope-agent advertises.
+	ServiceType = "_isotope-agent._tcp"
 	// ServiceDomain is the mDNS domain the service is advertised in.
 	ServiceDomain = "local."
 
 	// defaultInstance is the service instance name used when the caller
 	// supplies no hostname, or the supplied hostname normalizes to nothing.
-	defaultInstance = "hadron-agent"
+	defaultInstance = "isotope-agent"
 )
 
 // Server is the minimal lifecycle of a live mDNS registration: shutting
@@ -86,7 +86,7 @@ type Config struct {
 	// Hostname seeds the service instance name; it is normalized (domain
 	// stripped, sanitized) before use. Empty falls back to the OS
 	// hostname, and a hostname that normalizes to nothing falls back to
-	// "hadron-agent".
+	// "isotope-agent".
 	Hostname string
 	// Version is the build version advertised under the TXT key "version".
 	// Callers pass buildinfo.Version.
@@ -99,7 +99,7 @@ type Config struct {
 	Interfaces []net.Interface
 }
 
-// Advertiser is the optional mDNS advertisement of hadron-agent's MCP
+// Advertiser is the optional mDNS advertisement of isotope-agent's MCP
 // endpoint. Construct it with New and drive its lifecycle with Start and
 // Stop; it is safe for concurrent use.
 type Advertiser struct {
@@ -202,7 +202,7 @@ func (a *Advertiser) txtRecords() []string {
 // mDNS service instance name: the domain is stripped (only the leftmost
 // label is kept), and every character outside [A-Za-z0-9-_] is replaced
 // with '-'. An empty, all-domain, or all-unsafe input falls back to
-// "hadron-agent".
+// "isotope-agent".
 func normalizeInstance(hostname string) string {
 	h := strings.TrimSpace(hostname)
 	if i := strings.IndexByte(h, '.'); i >= 0 {

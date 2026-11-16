@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launch a Hadron desktop image in QEMU with the correct display flags for an
+# Launch an Isotope image in QEMU with the correct display flags for an
 # accurate picture of the real boot.
 #
 # WHY THIS EXISTS: QEMU's *default* VGA gives a glitchy UEFI framebuffer that
@@ -155,7 +155,7 @@ if [ "${NOVNC:-0}" = "1" ]; then
   NOVNC_ROOT="$(find_first "$HOME/novnc/vnc.html" /usr/share/novnc/vnc.html /usr/share/webapps/novnc/vnc.html)"
   NOVNC_ROOT="${NOVNC_ROOT%/vnc.html}"
   if [ -x "$WS" ] && [ -n "$NOVNC_ROOT" ]; then
-    "$WS" --web "$NOVNC_ROOT" "$BIND:$NOVNC_PORT" "127.0.0.1:$VNC_PORT" >/tmp/hadron-novnc.log 2>&1 &
+    "$WS" --web "$NOVNC_ROOT" "$BIND:$NOVNC_PORT" "127.0.0.1:$VNC_PORT" >/tmp/isotope-novnc.log 2>&1 &
     WS_PID=$!
     echo "==> noVNC:  http://$(hostname -I 2>/dev/null | awk '{print $1}'):$NOVNC_PORT/vnc.html?autoconnect=1"
   else
@@ -173,7 +173,7 @@ echo "==> Ctrl-C in this terminal stops the VM."
 # mouse, which would otherwise be the active pointer, and which a guest without
 # the vmmouse driver only sees as a relative PS/2 mouse.
 exec qemu-system-x86_64 \
-  -name "hadron-${DESKTOP}-desktop-vm" \
+  -name "isotope-${DESKTOP}-desktop-vm" \
   "${ACCEL[@]}" \
   -m "$MEM" -smp "$CPUS" \
   -drive if=pflash,format=raw,unit=0,readonly=on,file="$OVMF_CODE" \

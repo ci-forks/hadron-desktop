@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mudler/hadron-desktop/agent/internal/api"
+	"github.com/kairos-community/isotope/agent/internal/api"
 )
 
 // This file implements the browser tool over Cua's `page` tool.
@@ -615,7 +615,7 @@ func jsString(s string) string {
 // re-render can detach the node while the array still holds it -- both must be
 // reported, never silently retargeted.
 func resolveRefJS(idx int) string {
-	return fmt.Sprintf(`var refs=window.__hadronRefs||[];var el=refs[%d];
+	return fmt.Sprintf(`var refs=window.__isotopeRefs||[];var el=refs[%d];
 if(!el||!document.contains(el)){return JSON.stringify({error:'stale_ref'});}`, idx)
 }
 
@@ -628,7 +628,7 @@ func submitJS(submit bool) string {
 
 // snapshotJS builds the snapshot program: collect the page's interactive
 // elements with their roles, accessible names and bounds, and leave the nodes
-// in window.__hadronRefs for later ref actions.
+// in window.__isotopeRefs for later ref actions.
 //
 // The selector takes bare 'a', not a[href]: js-dos's "Click to start" overlay
 // is an anchor with no href wired up in JS, and requiring href made the one
@@ -695,12 +695,12 @@ for(var i=0;i<nodes.length;i++){
             x:Math.round(r.left),y:Math.round(r.top),
             width:Math.round(r.width),height:Math.round(r.height)});
 }
-window.__hadronRefs=refs;
+window.__isotopeRefs=refs;
 return JSON.stringify({url:location.href,title:document.title,vw:window.innerWidth,vh:window.innerHeight,
                        elements:out,truncated:truncated});})()`, limit)
 }
 
-// refIndex turns a public ref ("e12") into its index in window.__hadronRefs.
+// refIndex turns a public ref ("e12") into its index in window.__isotopeRefs.
 func refIndex(ref string) (int, error) {
 	if !strings.HasPrefix(ref, "e") {
 		return 0, fmt.Errorf("invalid ref %q: refs come from a snapshot and look like \"e1\"", ref)

@@ -10,15 +10,15 @@ import (
 
 // defaultReleaseFile is written by the Dockerfile's kairos stage. It is the one
 // place the installed system records which image line it upgrades along.
-const defaultReleaseFile = "/etc/hadron-desktop/release"
+const defaultReleaseFile = "/etc/isotope/release"
 
 // Release is the identity of the running system.
 type Release struct {
 	Flavor        string // sway, i3, cosmic, niri, agent or server
-	Version       string // the hadron-desktop release tag, e.g. v0.1.0
+	Version       string // the isotope release tag, e.g. v0.1.0
 	HadronVersion string // the Hadron base release, e.g. v0.6.3
-	ImageRepo     string // e.g. ghcr.io/kairos-community/hadron-desktop
-	GitHubRepo    string // e.g. kairos-community/hadron-desktop
+	ImageRepo     string // e.g. ghcr.io/kairos-community/isotope
+	GitHubRepo    string // e.g. kairos-community/isotope
 	// GPU is the image line: gpuFull or gpuVM. Releases up to v0.0.7 wrote
 	// no GPU key; LoadRelease reads them as gpuFull (see Line).
 	GPU string
@@ -36,7 +36,7 @@ const (
 
 // Line is the image line this system upgrades along. A release file without a
 // GPU key comes from v0.0.7 or earlier: those were GPU=vm images, but their
-// own hadron-update can only pull <flavor>-<tag>, which is the full line now,
+// own isotope-update can only pull <flavor>-<tag>, which is the full line now,
 // and the full image runs in a VM too. So they are on the full line.
 func (r Release) Line() string {
 	if r.GPU == gpuVM {
@@ -60,7 +60,7 @@ func (r Release) ImageFor(tag string) string {
 }
 
 func releaseFile() string {
-	if p := os.Getenv("HADRON_UPDATE_RELEASE_FILE"); p != "" {
+	if p := os.Getenv("ISOTOPE_UPDATE_RELEASE_FILE"); p != "" {
 		return p
 	}
 	return defaultReleaseFile
@@ -68,7 +68,7 @@ func releaseFile() string {
 
 // LoadRelease reads a KEY=value file. Values may be quoted. Every key the
 // upgrade path needs must be present: a half-written file would otherwise make
-// hadron-update pull an image reference like ":-v1.0.0".
+// isotope-update pull an image reference like ":-v1.0.0".
 func LoadRelease(path string) (Release, error) {
 	kv, err := readKV(path)
 	if err != nil {
@@ -99,8 +99,8 @@ func LoadRelease(path string) (Release, error) {
 	return r, nil
 }
 
-// readKV reads a KEY=value file, the format of /etc/hadron-desktop/release
-// and /etc/hadron-desktop/session. Blank lines and # comments are skipped;
+// readKV reads a KEY=value file, the format of /etc/isotope/release
+// and /etc/isotope/session. Blank lines and # comments are skipped;
 // values may be quoted.
 func readKV(path string) (map[string]string, error) {
 	f, err := os.Open(path)

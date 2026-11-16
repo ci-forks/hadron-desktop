@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mudler/hadron-desktop/agent/internal/api"
-	"github.com/mudler/hadron-desktop/agent/internal/control"
+	"github.com/kairos-community/isotope/agent/internal/api"
+	"github.com/kairos-community/isotope/agent/internal/control"
 )
 
 // TestStatusWriterSerializesElevenFields asserts the redacted status.json
-// carries EXACTLY the eleven fields the hadron-status / first-run scripts read,
+// carries EXACTLY the eleven fields the isotope-status / first-run scripts read,
 // with the correct names and values (a simulated in-flight computer_use ->
 // computer_use_active true; session-down + not-paused -> degraded true & ready
 // false), that it is written atomically (no temp file left behind), and that it

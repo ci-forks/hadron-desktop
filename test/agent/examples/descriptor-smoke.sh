@@ -4,7 +4,7 @@
 #
 # It does exactly what a downstream UI repository's CI does, minus the UI:
 #
-#   1. resolve a fixture descriptor (argument, HADRON_AGENT_FIXTURE, or the
+#   1. resolve a fixture descriptor (argument, ISOTOPE_AGENT_FIXTURE, or the
 #      default fixture artifact path);
 #   2. validate it against test/agent/fixture.schema.json AND check the file
 #      modes and token-leak rules that the schema alone cannot express;
@@ -21,7 +21,7 @@
 #   descriptor-smoke.sh [DESCRIPTOR]
 #
 # Environment:
-#   HADRON_AGENT_FIXTURE  descriptor path (same variable the reusable CI
+#   ISOTOPE_AGENT_FIXTURE  descriptor path (same variable the reusable CI
 #                         workflow exports to the caller's test command)
 #   ADMIN_TOKEN_FILE      admin bearer file. mcp-smoke requires one so it can
 #                         prove that the DESCRIPTOR's ordinary bearer cannot
@@ -61,7 +61,7 @@ source "$AGENT_DIR/lib/common.sh"
 # ---------------------------------------------------------------------------
 # 1. Resolve the descriptor
 # ---------------------------------------------------------------------------
-DESCRIPTOR="${1:-${HADRON_AGENT_FIXTURE:-$FIXTURE_ART/fixture.json}}"
+DESCRIPTOR="${1:-${ISOTOPE_AGENT_FIXTURE:-$FIXTURE_ART/fixture.json}}"
 if [ ! -f "$DESCRIPTOR" ]; then
   err "no descriptor at $DESCRIPTOR"
   err "start a fixture first:  $AGENT_DIR/run.sh fixture &"

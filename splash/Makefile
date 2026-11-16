@@ -1,9 +1,9 @@
 .PHONY: all clean test
-all: hadron-splash
+all: isotope-splash
 
 CFLAGS_COMMON = -std=c99 -Wall -Wextra -Wpedantic
 
-hadron-splash: main.c agent.c agent.h font.h
+isotope-splash: main.c agent.c agent.h font.h
 	@gcc -Os $(CFLAGS_COMMON) \
 		-fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector \
 		-ffunction-sections -fdata-sections -fno-plt -fno-pie -no-pie -flto \
@@ -19,4 +19,4 @@ test: test_agent
 	@./test_agent
 
 clean:
-	@rm -f hadron-splash test_agent *.o
+	@rm -f isotope-splash test_agent *.o

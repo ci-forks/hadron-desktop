@@ -1,0 +1,36 @@
+#!/bin/sh
+# The menu picker every isotope-* menu uses: reads one choice per line on
+# stdin, prints the chosen line, and exits non-zero when the user cancels.
+#
+#   printf '%s\n' One Two | isotope-pick 'Prompt' [LINES]
+#
+# A line can add an icon after a tab, "Label<TAB>glyph", where the glyph is a
+# Symbols Nerd Font character. fuzzel shows the glyph before the label; dmenu
+# shows only the label. Either way the printed choice is the label alone, so
+# a caller matches the same text on every variant.
+#
+# fuzzel on Wayland, dmenu on X11 (i3), both in the Isotope palette, so the
+# Isotope menu and the Wi-Fi, audio, Bluetooth and power menus look the same.
+prompt=${1:-Select}
+lines=${2:-14}
+tab=$(printf '\t')
+
+if [ -n "${WAYLAND_DISPLAY:-}" ] && command -v fuzzel >/dev/null 2>&1; then
+    pick() { fuzzel --dmenu --width=48 --lines="$lines" --prompt="$prompt > "; }
+    items=$(cat)
+    [ -n "$items" ] || exit 1
+    case "$items" in
+        *"$tab"*) ;;
+        *) printf '%s\n' "$items" | pick; exit ;;
+    esac
+    sel=$(printf '%s\n' "$items" |
+        awk -F "$tab" 'NF > 1 { print $2 "  " $1; next } { print }' | pick) || exit
+    # Back from "glyph  Label" to "Label"; typed text that is no item stays.
+    printf '%s\n' "$items" | S=$sel awk -F "$tab" '
+        NF > 1 && $2 "  " $1 == ENVIRON["S"] { print $1; found = 1; exit }
+        $0 == ENVIRON["S"] { print; found = 1; exit }
+        END { if (!found) print ENVIRON["S"] }'
+    exit 0
+fi
+cut -f1 | dmenu -i -l "$lines" -p "$prompt" -fn 'Inter Variable-11' \
+    -nb '#15141c' -nf '#f2f1f5' -sb '#8fd12e' -sf '#15141c'

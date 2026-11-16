@@ -1,11 +1,11 @@
-// Hadron Desktop: niri with the Noctalia shell.
+// Isotope: niri with the Noctalia shell.
 //
 // This is the system-wide default (/etc/niri/config.kdl). niri reads
 // ~/.config/niri/config.kdl instead when it exists; to customise, copy this
 // file there and edit it. niri reloads it live on save.
 //
 // It is niri's own default config with these changes: Noctalia is started
-// with the session (through hadron-noctalia) and replaces waybar, fuzzel and
+// with the session (through isotope-noctalia) and replaces waybar, fuzzel and
 // swaylock in the key bindings; foot is the terminal; apps are asked not to
 // draw their own decorations (prefer-no-csd); the startup hotkey pop-up is
 // off; Super+Enter, Super+Shift+Q and Super+Shift+E work as they do in the
@@ -35,8 +35,8 @@ input {
             //
             // Hadron has no localed. Leave this section empty and niri uses
             // the layout chosen in the installer: niri-session starts a login
-            // shell, /etc/profile.d/hadron-keyboard.sh exports it from
-            // /etc/hadron-desktop/keyboard as XKB_DEFAULT_LAYOUT and
+            // shell, /etc/profile.d/isotope-keyboard.sh exports it from
+            // /etc/isotope/keyboard as XKB_DEFAULT_LAYOUT and
             // XKB_DEFAULT_VARIANT, and libxkbcommon reads those when niri
             // gives it no layout. A layout set here replaces it.
         }
@@ -186,15 +186,15 @@ layout {
         // - RGB hex: "#rgb", "#rgba", "#rrggbb", "#rrggbbaa"
         // - CSS-like notation: "rgb(255, 127, 0)", rgba(), hsl() and a few others.
 
-        // Color of the ring on the active monitor. Hadron accent; the colours
+        // Color of the ring on the active monitor. Isotope accent; the colours
         // here are generated from theme/palette.toml by tools/gen-theme.py.
-        active-color "#7aa2f7"
+        active-color "#8fd12e"
 
         // Color of the ring on inactive monitors.
         //
         // The focus ring only draws around the active window, so the only place
         // where you can see its inactive-color is on other monitors.
-        inactive-color "#414868"
+        inactive-color "#3c3a49"
 
         // You can also use gradients. They take precedence over solid colors.
         // Gradients are rendered the same as CSS linear-gradient(angle, from, to).
@@ -219,8 +219,8 @@ layout {
         off
 
         width 4
-        active-color "#7aa2f7"
-        inactive-color "#414868"
+        active-color "#8fd12e"
+        inactive-color "#3c3a49"
 
         // Color of the border around windows that request your attention.
         urgent-color "#f7768e"
@@ -289,18 +289,18 @@ layout {
 // See the binds section below for more spawn examples.
 
 // Noctalia is the shell: bar, dock, launcher, notifications, lock screen.
-// hadron-noctalia starts it with Hadron's defaults (the polkit prompt).
-spawn-at-startup "hadron-noctalia"
+// isotope-noctalia starts it with Isotope's defaults (the polkit prompt).
+spawn-at-startup "isotope-noctalia"
 // First-login welcome, and the update icon in Noctalia's tray, which shows
-// when a new Hadron Desktop is out and installs it.
-spawn-at-startup "hadron-welcome"
-spawn-at-startup "hadron-update" "tray"
+// when a new Isotope is out and installs it.
+spawn-at-startup "isotope-welcome"
+spawn-at-startup "isotope-update" "tray"
 // First-run app picker (a browser and essentials from Flathub), once per
 // user, after the network is up.
-spawn-at-startup "hadron-first-run-apps" "--login"
+spawn-at-startup "isotope-first-run-apps" "--login"
 // Turn Noctalia's night light back on if the user had it on in an earlier
 // session; Noctalia itself starts with it off (noctalia-defaults.toml).
-spawn-at-startup "hadron-night-light" "restore"
+spawn-at-startup "isotope-night-light" "restore"
 
 // Apps that read these only from the environment.
 environment {
@@ -314,7 +314,7 @@ environment {
 
 hotkey-overlay {
     // Uncomment this line to disable the "Important Hotkeys" pop-up at startup.
-    // Hadron: skipped; the welcome notification points at Super+F1 instead,
+    // Isotope: skipped; the welcome notification points at Super+F1 instead,
     // and Super+Shift+/ still opens this pop-up.
     skip-at-startup
 }
@@ -324,7 +324,7 @@ hotkey-overlay {
 // Additionally, clients will be informed that they are tiled, removing some client-side rounded corners.
 // This option will also fix border/focus ring drawing behind some semitransparent windows.
 // After enabling or disabling this, you need to restart the apps for this to take effect.
-// Hadron: on, so apps such as foot do not draw their own light title bar over
+// Isotope: on, so apps such as foot do not draw their own light title bar over
 // the Noctalia theme; niri's focus ring frames the window instead.
 prefer-no-csd
 
@@ -445,31 +445,31 @@ binds {
     Mod+Shift+Comma hotkey-overlay-title="Shell Settings" { spawn-sh "noctalia msg settings-toggle"; }
     // help-section: Basics
     // help: This help
-    Mod+F1 hotkey-overlay-title="Keyboard Shortcuts" { spawn "foot" "--app-id=floatterm" "-W" "96x30" "-T" "Keyboard shortcuts" "hadron-help"; }
-    // help: Hadron menu: apps, Wi-Fi, Bluetooth, updates, power
-    Mod+Escape hotkey-overlay-title="Hadron Menu" { spawn "hadron-menu"; }
+    Mod+F1 hotkey-overlay-title="Keyboard Shortcuts" { spawn "foot" "--app-id=floatterm" "-W" "96x30" "-T" "Keyboard shortcuts" "isotope-help"; }
+    // help: Isotope menu: apps, Wi-Fi, Bluetooth, updates, power
+    Mod+Escape hotkey-overlay-title="Isotope Menu" { spawn "isotope-menu"; }
     // Notifications (Noctalia): close, close all, history, do not disturb.
     // help-section: Notifications
     // help: Close the newest notification
-    Mod+BackSpace hotkey-overlay-title="Close Notifications" { spawn "hadron-notify-key" "dismiss"; }
+    Mod+BackSpace hotkey-overlay-title="Close Notifications" { spawn "isotope-notify-key" "dismiss"; }
     // help: Close all notifications
-    Mod+Shift+BackSpace hotkey-overlay-title=null { spawn "hadron-notify-key" "dismiss-all"; }
+    Mod+Shift+BackSpace hotkey-overlay-title=null { spawn "isotope-notify-key" "dismiss-all"; }
     // help: Notification history
-    Mod+Ctrl+BackSpace hotkey-overlay-title="Notification History" { spawn "hadron-notify-key" "restore"; }
+    Mod+Ctrl+BackSpace hotkey-overlay-title="Notification History" { spawn "isotope-notify-key" "restore"; }
     // help: Do not disturb on/off
-    Mod+Alt+BackSpace hotkey-overlay-title="Do Not Disturb" { spawn "hadron-notify-key" "dnd"; }
+    Mod+Alt+BackSpace hotkey-overlay-title="Do Not Disturb" { spawn "isotope-notify-key" "dnd"; }
     // help-section: Basics
     // help: Emoji picker: copies the chosen emoji
-    Mod+Semicolon hotkey-overlay-title="Emoji Picker" { spawn "hadron-emoji"; }
+    Mod+Semicolon hotkey-overlay-title="Emoji Picker" { spawn "isotope-emoji"; }
     // Noctalia records the clipboard; this opens its history panel.
     // help: Clipboard history: copy an earlier entry again
-    Mod+Ctrl+V hotkey-overlay-title="Clipboard History" { spawn "hadron-clipboard"; }
+    Mod+Ctrl+V hotkey-overlay-title="Clipboard History" { spawn "isotope-clipboard"; }
     Alt+Tab { spawn-sh "noctalia msg window-switcher hold"; }
     // help-section: System
     // help: Lock the screen
     Super+Alt+L hotkey-overlay-title="Lock the Screen" { spawn-sh "noctalia msg session lock"; }
     // help: Night light on and off
-    Super+Alt+N hotkey-overlay-title="Night Light On/Off" { spawn "hadron-night-light" "toggle"; }
+    Super+Alt+N hotkey-overlay-title="Night Light On/Off" { spawn "isotope-night-light" "toggle"; }
 
     // Use spawn-sh to run a shell command. Do this if you need pipes, multiple commands, etc.
     // Note: the entire command goes as a single argument. It's passed verbatim to `sh -c`.
@@ -752,7 +752,7 @@ binds {
     //
     // The allow-inhibiting=false property can be applied to other binds as well,
     // which ensures niri always processes them, even when an inhibitor is active.
-    // Hadron: on Mod+Shift+Escape, because Mod+Escape opens the Hadron menu
+    // Isotope: on Mod+Shift+Escape, because Mod+Escape opens the Isotope menu
     // in every variant.
     // help: Toggle the shortcut inhibit
     Mod+Shift+Escape allow-inhibiting=false { toggle-keyboard-shortcuts-inhibit; }

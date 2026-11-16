@@ -5,13 +5,13 @@
 #
 # - tools/gen-emoji-list.sh turns a fixture emoji-test.txt into the list,
 #   keeping only fully-qualified emoji, as "<emoji> <name>".
-# - hadron-emoji copies the picked emoji (and only the emoji) with wl-copy on
+# - isotope-emoji copies the picked emoji (and only the emoji) with wl-copy on
 #   Wayland and xsel on X11, and shows a notification. It copies nothing when
 #   the picker is cancelled or prints text that is not a line of the list.
-# - Every variant binds Super+; to hadron-emoji, and the Hadron menu has an
+# - Every variant binds Super+; to isotope-emoji, and the Isotope menu has an
 #   Emoji entry.
 #
-# hadron-pick, wl-copy, xsel and busctl are fakes on PATH that log what they
+# isotope-pick, wl-copy, xsel and busctl are fakes on PATH that log what they
 # get. POSIX sh; CI runs it on the runner and it runs in alpine:
 #
 #   test/emoji/check-emoji.sh
@@ -37,9 +37,9 @@ expect "list keeps only fully-qualified emoji" "$(cat "$here/fixtures/emoji.txt"
 
 # --- The picker, with fakes ---------------------------------------------------
 mkdir -p "$work/bin"
-# hadron-pick: print the line named by PICK (a line number, "typed" for text
+# isotope-pick: print the line named by PICK (a line number, "typed" for text
 # that matches no line, or "cancel" to exit 1 like a cancelled picker).
-cat > "$work/bin/hadron-pick" <<'EOF'
+cat > "$work/bin/isotope-pick" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" > "$LOG/pick.args"
 cat > "$LOG/pick.input"
@@ -64,14 +64,14 @@ printf '%s\n' "$*" > "$LOG/notify"
 EOF
 chmod +x "$work/bin/"*
 
-# run NAME PICK [VAR=VALUE...]: run hadron-emoji with the fakes, logging into
-# $work/NAME. The fixture list stands in for /usr/share/hadron/emoji.txt.
+# run NAME PICK [VAR=VALUE...]: run isotope-emoji with the fakes, logging into
+# $work/NAME. The fixture list stands in for /usr/share/isotope/emoji.txt.
 run() {
     name=$1 pick=$2; shift 2
     mkdir -p "$work/$name"
     env -u WAYLAND_DISPLAY PATH="$work/bin:$PATH" LOG="$work/$name" PICK="$pick" \
-        HADRON_EMOJI_LIST="$here/fixtures/emoji.txt" "$@" \
-        sh "$repo/rootfs/usr/bin/hadron-emoji" && echo 0 > "$work/$name/status" \
+        ISOTOPE_EMOJI_LIST="$here/fixtures/emoji.txt" "$@" \
+        sh "$repo/rootfs/usr/bin/isotope-emoji" && echo 0 > "$work/$name/status" \
         || echo $? > "$work/$name/status"
 }
 log() { cat "$work/$1/$2" 2>/dev/null || echo "<none>"; }
@@ -82,7 +82,7 @@ expect "the picker prompt is Emoji" "Emoji 14" "$(log wayland pick.args)"
 expect "Wayland: wl-copy gets only the emoji" "😃" "$(log wayland wl-copy)"
 expect "Wayland: xsel is not used" "<none>" "$(log wayland xsel)"
 case "$(log wayland notify)" in
-    *"Notify susssasa{sv}i Hadron Desktop 0  Emoji Copied 😃 grinning face with big eyes to the clipboard."*)
+    *"Notify susssasa{sv}i Isotope 0  Emoji Copied 😃 grinning face with big eyes to the clipboard."*)
         pass "Wayland: a notification names the emoji" ;;
     *) bad "Wayland: a notification names the emoji (got '$(log wayland notify)')" ;;
 esac
@@ -107,7 +107,7 @@ expect "cancel: exit status" 0 "$(log cancel status)"
 run typed typed WAYLAND_DISPLAY=wayland-1
 expect "typed text: nothing is copied" "<none>" "$(log typed wl-copy)"
 
-run nolist 1 WAYLAND_DISPLAY=wayland-1 HADRON_EMOJI_LIST="$work/missing.txt"
+run nolist 1 WAYLAND_DISPLAY=wayland-1 ISOTOPE_EMOJI_LIST="$work/missing.txt"
 expect "no list: exit status" 1 "$(log nolist status)"
 case "$(log nolist notify)" in
     *"No emoji list found"*) pass "no list: a notification says so" ;;
@@ -119,21 +119,21 @@ esac
 check() {
     if grep -Eq -- "$3" "$repo/$2"; then pass "$1"; else bad "$1"; fi
 }
-check "sway binds Super+; to hadron-emoji" rootfs-sway/etc/sway/config \
-    '^bindsym \$mod\+semicolon +exec hadron-emoji$'
-check "i3 binds Super+; to hadron-emoji" rootfs-i3/etc/i3/config \
-    '^bindsym \$mod\+semicolon +exec --no-startup-id hadron-emoji$'
-check "niri binds Super+; to hadron-emoji" rootfs-niri/etc/niri/config.kdl \
-    '^ +Mod\+Semicolon .*\{ spawn "hadron-emoji"; \}$'
-check "COSMIC binds Super+; to hadron-emoji (Dockerfile)" Dockerfile \
-    'key: "semicolon"\): Spawn\("hadron-emoji"\)'
-check "the Hadron menu has an Emoji entry" rootfs/usr/bin/hadron-menu \
-    '^ +Emoji\) +exec hadron-emoji ;;$'
+check "sway binds Super+; to isotope-emoji" rootfs-sway/etc/sway/config \
+    '^bindsym \$mod\+semicolon +exec isotope-emoji$'
+check "i3 binds Super+; to isotope-emoji" rootfs-i3/etc/i3/config \
+    '^bindsym \$mod\+semicolon +exec --no-startup-id isotope-emoji$'
+check "niri binds Super+; to isotope-emoji" rootfs-niri/etc/niri/config.kdl \
+    '^ +Mod\+Semicolon .*\{ spawn "isotope-emoji"; \}$'
+check "COSMIC binds Super+; to isotope-emoji (Dockerfile)" Dockerfile \
+    'key: "semicolon"\): Spawn\("isotope-emoji"\)'
+check "the Isotope menu has an Emoji entry" rootfs/usr/bin/isotope-menu \
+    '^ +Emoji\) +exec isotope-emoji ;;$'
 for v in sway i3 cosmic niri; do
-    check "the $v shortcut sheet lists Super+;" "rootfs-$v/usr/share/hadron/shortcuts.txt" \
+    check "the $v shortcut sheet lists Super+;" "rootfs-$v/usr/share/isotope/shortcuts.txt" \
         'Super \+ ;'
 done
-check "fontconfig names Noto Color Emoji" rootfs/usr/share/fontconfig/conf.avail/60-hadron.conf \
+check "fontconfig names Noto Color Emoji" rootfs/usr/share/fontconfig/conf.avail/60-isotope.conf \
     '<family>Noto Color Emoji</family>'
 for v in sway i3 cosmic niri; do
     if awk -v s="$v-rootfs" '$1 == "FROM" { in_s = ($NF == s) } in_s && /^COPY --from=emoji \/emoji \/$/ { f = 1 } END { exit !f }' "$repo/Dockerfile"; then

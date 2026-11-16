@@ -19,13 +19,13 @@ func TestSocketPathsAreDistinctAndAbsolute(t *testing.T) {
 		}
 		seen[p] = true
 	}
-	if SessionSocketPath != "/run/hadron-agent/session/session.sock" {
+	if SessionSocketPath != "/run/isotope-agent/session/session.sock" {
 		t.Fatalf("unexpected SessionSocketPath: %s", SessionSocketPath)
 	}
-	if RootSocketPath != "/run/hadron-agent/root/root.sock" {
+	if RootSocketPath != "/run/isotope-agent/root/root.sock" {
 		t.Fatalf("unexpected RootSocketPath: %s", RootSocketPath)
 	}
-	if ControlSocketPath != "/run/hadron-agent/control/control.sock" {
+	if ControlSocketPath != "/run/isotope-agent/control/control.sock" {
 		t.Fatalf("unexpected ControlSocketPath: %s", ControlSocketPath)
 	}
 }

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
-IMAGE="${IMAGE:?set IMAGE to the Hadron image under test}"
+IMAGE="${IMAGE:?set IMAGE to the Isotope image under test}"
 
 test "$(docker run --rm "$IMAGE" stat -c %a /tmp)" = 1777
 
 docker run --rm -i "$IMAGE" sh -eu -s <<'CLEAN'
 useradd -m -u 1000 -s /bin/sh fixture
-/usr/bin/hadron-user-setup
-/usr/bin/hadron-user-setup
+/usr/bin/isotope-user-setup
+/usr/bin/isotope-user-setup
 details=$(su - fixture -c \
   "flatpak --user remotes --show-disabled --columns=name,url,options")
 printf "%s\n" "$details" | awk -F "\t" '
@@ -26,7 +26,7 @@ su - fixture -c \
   "flatpak --user remote-add --no-gpg-verify flathub https://dl.flathub.org/repo/"
 su - fixture -c \
   "flatpak --user remote-modify --url=https://example.invalid/repo/ flathub"
-/usr/bin/hadron-user-setup
+/usr/bin/isotope-user-setup
 details=$(su - fixture -c \
   "flatpak --user remotes --show-disabled --columns=name,url,options")
 printf "%s\n" "$details" | awk -F "\t" '
@@ -43,8 +43,8 @@ docker run --rm -i "$IMAGE" sh -eu -s <<'FAIL_CLOSED'
 useradd -m -u 1000 -s /bin/sh fixture
 su - fixture -c \
   "flatpak --user remote-add --no-gpg-verify flathub https://dl.flathub.org/repo/"
-printf "%s\n" not-a-public-key > /usr/share/hadron/flathub.gpg
-if /usr/bin/hadron-user-setup; then
+printf "%s\n" not-a-public-key > /usr/share/isotope/flathub.gpg
+if /usr/bin/isotope-user-setup; then
     echo "malformed key unexpectedly succeeded" >&2
     exit 1
 fi
@@ -59,8 +59,8 @@ FAIL_CLOSED
 docker run --rm -i "$IMAGE" sh -eu -s <<'BAD_DESCRIPTOR'
 useradd -m -u 1000 -s /bin/sh fixture
 printf '%s\n' '[not-a-flatpak-repository' > \
-  /usr/share/hadron/flathub.flatpakrepo
-if /usr/bin/hadron-user-setup; then
+  /usr/share/isotope/flathub.flatpakrepo
+if /usr/bin/isotope-user-setup; then
     echo "malformed descriptor unexpectedly succeeded" >&2
     exit 1
 fi

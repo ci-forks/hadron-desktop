@@ -1,14 +1,14 @@
 # The COSMIC shortcut sheet, by hand: COSMIC keeps its default bindings
-# upstream, so only the keys Hadron documents are listed. tools/gen-shortcuts.py
-# turns this file into rootfs-cosmic/usr/share/hadron/shortcuts.txt.
+# upstream, so only the keys Isotope documents are listed. tools/gen-shortcuts.py
+# turns this file into rootfs-cosmic/usr/share/isotope/shortcuts.txt.
 #
 # Format: Section | Keys | Description
 # A trailing " @ TEXT" makes the generator fail unless the Dockerfile contains
 # TEXT: use it for the keys the Dockerfile changes from COSMIC's defaults.
 
-Basics | Super + Escape | Hadron menu: apps, Wi-Fi, Bluetooth, updates, power @ (modifiers: [Super], key: "Escape"): Spawn("hadron-menu"),
-Basics | Super + ; | Emoji picker: copies the chosen emoji @ (modifiers: [Super], key: "semicolon"): Spawn("hadron-emoji"),
-Basics | Super + Ctrl + V | Clipboard history: copy an earlier entry again @ (modifiers: [Super, Ctrl], key: "v"): Spawn("hadron-clipboard"),
+Basics | Super + Escape | Isotope menu: apps, Wi-Fi, Bluetooth, updates, power @ (modifiers: [Super], key: "Escape"): Spawn("isotope-menu"),
+Basics | Super + ; | Emoji picker: copies the chosen emoji @ (modifiers: [Super], key: "semicolon"): Spawn("isotope-emoji"),
+Basics | Super + Ctrl + V | Clipboard history: copy an earlier entry again @ (modifiers: [Super, Ctrl], key: "v"): Spawn("isotope-clipboard"),
 Basics | Super | Launch an application
 Basics | Super + T | Open a terminal
 Basics | Super + Q | Close the focused window
@@ -28,4 +28,4 @@ Workspaces | Super + Shift + 1 ... 9 | Send the window to the numbered workspace
 System | Super + Alt + L | Lock the screen @ (modifiers: [Super, Alt], key: "l"): System(LockScreen),
 System | Print | Screenshot
 
-Notifications | Super + Alt + BackSpace | Do not disturb on/off @ (modifiers: [Super, Alt], key: "BackSpace"): Spawn("hadron-notify-key dnd"),
+Notifications | Super + Alt + BackSpace | Do not disturb on/off @ (modifiers: [Super, Alt], key: "BackSpace"): Spawn("isotope-notify-key dnd"),

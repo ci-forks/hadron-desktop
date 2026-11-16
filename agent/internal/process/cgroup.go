@@ -32,7 +32,7 @@ const cgroupMount = "/sys/fs/cgroup"
 // cgroupLeaf is a single cgroup-v2 directory this package created and owns.
 type cgroupLeaf struct {
 	// path is the absolute directory of the leaf, e.g.
-	// /sys/fs/cgroup/<service>/hadron-proc-<id>.
+	// /sys/fs/cgroup/<service>/isotope-proc-<id>.
 	path string
 }
 
@@ -67,7 +67,7 @@ func cgroupProbe(root string) error {
 	if root == "" {
 		return errors.New("empty cgroup root")
 	}
-	probe := filepath.Join(root, fmt.Sprintf("hadron-probe-%d", os.Getpid()))
+	probe := filepath.Join(root, fmt.Sprintf("isotope-probe-%d", os.Getpid()))
 	if err := os.Mkdir(probe, 0o755); err != nil {
 		if os.IsExist(err) {
 			_ = os.Remove(probe)
@@ -89,7 +89,7 @@ func createLeaf(root, id string, pidsMax, memoryMax int64) (*cgroupLeaf, error) 
 	if root == "" {
 		return nil, errors.New("empty cgroup root")
 	}
-	leaf := &cgroupLeaf{path: filepath.Join(root, "hadron-proc-"+id)}
+	leaf := &cgroupLeaf{path: filepath.Join(root, "isotope-proc-"+id)}
 	if err := os.Mkdir(leaf.path, 0o755); err != nil {
 		return nil, fmt.Errorf("mkdir cgroup leaf: %w", err)
 	}

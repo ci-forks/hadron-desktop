@@ -1,5 +1,5 @@
-Welcome to Hadron Desktop — COSMIC on Wayland, built from source on Kairos.
+Welcome to Isotope — COSMIC on Wayland, built from source on Kairos.
 
   Apps       : COSMIC Store, or flatpak install flathub <id>
   Containers : docker run …   ·   distrobox enter
-  Updates    : tray icon   ·   hadron-update   ·   hadron-update upgrade
+  Updates    : tray icon   ·   isotope-update   ·   isotope-update upgrade

@@ -10,28 +10,28 @@ import (
 )
 
 func TestChoiceFromEnvRequiresMandatoryFields(t *testing.T) {
-	t.Setenv("HADRON_INSTALL_NONINTERACTIVE", "1")
-	t.Setenv("HADRON_USER", "")
-	t.Setenv("HADRON_PASS", "")
-	t.Setenv("HADRON_DISK", "")
+	t.Setenv("ISOTOPE_INSTALL_NONINTERACTIVE", "1")
+	t.Setenv("ISOTOPE_USER", "")
+	t.Setenv("ISOTOPE_PASS", "")
+	t.Setenv("ISOTOPE_DISK", "")
 	if _, _, err := choiceFromEnv(); err == nil {
-		t.Fatal("expected an error when HADRON_USER/PASS/DISK are unset")
+		t.Fatal("expected an error when ISOTOPE_USER/PASS/DISK are unset")
 	}
 }
 
 // TestChoiceFromEnvRequiresEachFieldIndividually: checking only the all-empty
 // case cannot tell that all three are enforced — with two checks in place the
 // third could be dropped and the suite would stay green. An unenforced
-// HADRON_DISK in particular would install to device "".
+// ISOTOPE_DISK in particular would install to device "".
 func TestChoiceFromEnvRequiresEachFieldIndividually(t *testing.T) {
 	full := map[string]string{
-		"HADRON_USER": "ada",
-		"HADRON_PASS": "hunter2",
-		"HADRON_DISK": "/dev/vda",
+		"ISOTOPE_USER": "ada",
+		"ISOTOPE_PASS": "hunter2",
+		"ISOTOPE_DISK": "/dev/vda",
 	}
 	for blank := range full {
 		t.Run(blank, func(t *testing.T) {
-			t.Setenv("HADRON_INSTALL_NONINTERACTIVE", "1")
+			t.Setenv("ISOTOPE_INSTALL_NONINTERACTIVE", "1")
 			for k, v := range full {
 				if k == blank {
 					v = ""
@@ -50,12 +50,12 @@ func TestChoiceFromEnvRequiresEachFieldIndividually(t *testing.T) {
 }
 
 func TestChoiceFromEnvPopulatesAndDefaultsHostname(t *testing.T) {
-	t.Setenv("HADRON_INSTALL_NONINTERACTIVE", "1")
-	t.Setenv("HADRON_USER", "ada")
-	t.Setenv("HADRON_PASS", "hunter2")
-	t.Setenv("HADRON_DISK", "/dev/vda")
-	t.Setenv("HADRON_HOSTNAME", "")
-	t.Setenv("HADRON_GITHUB", "adalovelace")
+	t.Setenv("ISOTOPE_INSTALL_NONINTERACTIVE", "1")
+	t.Setenv("ISOTOPE_USER", "ada")
+	t.Setenv("ISOTOPE_PASS", "hunter2")
+	t.Setenv("ISOTOPE_DISK", "/dev/vda")
+	t.Setenv("ISOTOPE_HOSTNAME", "")
+	t.Setenv("ISOTOPE_GITHUB", "adalovelace")
 
 	c, ok, err := choiceFromEnv()
 	if err != nil {
@@ -67,8 +67,8 @@ func TestChoiceFromEnvPopulatesAndDefaultsHostname(t *testing.T) {
 	if c.Username != "ada" || c.Password != "hunter2" || c.Disk != "/dev/vda" {
 		t.Errorf("unexpected choice: %+v", c)
 	}
-	if c.Hostname != "hadron" {
-		t.Errorf("Hostname = %q, want default %q", c.Hostname, "hadron")
+	if c.Hostname != "isotope" {
+		t.Errorf("Hostname = %q, want default %q", c.Hostname, "isotope")
 	}
 	if c.Github != "adalovelace" {
 		t.Errorf("Github = %q, want adalovelace", c.Github)
@@ -76,7 +76,7 @@ func TestChoiceFromEnvPopulatesAndDefaultsHostname(t *testing.T) {
 }
 
 func TestChoiceFromEnvInactiveWhenFlagUnset(t *testing.T) {
-	t.Setenv("HADRON_INSTALL_NONINTERACTIVE", "0")
+	t.Setenv("ISOTOPE_INSTALL_NONINTERACTIVE", "0")
 	if _, ok, _ := choiceFromEnv(); ok {
 		t.Error("non-interactive mode should be inactive when the flag is not 1")
 	}
@@ -87,10 +87,10 @@ func TestChoiceFromEnvInactiveWhenFlagUnset(t *testing.T) {
 // block scalar, so a newline there terminates the YAML block and yields an
 // invalid cloud-config on a machine that has already been wiped.
 func TestChoiceFromEnvRejectsInvalidUsername(t *testing.T) {
-	t.Setenv("HADRON_INSTALL_NONINTERACTIVE", "1")
-	t.Setenv("HADRON_PASS", "hunter2")
-	t.Setenv("HADRON_DISK", "/dev/vda")
-	t.Setenv("HADRON_USER", "ada\nsession_index = 9")
+	t.Setenv("ISOTOPE_INSTALL_NONINTERACTIVE", "1")
+	t.Setenv("ISOTOPE_PASS", "hunter2")
+	t.Setenv("ISOTOPE_DISK", "/dev/vda")
+	t.Setenv("ISOTOPE_USER", "ada\nsession_index = 9")
 	if _, _, err := choiceFromEnv(); err == nil {
 		t.Fatal("expected an error for a username containing a newline")
 	}
@@ -114,17 +114,17 @@ func topLevelStages(cfg string) int {
 // top-level `stages:` keys and the injected one displaces /etc/ly/save.ini.
 // Valid YAML, wrong machine, disk already wiped.
 func TestChoiceFromEnvRejectsInjectedGithub(t *testing.T) {
-	t.Setenv("HADRON_INSTALL_NONINTERACTIVE", "1")
-	t.Setenv("HADRON_USER", "ada")
-	t.Setenv("HADRON_PASS", "hunter2")
-	t.Setenv("HADRON_DISK", "/dev/vda")
-	t.Setenv("HADRON_GITHUB", "ada\nstages:\n  network:\n    - name: pwn")
+	t.Setenv("ISOTOPE_INSTALL_NONINTERACTIVE", "1")
+	t.Setenv("ISOTOPE_USER", "ada")
+	t.Setenv("ISOTOPE_PASS", "hunter2")
+	t.Setenv("ISOTOPE_DISK", "/dev/vda")
+	t.Setenv("ISOTOPE_GITHUB", "ada\nstages:\n  network:\n    - name: pwn")
 
 	_, _, err := choiceFromEnv()
 	if err == nil {
-		t.Fatal("expected an error for a HADRON_GITHUB containing a newline")
+		t.Fatal("expected an error for a ISOTOPE_GITHUB containing a newline")
 	}
-	if !strings.Contains(err.Error(), "HADRON_GITHUB") {
+	if !strings.Contains(err.Error(), "ISOTOPE_GITHUB") {
 		t.Errorf("error %q does not name the offending variable", err)
 	}
 }
@@ -132,7 +132,7 @@ func TestChoiceFromEnvRejectsInjectedGithub(t *testing.T) {
 // TestChoiceFromEnvGithubValidity pins both edges at once: a rejection-only
 // test would pass with the field hardwired to always fail, and an
 // acceptance-only test would pass with no validation at all. The empty case is
-// load-bearing — HADRON_GITHUB is optional and must stay skippable.
+// load-bearing — ISOTOPE_GITHUB is optional and must stay skippable.
 func TestChoiceFromEnvGithubValidity(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -153,16 +153,16 @@ func TestChoiceFromEnvGithubValidity(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("HADRON_INSTALL_NONINTERACTIVE", "1")
-			t.Setenv("HADRON_USER", "ada")
-			t.Setenv("HADRON_PASS", "hunter2")
-			t.Setenv("HADRON_DISK", "/dev/vda")
-			t.Setenv("HADRON_GITHUB", tc.value)
+			t.Setenv("ISOTOPE_INSTALL_NONINTERACTIVE", "1")
+			t.Setenv("ISOTOPE_USER", "ada")
+			t.Setenv("ISOTOPE_PASS", "hunter2")
+			t.Setenv("ISOTOPE_DISK", "/dev/vda")
+			t.Setenv("ISOTOPE_GITHUB", tc.value)
 
 			c, _, err := choiceFromEnv()
 			if tc.ok {
 				if err != nil {
-					t.Fatalf("HADRON_GITHUB=%q rejected: %v", tc.value, err)
+					t.Fatalf("ISOTOPE_GITHUB=%q rejected: %v", tc.value, err)
 				}
 				if c.Github != tc.value {
 					t.Errorf("Github = %q, want %q", c.Github, tc.value)
@@ -176,7 +176,7 @@ func TestChoiceFromEnvGithubValidity(t *testing.T) {
 				return
 			}
 			if err == nil {
-				t.Fatalf("HADRON_GITHUB=%q accepted, rendered config:\n%s",
+				t.Fatalf("ISOTOPE_GITHUB=%q accepted, rendered config:\n%s",
 					tc.value, RenderCloudConfig(c, "$6$fake"))
 			}
 		})
@@ -185,7 +185,7 @@ func TestChoiceFromEnvGithubValidity(t *testing.T) {
 
 func TestWriteChoiceProducesReadableConfig(t *testing.T) {
 	dir := t.TempDir()
-	out := filepath.Join(dir, "99_hadron-user.yaml")
+	out := filepath.Join(dir, "99_isotope-user.yaml")
 	c := Choice{Hostname: "box", Username: "ada", Disk: "/dev/vda"}
 
 	if err := writeChoice(out, c, "$6$fake"); err != nil {
@@ -213,7 +213,7 @@ func TestWriteChoiceProducesReadableConfig(t *testing.T) {
 // against RenderCloudConfig in config_test.go, and this is the only step
 // between it and the disk.
 func TestWriteChoiceMatchesRenderCloudConfig(t *testing.T) {
-	out := filepath.Join(t.TempDir(), "nested", "99_hadron-user.yaml")
+	out := filepath.Join(t.TempDir(), "nested", "99_isotope-user.yaml")
 	c := Choice{Hostname: "box", Username: "ada", Github: "adalovelace", Disk: "/dev/vda"}
 
 	if err := writeChoice(out, c, "$6$fake"); err != nil {
@@ -482,7 +482,7 @@ func TestWizardGithubPayloadIsRejectedAtTheFunction(t *testing.T) {
 }
 
 // TestWizardGithubValidation is the interactive half of the injection fix.
-// HADRON_GITHUB is not the only way a handle reaches the renderer — anything
+// ISOTOPE_GITHUB is not the only way a handle reaches the renderer — anything
 // typed here does too, and this step used to store its value unchecked.
 func TestWizardGithubValidation(t *testing.T) {
 	cases := []struct {
@@ -636,18 +636,18 @@ func TestWizardCtrlCAborts(t *testing.T) {
 
 func TestRunWizardNonInteractiveWritesConfig(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HADRON_OEM_DIR", dir)
-	t.Setenv("HADRON_INSTALL_NONINTERACTIVE", "1")
-	t.Setenv("HADRON_USER", "ada")
-	t.Setenv("HADRON_PASS", "hunter2")
-	t.Setenv("HADRON_DISK", "/dev/vda")
-	t.Setenv("HADRON_HOSTNAME", "box")
-	t.Setenv("HADRON_GITHUB", "adalovelace")
+	t.Setenv("ISOTOPE_OEM_DIR", dir)
+	t.Setenv("ISOTOPE_INSTALL_NONINTERACTIVE", "1")
+	t.Setenv("ISOTOPE_USER", "ada")
+	t.Setenv("ISOTOPE_PASS", "hunter2")
+	t.Setenv("ISOTOPE_DISK", "/dev/vda")
+	t.Setenv("ISOTOPE_HOSTNAME", "box")
+	t.Setenv("ISOTOPE_GITHUB", "adalovelace")
 
 	if _, err := runWizard(); err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile(filepath.Join(dir, "99_hadron-user.yaml"))
+	data, err := os.ReadFile(filepath.Join(dir, "99_isotope-user.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -670,53 +670,53 @@ func TestRunWizardSkipsWhenConfigPresent(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "10_seed.yaml"), []byte("users:\n  - name: seeded\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("HADRON_OEM_DIR", dir)
+	t.Setenv("ISOTOPE_OEM_DIR", dir)
 	// Non-interactive mode is deliberately NOT set: if the short-circuit failed,
 	// runWizard would try to open a terminal here rather than return nil.
-	t.Setenv("HADRON_INSTALL_NONINTERACTIVE", "")
+	t.Setenv("ISOTOPE_INSTALL_NONINTERACTIVE", "")
 
 	if _, err := runWizard(); err != nil {
 		t.Fatalf("seeded /oem should install unattended, got: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "99_hadron-user.yaml")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, "99_isotope-user.yaml")); !os.IsNotExist(err) {
 		t.Errorf("wizard wrote its own config despite a seeded one being present (stat err: %v)", err)
 	}
 }
 
 func TestRunWizardReportsMissingEnv(t *testing.T) {
-	t.Setenv("HADRON_OEM_DIR", t.TempDir())
-	t.Setenv("HADRON_INSTALL_NONINTERACTIVE", "1")
-	t.Setenv("HADRON_USER", "")
-	t.Setenv("HADRON_PASS", "")
-	t.Setenv("HADRON_DISK", "")
+	t.Setenv("ISOTOPE_OEM_DIR", t.TempDir())
+	t.Setenv("ISOTOPE_INSTALL_NONINTERACTIVE", "1")
+	t.Setenv("ISOTOPE_USER", "")
+	t.Setenv("ISOTOPE_PASS", "")
+	t.Setenv("ISOTOPE_DISK", "")
 	_, err := runWizard()
 	if err == nil {
 		t.Fatal("expected an error when the non-interactive env is incomplete")
 	}
-	if !strings.Contains(err.Error(), "HADRON_USER") {
+	if !strings.Contains(err.Error(), "ISOTOPE_USER") {
 		t.Errorf("error %q does not name the missing variable", err)
 	}
 }
 
 func TestOemDirDefaultsToOem(t *testing.T) {
-	t.Setenv("HADRON_OEM_DIR", "")
+	t.Setenv("ISOTOPE_OEM_DIR", "")
 	if got := oemDir(); got != "/oem" {
 		t.Errorf("oemDir() = %q, want /oem", got)
 	}
-	t.Setenv("HADRON_OEM_DIR", "/tmp/fake-oem")
+	t.Setenv("ISOTOPE_OEM_DIR", "/tmp/fake-oem")
 	if got := oemDir(); got != "/tmp/fake-oem" {
 		t.Errorf("oemDir() = %q, want /tmp/fake-oem", got)
 	}
 }
 
 func TestConfigOutFollowsOemDirUnlessSet(t *testing.T) {
-	t.Setenv("HADRON_OEM_DIR", "/tmp/fake-oem")
-	t.Setenv("HADRON_CONFIG_OUT", "")
-	if got := configOut(); got != "/tmp/fake-oem/99_hadron-user.yaml" {
-		t.Errorf("configOut() = %q, want /tmp/fake-oem/99_hadron-user.yaml", got)
+	t.Setenv("ISOTOPE_OEM_DIR", "/tmp/fake-oem")
+	t.Setenv("ISOTOPE_CONFIG_OUT", "")
+	if got := configOut(); got != "/tmp/fake-oem/99_isotope-user.yaml" {
+		t.Errorf("configOut() = %q, want /tmp/fake-oem/99_isotope-user.yaml", got)
 	}
-	t.Setenv("HADRON_CONFIG_OUT", "/etc/kairos/99_hadron-user.yaml")
-	if got := configOut(); got != "/etc/kairos/99_hadron-user.yaml" {
-		t.Errorf("configOut() = %q, want /etc/kairos/99_hadron-user.yaml", got)
+	t.Setenv("ISOTOPE_CONFIG_OUT", "/etc/kairos/99_isotope-user.yaml")
+	if got := configOut(); got != "/etc/kairos/99_isotope-user.yaml" {
+		t.Errorf("configOut() = %q, want /etc/kairos/99_isotope-user.yaml", got)
 	}
 }

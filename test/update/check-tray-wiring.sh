@@ -2,11 +2,11 @@
 # The checks are strings that the inner sh expands ($R, globs), on purpose.
 # shellcheck disable=SC2016
 # Assert the update tray is wired into a variant: the root update service and
-# its polkit policy (with the system extensions action, and the hadron-ext
+# its polkit policy (with the system extensions action, and the isotope-ext
 # link) are installed, polkitd can run, and the session starts
-# `hadron-update tray` (and, on i3, the snixembed tray bridge). For the agent
+# `isotope-update tray` (and, on i3, the snixembed tray bridge). For the agent
 # image, assert the opposite: no update service and nothing that starts
-# hadron-update.
+# isotope-update.
 #
 #   test/update/check-tray-wiring.sh IMAGE FLAVOR
 #   test/update/check-tray-wiring.sh --root DIR FLAVOR
@@ -70,20 +70,20 @@ ALL_SESSION='$R/etc/sway/config $R/etc/sway/config.d/* $R/etc/i3/config $R/etc/i
 lines() { echo "cat $1 2>/dev/null | grep -Ev '^[[:space:]]*(#|//)'"; }
 
 SYSTEM_FILES="
-/usr/share/dbus-1/system.d/io.kairos.HadronUpdate1.conf
-/usr/share/dbus-1/system-services/io.kairos.HadronUpdate1.service
-/usr/lib/systemd/system/hadron-updated.service
-/usr/share/polkit-1/actions/io.kairos.hadron-update.policy
-/usr/share/polkit-1/rules.d/50-hadron-update.rules"
+/usr/share/dbus-1/system.d/io.kairos.IsotopeUpdate1.conf
+/usr/share/dbus-1/system-services/io.kairos.IsotopeUpdate1.service
+/usr/lib/systemd/system/isotope-updated.service
+/usr/share/polkit-1/actions/io.kairos.isotope-update.policy
+/usr/share/polkit-1/rules.d/50-isotope-update.rules"
 
 # The release file names the image line upgrades follow (GPU=full or vm), and
 # the image says the same in its label; the agent is always vm. Written by the
 # Dockerfile kairos stage, so only an image has it.
 if [ -n "$IMAGE" ]; then
-    gpu_label="$(docker image inspect --format '{{index .Config.Labels "io.kairos.hadron-desktop.gpu"}}' "$IMAGE" 2>/dev/null || true)"
+    gpu_label="$(docker image inspect --format '{{index .Config.Labels "io.kairos.isotope.gpu"}}' "$IMAGE" 2>/dev/null || true)"
     if [ "$FLAVOR" = agent ]; then want_gpu='vm'; else want_gpu='(full|vm)'; fi
     if [[ "$gpu_label" =~ ^${want_gpu}$ ]]; then echo "PASS: the image is labelled on the $gpu_label line"; else echo "FAIL: the image is labelled on the line '$gpu_label', want $want_gpu"; fail=1; fi
-    check "the release file names the same line" "grep -qx 'GPU=$gpu_label' /etc/hadron-desktop/release"
+    check "the release file names the same line" "grep -qx 'GPU=$gpu_label' /etc/isotope/release"
 else
     echo "SKIP: the image line (needs an image)"
 fi
@@ -92,15 +92,15 @@ if [ "$FLAVOR" = agent ]; then
     for f in $SYSTEM_FILES; do
         check "agent: no $f" "! test -e \$R$f"
     done
-    check "agent: no hadron-ext (system extensions)" "! test -e \$R/usr/bin/hadron-ext"
-    check "agent: no hadron-recovery (disk recovery key)" "! test -e \$R/usr/bin/hadron-recovery"
+    check "agent: no isotope-ext (system extensions)" "! test -e \$R/usr/bin/isotope-ext"
+    check "agent: no isotope-recovery (disk recovery key)" "! test -e \$R/usr/bin/isotope-recovery"
     check "agent: no setting that merges unsigned extensions" \
-        "! test -e \$R/etc/kairos/90_hadron_extensions.yaml && ! test -e \$R/system/oem/93_hadron_extensions.yaml"
-    check "agent: no unit starts hadron-update" \
-        "! grep -rqs 'hadron-update' \$R/usr/lib/systemd/system \$R/etc/systemd/system"
+        "! test -e \$R/etc/kairos/90_isotope_extensions.yaml && ! test -e \$R/system/oem/93_isotope_extensions.yaml"
+    check "agent: no unit starts isotope-update" \
+        "! grep -rqs 'isotope-update' \$R/usr/lib/systemd/system \$R/etc/systemd/system"
     check "agent: the session config exists" 'test -f $R/etc/i3/config'
-    check "agent: nothing in the session starts hadron-update" \
-        "! { $(lines "$ALL_SESSION"); } | grep -q 'hadron-update'"
+    check "agent: nothing in the session starts isotope-update" \
+        "! { $(lines "$ALL_SESSION"); } | grep -q 'isotope-update'"
     check "agent: the session does not start snixembed" \
         "! { $(lines "$ALL_SESSION"); } | grep -q 'snixembed'"
     echo
@@ -112,15 +112,15 @@ fi
 for f in $SYSTEM_FILES; do
     check "$f installed" "test -f \$R$f"
 done
-check "D-Bus activation starts hadron-updated.service" \
-    'grep -qx "SystemdService=hadron-updated.service" $R/usr/share/dbus-1/system-services/io.kairos.HadronUpdate1.service'
-check_image "hadron-update is installed" 'test -x /usr/bin/hadron-update'
+check "D-Bus activation starts isotope-updated.service" \
+    'grep -qx "SystemdService=isotope-updated.service" $R/usr/share/dbus-1/system-services/io.kairos.IsotopeUpdate1.service'
+check_image "isotope-update is installed" 'test -x /usr/bin/isotope-update'
 check "the polkit policy declares the extensions action" \
-    'grep -q "<action id=\"io.kairos.hadron-update.extensions\">" $R/usr/share/polkit-1/actions/io.kairos.hadron-update.policy'
-check_image "hadron-ext is a link to hadron-update" 'test "$(readlink /usr/bin/hadron-ext)" = hadron-update'
+    'grep -q "<action id=\"io.kairos.isotope-update.extensions\">" $R/usr/share/polkit-1/actions/io.kairos.isotope-update.policy'
+check_image "isotope-ext is a link to isotope-update" 'test "$(readlink /usr/bin/isotope-ext)" = isotope-update'
 check "the polkit policy declares the recovery action" \
-    'grep -q "<action id=\"io.kairos.hadron-update.recovery\">" $R/usr/share/polkit-1/actions/io.kairos.hadron-update.policy'
-check_image "hadron-recovery is a link to hadron-update" 'test "$(readlink /usr/bin/hadron-recovery)" = hadron-update'
+    'grep -q "<action id=\"io.kairos.isotope-update.recovery\">" $R/usr/share/polkit-1/actions/io.kairos.isotope-update.policy'
+check_image "isotope-recovery is a link to isotope-update" 'test "$(readlink /usr/bin/isotope-recovery)" = isotope-update'
 
 # polkitd answers the daemon's checks. It is D-Bus activated, so it needs its
 # activation file and unit, not an enable link.
@@ -137,16 +137,16 @@ check_image "polkit rules directory is owned by polkitd" \
 # The session starts the tray, and no longer the old notifier.
 case "$FLAVOR" in
     sway|i3)
-        TRAY='^[[:space:]]*exec(_always)?[[:space:]]+(--no-startup-id[[:space:]]+)?hadron-update[[:space:]]+tray([[:space:]]|$)' ;;
+        TRAY='^[[:space:]]*exec(_always)?[[:space:]]+(--no-startup-id[[:space:]]+)?isotope-update[[:space:]]+tray([[:space:]]|$)' ;;
     niri)
-        TRAY='^[[:space:]]*spawn-at-startup[[:space:]]+"hadron-update"[[:space:]]+"tray"[[:space:]]*$' ;;
+        TRAY='^[[:space:]]*spawn-at-startup[[:space:]]+"isotope-update"[[:space:]]+"tray"[[:space:]]*$' ;;
     cosmic)
-        TRAY='^Exec=hadron-update tray$' ;;
+        TRAY='^Exec=isotope-update tray$' ;;
 esac
-check "the $FLAVOR session starts hadron-update tray" \
+check "the $FLAVOR session starts isotope-update tray" \
     "{ $(lines "$SESSION"); } | grep -Eq '$TRAY'"
-check "nothing starts hadron-update notify" \
-    "! { $(lines "$ALL_SESSION"); } | grep -Eq 'hadron-update(\"[[:space:]]+\"|[[:space:]]+)notify'"
+check "nothing starts isotope-update notify" \
+    "! { $(lines "$ALL_SESSION"); } | grep -Eq 'isotope-update(\"[[:space:]]+\"|[[:space:]]+)notify'"
 
 if [ "$FLAVOR" = i3 ]; then
     # i3bar is an XEmbed tray only; snixembed shows the tray's
@@ -158,7 +158,7 @@ if [ "$FLAVOR" = i3 ]; then
     # Cosmetic only: i3 does not wait for --fork, and the tray registers
     # with a watcher that appears later. Listed first, the icon shows sooner.
     check "snixembed is listed before the tray (cosmetic ordering)" \
-        "{ $(lines "$SESSION"); } | grep -E 'snixembed|hadron-update[[:space:]]+tray' | head -n1 | grep -q snixembed"
+        "{ $(lines "$SESSION"); } | grep -E 'snixembed|isotope-update[[:space:]]+tray' | head -n1 | grep -q snixembed"
     check "i3bar shows a tray" \
         "{ $(lines "$SESSION"); } | grep -q '^[[:space:]]*bar[[:space:]]*{' && ! { $(lines "$SESSION"); } | grep -Eq '^[[:space:]]*tray_output[[:space:]]+none'"
 fi

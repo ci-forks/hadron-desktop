@@ -17,10 +17,10 @@ import (
 )
 
 // registryBase maps an image reference's registry host to the URL its v2 API
-// is served at. HADRON_UPDATE_REGISTRY replaces it, so a test can point every
+// is served at. ISOTOPE_UPDATE_REGISTRY replaces it, so a test can point every
 // host at a fake registry.
 func registryBase(host string) string {
-	if u := os.Getenv("HADRON_UPDATE_REGISTRY"); u != "" {
+	if u := os.Getenv("ISOTOPE_UPDATE_REGISTRY"); u != "" {
 		return strings.TrimRight(u, "/")
 	}
 	return "https://" + host
@@ -148,13 +148,13 @@ func anonymousToken(ctx context.Context, challenge string) (string, error) {
 // tokenRealmAllowed accepts only an https realm. The realm comes from the
 // registry the caller named, and the daemon fetches it as root, so another
 // scheme would let any local user make root fetch a plain-http (or file, or
-// ftp) URL. The test registry of HADRON_UPDATE_REGISTRY may serve its token
+// ftp) URL. The test registry of ISOTOPE_UPDATE_REGISTRY may serve its token
 // over http.
 func tokenRealmAllowed(realm string) bool {
 	if u, err := url.Parse(realm); err == nil && u.Scheme == "https" && u.Host != "" {
 		return true
 	}
-	base := os.Getenv("HADRON_UPDATE_REGISTRY")
+	base := os.Getenv("ISOTOPE_UPDATE_REGISTRY")
 	return base != "" && strings.HasPrefix(realm, strings.TrimRight(base, "/")+"/")
 }
 
@@ -163,7 +163,7 @@ func tokenRealmAllowed(realm string) bool {
 var ErrNeedsCredentials = errors.New("needs registry credentials")
 
 // ErrWrongPlatform means the image has no linux/amd64 build, the only
-// platform Hadron Desktop runs on.
+// platform Isotope runs on.
 var ErrWrongPlatform = errors.New("image is not built for linux/amd64")
 
 // ImageInfo is what an install needs to know about an image. Digest is the

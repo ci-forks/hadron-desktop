@@ -12,7 +12,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/mudler/hadron-desktop/agent/internal/api"
+	"github.com/kairos-community/isotope/agent/internal/api"
 )
 
 // e2eDir is the writable working directory the file round-trip check exercises,
@@ -20,10 +20,10 @@ import (
 const e2eDir = "/home/agent/e2e"
 
 // cgroupLeafMarker is the substring every tracked process's own cgroup path
-// must contain: package process names each leaf "hadron-proc-<id>", so its
+// must contain: package process names each leaf "isotope-proc-<id>", so its
 // presence in a process's /proc/self/cgroup proves the process runs in its
 // dedicated MCP cgroup leaf (the authoritative kill boundary).
-const cgroupLeafMarker = "hadron-proc-"
+const cgroupLeafMarker = "isotope-proc-"
 
 // privilegedGroups are the supplementary groups the unprivileged agent must NOT
 // belong to; membership in any would breach the privilege boundary.
@@ -280,7 +280,7 @@ echo GC=$!`
 // under the agent's e2e directory (brief item 4).
 func (s *Suite) checkFilesRoundTrip(ctx context.Context, sess *mcp.ClientSession) CheckResult {
 	const name = "files_round_trip"
-	const marker = "hadron-e2e-probe"
+	const marker = "isotope-e2e-probe"
 	file := e2eDir + "/probe.txt"
 
 	var wr api.WriteFileOutput

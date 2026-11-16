@@ -1,4 +1,4 @@
-// Command mcp-smoke is the public MCP smoke/privilege client for the Hadron Cua
+// Command mcp-smoke is the public MCP smoke/privilege client for the Isotope Cua
 // agent appliance. It drives the appliance's public HTTPS MCP gateway using
 // ONLY the eight public MCP tools and asserts both the public contract and the
 // privilege boundaries that separate the unprivileged `agent` user from
@@ -26,7 +26,7 @@ package main
 import (
 	"os"
 
-	"github.com/mudler/hadron-desktop/agent/internal/smoke"
+	"github.com/kairos-community/isotope/agent/internal/smoke"
 )
 
 func main() {

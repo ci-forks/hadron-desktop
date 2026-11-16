@@ -1,20 +1,20 @@
-# Reusable downstream UI end-to-end gate for the Hadron Cua agent appliance.
+# Reusable downstream UI end-to-end gate for the Isotope Cua agent appliance.
 #
 # A UI repository calls this workflow to get a REAL, visible XLibre/i3 desktop
 # under test without knowing anything about Kairos, AuroraBoot, or QEMU. This
 # workflow boots the appliance as a detachable fixture VM, hands the caller's
-# own test command a descriptor via HADRON_AGENT_FIXTURE, and cleans up.
+# own test command a descriptor via ISOTOPE_AGENT_FIXTURE, and cleans up.
 #
 # Everything the caller needs to know about the descriptor, the eight public
 # MCP tools, TLS trust, and secret handling is in test/agent/README.md.
 #
 #   jobs:
 #     agent-ui-e2e:
-#       uses: mudler/hadron-desktop/.github/workflows/reusable-agent-ui-e2e.yml@main
+#       uses: kairos-community/isotope/.github/workflows/reusable-agent-ui-e2e.yml@main
 #       with:
-#         agent_iso_url: https://.../hadron-desktop-agent-v0.1.0-amd64.iso
+#         agent_iso_url: https://.../isotope-agent-v0.1.0-amd64.iso
 #         agent_iso_sha256: 3f2a...
-#         hadron_ref: v0.1.0
+#         isotope_ref: v0.1.0
 #         test_command: go test ./e2e/... -run TestAgentUI
 #
 # TRUST MODEL. This workflow declares `contents: read` and NOTHING else, and
@@ -39,14 +39,14 @@ on:
           job before QEMU is ever started.
         required: true
         type: string
-      hadron_ref:
-        description: Git ref of mudler/hadron-desktop to take the harness from.
+      isotope_ref:
+        description: Git ref of kairos-community/isotope to take the harness from.
         required: true
         type: string
       test_command:
         description: >-
           Caller-controlled command, run from the caller's checkout with
-          HADRON_AGENT_FIXTURE pointing at the fixture descriptor.
+          ISOTOPE_AGENT_FIXTURE pointing at the fixture descriptor.
         required: true
         type: string
       timeout_minutes:
@@ -68,7 +68,7 @@ jobs:
     env:
       # Absolute paths, because run.sh cds to its own repo root and the caller's
       # test command runs from a different directory.
-      HADRON_DIR: ${{ github.workspace }}/hadron
+      ISOTOPE_DIR: ${{ github.workspace }}/isotope
       CALLER_DIR: ${{ github.workspace }}/caller
       # ISO_PATH is deliberately NOT set here: the `runner` context is not
       # available in a job-level `env:`, and referencing it there makes GitHub
@@ -87,12 +87,12 @@ jobs:
           path: caller
           persist-credentials: false
 
-      - name: Check out Hadron at the requested ref
+      - name: Check out Isotope at the requested ref
         uses: actions/checkout@v7
         with:
-          repository: mudler/hadron-desktop
-          ref: ${{ inputs.hadron_ref }}
-          path: hadron
+          repository: kairos-community/isotope
+          ref: ${{ inputs.isotope_ref }}
+          path: isotope
           persist-credentials: false
 
       # Fail on a bad checksum BEFORE anything executes the ISO's contents.
@@ -174,7 +174,7 @@ jobs:
 
           FIXTURE_PROV_ISO="$ISO_PATH" \
           FIXTURE_BOOT_TIMEOUT="${FIXTURE_BOOT_TIMEOUT:-1800}" \
-            "$HADRON_DIR/test/agent/run.sh" fixture > "$descriptor_out" &
+            "$ISOTOPE_DIR/test/agent/run.sh" fixture > "$descriptor_out" &
           fixture_pid=$!
           echo "$fixture_pid" > "$RUNNER_TEMP/fixture/launcher.pid"
 
@@ -196,7 +196,7 @@ jobs:
           fi
 
           # The descriptor path is the entire downstream contract.
-          echo "HADRON_AGENT_FIXTURE=$descriptor" >> "$GITHUB_ENV"
+          echo "ISOTOPE_AGENT_FIXTURE=$descriptor" >> "$GITHUB_ENV"
           echo "descriptor=$descriptor" >> "$GITHUB_OUTPUT"
           echo "Fixture descriptor: $descriptor"
 
@@ -213,7 +213,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          desc="$HADRON_AGENT_FIXTURE"
+          desc="$ISOTOPE_AGENT_FIXTURE"
           mcp_url="$(jq -r '.mcp_url' "$desc")"
           ca="$(jq -r '.ca_certificate_file' "$desc")"
           token_file="$(jq -r '.bearer_token_file' "$desc")"
@@ -234,7 +234,7 @@ jobs:
             echo "This VM's cloud-config did not reach the guest, so the appliance" >&2
             echo "does not know its bearer digests. run.sh injects that config into a" >&2
             echo "copy of the supplied ISO (_agent_inject_cloud_config); check that" >&2
-            echo "step's output, and that the ISO is a Hadron agent image." >&2
+            echo "step's output, and that the ISO is an Isotope agent image." >&2
             exit 1
           fi
           echo "Descriptor credential accepted by the gateway (HTTP $status)."
@@ -251,7 +251,7 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
-          "$HADRON_DIR/test/agent/run.sh" stop || true
+          "$ISOTOPE_DIR/test/agent/run.sh" stop || true
 
       # Artifacts only, never runtime/ -- runtime/ is where the plaintext
       # bearer files live. Text artifacts still go through the harness's own
@@ -261,11 +261,11 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
-          art="$HADRON_DIR/test/agent/artifacts"
+          art="$ISOTOPE_DIR/test/agent/artifacts"
           [ -d "$art" ] || exit 0
 
           # shellcheck source=/dev/null
-          source "$HADRON_DIR/test/agent/lib/common.sh"
+          source "$ISOTOPE_DIR/test/agent/lib/common.sh"
 
           # Enumerate first, then rewrite: rewriting in the same pass would let
           # find walk into the temporary files this loop creates.
@@ -287,6 +287,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: agent-ui-e2e-artifacts
-          path: hadron/test/agent/artifacts/**
+          path: isotope/test/agent/artifacts/**
           if-no-files-found: warn
           retention-days: 7

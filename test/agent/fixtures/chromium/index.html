@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Hadron Cua Chromium Fixture</title>
+  <title>Isotope Cua Chromium Fixture</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -58,7 +58,7 @@
 </head>
 <body>
   <main>
-    <h1>Hadron Cua Chromium Fixture</h1>
+    <h1>Isotope Cua Chromium Fixture</h1>
     <div class="controls">
       <button id="click-count" type="button" aria-label="Click count">Clicks: 0</button>
       <button id="double-click-count" type="button" aria-label="Double click count">Double clicks: 0</button>
@@ -80,7 +80,7 @@
     (() => {
       'use strict';
 
-      const baseTitle = 'Hadron Cua Chromium Fixture';
+      const baseTitle = 'Isotope Cua Chromium Fixture';
       const state = {
         clicks: 0,
         double_clicks: 0,
@@ -130,7 +130,7 @@
 
       dragSource.addEventListener('dragstart', (event) => {
         event.dataTransfer.effectAllowed = 'copy';
-        event.dataTransfer.setData('text/plain', 'hadron-cua-fixture');
+        event.dataTransfer.setData('text/plain', 'isotope-cua-fixture');
       });
 
       dragTarget.addEventListener('dragover', (event) => {
@@ -140,7 +140,7 @@
 
       dragTarget.addEventListener('drop', (event) => {
         event.preventDefault();
-        state.dragged = event.dataTransfer.getData('text/plain') === 'hadron-cua-fixture';
+        state.dragged = event.dataTransfer.getData('text/plain') === 'isotope-cua-fixture';
         dragTarget.textContent = state.dragged ? 'Drag target: dropped' : 'Drag target: waiting';
         render();
       });

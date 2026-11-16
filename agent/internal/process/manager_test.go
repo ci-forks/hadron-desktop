@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mudler/hadron-desktop/agent/internal/api"
+	"github.com/kairos-community/isotope/agent/internal/api"
 )
 
 // testConfig returns a Manager config suited to tests: process-group fallback
@@ -139,9 +139,9 @@ func TestTerminalEnvAndCwd(t *testing.T) {
 	m := newTestManager(t)
 	dir := t.TempDir()
 	out, err := m.Bash(context.Background(), api.BashInput{
-		Command: "printf '%s|%s' \"$PWD\" \"$HADRON_TEST\"",
+		Command: "printf '%s|%s' \"$PWD\" \"$ISOTOPE_TEST\"",
 		Cwd:     dir,
-		Env:     []string{"HADRON_TEST=xyzzy"},
+		Env:     []string{"ISOTOPE_TEST=xyzzy"},
 	})
 	if err != nil {
 		t.Fatalf("Terminal returned error: %v", err)
@@ -158,7 +158,7 @@ func TestTerminalEnvAndCwd(t *testing.T) {
 		t.Errorf("cwd = %q, want %q", gotDir, wantDir)
 	}
 	if parts[1] != "xyzzy" {
-		t.Errorf("env HADRON_TEST = %q, want xyzzy", parts[1])
+		t.Errorf("env ISOTOPE_TEST = %q, want xyzzy", parts[1])
 	}
 }
 

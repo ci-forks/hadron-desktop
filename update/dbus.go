@@ -20,23 +20,23 @@ import (
 // The bus API. The names are part of the interface: the tray, the CLI, the
 // D-Bus policy, the activation file and the polkit files all spell them.
 const (
-	busName      = "io.kairos.HadronUpdate1"
-	busPath      = dbus.ObjectPath("/io/kairos/HadronUpdate1")
-	busInterface = "io.kairos.HadronUpdate1"
+	busName      = "io.kairos.IsotopeUpdate1"
+	busPath      = dbus.ObjectPath("/io/kairos/IsotopeUpdate1")
+	busInterface = "io.kairos.IsotopeUpdate1"
 
-	actionApply  = "io.kairos.hadron-update.apply"
-	actionReboot = "io.kairos.hadron-update.reboot"
+	actionApply  = "io.kairos.isotope-update.apply"
+	actionReboot = "io.kairos.isotope-update.reboot"
 	// actionExtensions covers installing, enabling, disabling and removing
 	// system extensions: each one changes what runs as root.
-	actionExtensions = "io.kairos.hadron-update.extensions"
+	actionExtensions = "io.kairos.isotope-update.extensions"
 	// actionRecovery covers the disk recovery key: reading which keyslots
 	// exist, adding a new key and resealing to the TPM.
-	actionRecovery = "io.kairos.hadron-update.recovery"
+	actionRecovery = "io.kairos.isotope-update.recovery"
 )
 
 // busIntrospection describes the interface for busctl, d-feet and friends.
 const busIntrospection = introspect.IntrospectDeclarationString + `<node>
-  <interface name="io.kairos.HadronUpdate1">
+  <interface name="io.kairos.IsotopeUpdate1">
     <method name="Status"><arg name="status" type="a{sv}" direction="out"/></method>
     <method name="Check"/>
     <method name="Releases"><arg name="tags" type="as" direction="out"/></method>
@@ -146,7 +146,7 @@ func (l logindInhibitor) Inhibit() (func(), error) {
 	var fd dbus.UnixFD
 	err := l.conn.Object("org.freedesktop.login1", "/org/freedesktop/login1").
 		CallWithContext(ctx, "org.freedesktop.login1.Manager.Inhibit", 0,
-			"shutdown:sleep", "Hadron Desktop update", "An update is being written to disk", "block").
+			"shutdown:sleep", "Isotope update", "An update is being written to disk", "block").
 		Store(&fd)
 	if err != nil {
 		return nil, fmt.Errorf("logind: %w", err)
@@ -174,7 +174,7 @@ func busError(err error) *dbus.Error {
 		name = "NotCancellable"
 	case errors.Is(err, ErrRebooting):
 		name = "Rebooting"
-	case errors.Is(err, ErrAgentImage), errors.Is(err, ErrNotHadron), errors.Is(err, ErrNotRelease),
+	case errors.Is(err, ErrAgentImage), errors.Is(err, ErrNotIsotope), errors.Is(err, ErrNotRelease),
 		errors.Is(err, ErrServerImage), errors.Is(err, ErrDesktopImage),
 		errors.Is(err, ErrNeedsCredentials), errors.Is(err, ErrWrongPlatform),
 		errors.Is(err, errUnmanaged), errors.Is(err, errExtNeedsAdvanced):
@@ -474,7 +474,7 @@ func newService(d *Daemon, a Authorizer) *service {
 // install an image or reboot.
 func (s *service) authorize(sender dbus.Sender, action string) *dbus.Error {
 	if s.credsOf == nil {
-		fmt.Fprintf(os.Stderr, "hadron-update: refusing %s for %s: no way to look up the caller\n", action, sender)
+		fmt.Fprintf(os.Stderr, "isotope-update: refusing %s for %s: no way to look up the caller\n", action, sender)
 		return errNotAuthorized
 	}
 	creds, err := s.credsOf(sender)
@@ -482,20 +482,20 @@ func (s *service) authorize(sender dbus.Sender, action string) *dbus.Error {
 		defer creds.close()
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "hadron-update: refusing %s for %s: %v\n", action, sender, err)
+		fmt.Fprintf(os.Stderr, "isotope-update: refusing %s for %s: %v\n", action, sender, err)
 		return errNotAuthorized
 	}
 	if sb, err := sandboxed(creds); sb {
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "hadron-update: refusing %s for %s: %v\n", action, sender, err)
+			fmt.Fprintf(os.Stderr, "isotope-update: refusing %s for %s: %v\n", action, sender, err)
 			return errNotAuthorized
 		}
-		fmt.Fprintf(os.Stderr, "hadron-update: refusing %s for %s: it runs in a Flatpak sandbox\n", action, sender)
+		fmt.Fprintf(os.Stderr, "isotope-update: refusing %s for %s: it runs in a Flatpak sandbox\n", action, sender)
 		return errSandboxed
 	}
 	ok, err := s.auth.Allowed(sender, action)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "hadron-update: refusing %s for %s: %v\n", action, sender, err)
+		fmt.Fprintf(os.Stderr, "isotope-update: refusing %s for %s: %v\n", action, sender, err)
 		return errNotAuthorized
 	}
 	if !ok {
@@ -578,8 +578,8 @@ func (a busAPI) Inspect(ref string, advanced bool) (map[string]dbus.Variant, *db
 	info, v, err := a.s.d.Inspect(context.Background(), ref, advanced)
 	refusal, overridable := "", false
 	switch {
-	case errors.Is(err, ErrNotHadron):
-		refusal, overridable = ErrNotHadron.Error(), AdvancedEnabled()
+	case errors.Is(err, ErrNotIsotope):
+		refusal, overridable = ErrNotIsotope.Error(), AdvancedEnabled()
 	case errors.Is(err, ErrNotRelease):
 		refusal, overridable = ErrNotRelease.Error(), AdvancedEnabled()
 	case errors.Is(err, ErrAgentImage):
@@ -600,7 +600,7 @@ func (a busAPI) Inspect(ref string, advanced bool) (map[string]dbus.Variant, *db
 		"version":     dbus.MakeVariant(v.Version),
 		"gpu":         dbus.MakeVariant(v.GPU),
 		"trusted":     dbus.MakeVariant(v.Trusted),
-		"hadron":      dbus.MakeVariant(v.Hadron),
+		"isotope":     dbus.MakeVariant(v.Isotope),
 		"refusal":     dbus.MakeVariant(refusal),
 		"overridable": dbus.MakeVariant(overridable),
 	}, nil
@@ -660,7 +660,7 @@ func (a busAPI) RebootPrevious(sender dbus.Sender) *dbus.Error {
 	return busError(a.s.d.RebootPrevious())
 }
 
-// serve exports d on conn as io.kairos.HadronUpdate1 and returns when the
+// serve exports d on conn as io.kairos.IsotopeUpdate1 and returns when the
 // service has been idle for idleTimeout, or with an error when the name is
 // taken or the bus goes away. It never returns while a job runs.
 func serve(conn *dbus.Conn, d *Daemon, a Authorizer) error {
@@ -669,13 +669,13 @@ func serve(conn *dbus.Conn, d *Daemon, a Authorizer) error {
 	d.OnChange(func(st Status) {
 		s.touch()
 		if err := conn.Emit(busPath, busInterface+".StateChanged", statusDict(st)); err != nil {
-			fmt.Fprintln(os.Stderr, "hadron-update: emitting StateChanged:", err)
+			fmt.Fprintln(os.Stderr, "isotope-update: emitting StateChanged:", err)
 		}
 	})
 	d.OnProgress(func(line string) {
 		s.touch()
 		if err := conn.Emit(busPath, busInterface+".Progress", line); err != nil {
-			fmt.Fprintln(os.Stderr, "hadron-update: emitting Progress:", err)
+			fmt.Fprintln(os.Stderr, "isotope-update: emitting Progress:", err)
 		}
 	})
 
@@ -720,32 +720,32 @@ func serve(conn *dbus.Conn, d *Daemon, a Authorizer) error {
 	}
 }
 
-// cmdDaemon is hadron-updated: the root service that owns the update job.
+// cmdDaemon is isotope-updated: the root service that owns the update job.
 func cmdDaemon(args []string, stderr io.Writer) int {
 	fs := newFlags("daemon", stderr)
 	if err := fs.Parse(args); err != nil {
 		return exitUsage
 	}
 	if fs.NArg() > 0 {
-		fmt.Fprintf(stderr, "hadron-update daemon: unexpected argument %q\n", fs.Arg(0))
+		fmt.Fprintf(stderr, "isotope-update daemon: unexpected argument %q\n", fs.Arg(0))
 		return exitUsage
 	}
 	// It runs kairos-agent and reboots; as any other user it could do
 	// neither, and would only mislead clients by owning the name.
 	if needRoot() {
-		fmt.Fprintln(stderr, "hadron-update daemon: must run as root; D-Bus activation starts it through hadron-updated.service.")
+		fmt.Fprintln(stderr, "isotope-update daemon: must run as root; D-Bus activation starts it through isotope-updated.service.")
 		return exitError
 	}
 	conn, err := dbus.ConnectSystemBus()
 	if err != nil {
-		fmt.Fprintln(stderr, "hadron-update daemon: cannot connect to the system bus:", err)
+		fmt.Fprintln(stderr, "isotope-update daemon: cannot connect to the system bus:", err)
 		return exitError
 	}
 	defer conn.Close()
 	d := NewDaemon(kairosBackend{})
 	d.inhibitor = logindInhibitor{conn: conn}
 	if err := serve(conn, d, polkitAuthorizer{conn: conn}); err != nil {
-		fmt.Fprintln(stderr, "hadron-update daemon:", err)
+		fmt.Fprintln(stderr, "isotope-update daemon:", err)
 		return exitError
 	}
 	return exitOK

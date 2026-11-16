@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mudler/hadron-desktop/agent/internal/control"
+	"github.com/kairos-community/isotope/agent/internal/control"
 )
 
 // ---------------------------------------------------------------------------

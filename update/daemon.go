@@ -96,15 +96,15 @@ var (
 	// must not start under a system that systemd is shutting down.
 	ErrRebooting = errors.New("the system is rebooting")
 
-	errUnmanaged       = errors.New("this system has no hadron-desktop release file, so it is not updated from here")
+	errUnmanaged       = errors.New("this system has no isotope release file, so it is not updated from here")
 	errNothingToCancel = errors.New("no job to cancel")
 )
 
 func runDir() string {
-	if p := os.Getenv("HADRON_UPDATE_RUN_DIR"); p != "" {
+	if p := os.Getenv("ISOTOPE_UPDATE_RUN_DIR"); p != "" {
 		return p
 	}
-	return "/run/hadron-update"
+	return "/run/isotope-update"
 }
 
 // rebootMarker exists from the moment kairos-agent is about to start until
@@ -126,7 +126,7 @@ func (d *Daemon) setLatestLocked(tag string) {
 	}
 	d.latest = tag
 	if err := writeRunFile(latestFile(), tag+"\n"); err != nil {
-		fmt.Fprintln(os.Stderr, "hadron-update: could not record the newest release:", err)
+		fmt.Fprintln(os.Stderr, "isotope-update: could not record the newest release:", err)
 	}
 }
 
@@ -198,7 +198,7 @@ type Daemon struct {
 }
 
 // NewDaemon reads the release file and the reboot marker. Without a release
-// file the system is not a Hadron Desktop install this daemon may update, and
+// file the system is not an Isotope install this daemon may update, and
 // every mutating call is refused.
 func NewDaemon(b Backend) *Daemon {
 	d := &Daemon{backend: b, state: StateIdle}
@@ -429,7 +429,7 @@ func (d *Daemon) Releases(ctx context.Context) ([]Latest, error) {
 }
 
 // evaluate resolves r and decides whether it may be installed. Only a
-// published release is installed without advanced mode. ErrNotHadron and
+// published release is installed without advanced mode. ErrNotIsotope and
 // ErrNotRelease (labelled, but not trusted by name) yield to advanced mode,
 // and only when the caller asked for it and update.conf allows it; an agent
 // image, a wrong platform or a private image is refused whatever the caller
@@ -448,7 +448,7 @@ func (d *Daemon) evaluate(ctx context.Context, r ImageRef, advanced bool) (Image
 	if err == nil && !v.Trusted {
 		err = ErrNotRelease
 	}
-	overridable := errors.Is(err, ErrNotHadron) || errors.Is(err, ErrNotRelease)
+	overridable := errors.Is(err, ErrNotIsotope) || errors.Is(err, ErrNotRelease)
 	if overridable && advanced && AdvancedEnabled() {
 		return info, v, published, nil
 	}
@@ -561,10 +561,10 @@ func (d *Daemon) run(ctx context.Context, j *job, r ImageRef, ref, digest string
 		// system that runs now, and a second install would push the
 		// never-booted image over it. The marker stays, and so does
 		// reboot-pending, on every failure.
-		fmt.Fprintf(os.Stderr, "hadron-update: the upgrade to %s failed: %v (last line: %q)\n", source, err, d.lastLine())
+		fmt.Fprintf(os.Stderr, "isotope-update: the upgrade to %s failed: %v (last line: %q)\n", source, err, d.lastLine())
 		if werr := writeRebootMarker(pendingFailed, source); werr != nil {
 			// The marker still says started: reboot-pending all the same.
-			fmt.Fprintln(os.Stderr, "hadron-update: could not record the failure in the marker:", werr)
+			fmt.Fprintln(os.Stderr, "isotope-update: could not record the failure in the marker:", werr)
 		}
 		d.mu.Lock()
 		defer d.mu.Unlock()
@@ -576,7 +576,7 @@ func (d *Daemon) run(ctx context.Context, j *job, r ImageRef, ref, digest string
 	if werr := writeRebootMarker(pendingInstalled, source); werr != nil {
 		// The marker still says started; a restarted daemon words the
 		// state as interrupted. The install itself succeeded.
-		fmt.Fprintln(os.Stderr, "hadron-update: could not record the finished install in the marker:", werr)
+		fmt.Fprintln(os.Stderr, "isotope-update: could not record the finished install in the marker:", werr)
 	}
 
 	var notes []string
@@ -612,7 +612,7 @@ func (d *Daemon) inhibitShutdown() (release func()) {
 	}
 	release, err := d.inhibitor.Inhibit()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "hadron-update: could not block shutdown during the upgrade:", err)
+		fmt.Fprintln(os.Stderr, "isotope-update: could not block shutdown during the upgrade:", err)
 		return func() {}
 	}
 	return release

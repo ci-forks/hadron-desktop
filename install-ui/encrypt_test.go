@@ -55,8 +55,8 @@ func TestRenderCloudConfigEncrypted(t *testing.T) {
 
 	for _, want := range []string{
 		"install:\n  device: \"/dev/vda\"\n  auto: true\n  reboot: false\n  encrypted_partitions:\n    - COS_PERSISTENT\n" +
-			"kcrypt:\n  method: passphrase\n  passphrase_file: /run/hadron-install/passphrase\nhostname:",
-		"        - path: /etc/hadron-desktop/encryption\n          permissions: 0644\n          content: |\n            mode=passphrase\n",
+			"kcrypt:\n  method: passphrase\n  passphrase_file: /run/isotope-install/passphrase\nhostname:",
+		"        - path: /etc/isotope/encryption\n          permissions: 0644\n          content: |\n            mode=passphrase\n",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("config is missing\n%s\nin\n%s", want, out)
@@ -93,7 +93,7 @@ func TestRenderCloudConfigUnencryptedIsUnchanged(t *testing.T) {
 // writeChoice is what puts the config in /oem: the passphrase must not be in
 // that file either.
 func TestWriteChoiceKeepsThePassphraseOutOfOEM(t *testing.T) {
-	out := filepath.Join(t.TempDir(), "99_hadron-user.yaml")
+	out := filepath.Join(t.TempDir(), "99_isotope-user.yaml")
 	c := Choice{Hostname: "box", Username: "ada", Disk: "/dev/vda", Encrypt: true, Passphrase: testPassphrase,
 		KeyboardLayout: "us", Timezone: "UTC"}
 	if err := writeChoice(out, c, "$6$fake"); err != nil {
@@ -111,7 +111,7 @@ func TestWriteChoiceKeepsThePassphraseOutOfOEM(t *testing.T) {
 // --- the passphrase file ---------------------------------------------------
 
 func TestPassphraseFileHandOff(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "hadron-install", "passphrase")
+	path := filepath.Join(t.TempDir(), "isotope-install", "passphrase")
 	if err := writePassphraseFile(path, testPassphrase); err != nil {
 		t.Fatal(err)
 	}
@@ -144,14 +144,14 @@ func TestPassphraseFileHandOff(t *testing.T) {
 
 func TestChoiceFromEnvEncryption(t *testing.T) {
 	base := func(t *testing.T) {
-		t.Setenv("HADRON_INSTALL_NONINTERACTIVE", "1")
-		t.Setenv("HADRON_USER", "ada")
-		t.Setenv("HADRON_PASS", "hunter2")
-		t.Setenv("HADRON_DISK", "/dev/vda")
+		t.Setenv("ISOTOPE_INSTALL_NONINTERACTIVE", "1")
+		t.Setenv("ISOTOPE_USER", "ada")
+		t.Setenv("ISOTOPE_PASS", "hunter2")
+		t.Setenv("ISOTOPE_DISK", "/dev/vda")
 	}
 	t.Run("off by default", func(t *testing.T) {
 		base(t)
-		t.Setenv("HADRON_DISK_PASSPHRASE", testPassphrase)
+		t.Setenv("ISOTOPE_DISK_PASSPHRASE", testPassphrase)
 		c, _, err := choiceFromEnv()
 		if err != nil {
 			t.Fatal(err)
@@ -162,16 +162,16 @@ func TestChoiceFromEnvEncryption(t *testing.T) {
 	})
 	t.Run("needs a passphrase", func(t *testing.T) {
 		base(t)
-		t.Setenv("HADRON_ENCRYPT", "1")
-		t.Setenv("HADRON_DISK_PASSPHRASE", "short")
-		if _, _, err := choiceFromEnv(); err == nil || !strings.Contains(err.Error(), "HADRON_DISK_PASSPHRASE") {
-			t.Errorf("err = %v, want a HADRON_DISK_PASSPHRASE error", err)
+		t.Setenv("ISOTOPE_ENCRYPT", "1")
+		t.Setenv("ISOTOPE_DISK_PASSPHRASE", "short")
+		if _, _, err := choiceFromEnv(); err == nil || !strings.Contains(err.Error(), "ISOTOPE_DISK_PASSPHRASE") {
+			t.Errorf("err = %v, want a ISOTOPE_DISK_PASSPHRASE error", err)
 		}
 	})
 	t.Run("on", func(t *testing.T) {
 		base(t)
-		t.Setenv("HADRON_ENCRYPT", "1")
-		t.Setenv("HADRON_DISK_PASSPHRASE", testPassphrase)
+		t.Setenv("ISOTOPE_ENCRYPT", "1")
+		t.Setenv("ISOTOPE_DISK_PASSPHRASE", testPassphrase)
 		c, _, err := choiceFromEnv()
 		if err != nil {
 			t.Fatal(err)
@@ -393,7 +393,7 @@ func TestVerifyEncryption(t *testing.T) {
 	if open == nil || !strings.Contains(strings.Join(open.args, " "), "--test-passphrase --key-file - /dev/vda5") || open.stdin != testPassphrase {
 		t.Errorf("passphrase test = %+v", open)
 	}
-	if !strings.Contains(strings.Join(logs, "\n"), "hadron: checking the disk passphrase") {
+	if !strings.Contains(strings.Join(logs, "\n"), "isotope: checking the disk passphrase") {
 		t.Errorf("the progress step marker was not logged: %q", logs)
 	}
 }

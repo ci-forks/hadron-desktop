@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE="${IMAGE:?set IMAGE to the Hadron image under test}"
+IMAGE="${IMAGE:?set IMAGE to the Isotope image under test}"
 DESCRIPTOR_SHA=3371dd250e61d9e1633630073fefda153cd4426f72f4afa0c3373ae2e8fea03a
 PRIMARY_FINGERPRINT=6E5C05D979C76DAF93C081354184DD4D907A7CAE
 MAX_BYTES=20971520
@@ -45,8 +45,8 @@ if grep -F "not found" /tmp/gnupg-ldd; then
     exit 1
 fi
 
-descriptor=/usr/share/hadron/flathub.flatpakrepo
-key=/usr/share/hadron/flathub.gpg
+descriptor=/usr/share/isotope/flathub.flatpakrepo
+key=/usr/share/isotope/flathub.gpg
 test "$(sha256sum "$descriptor" | cut -d ' ' -f1)" = "$descriptor_sha"
 install -d -m700 /tmp/runtime-gpg-home
 fingerprint=$(GNUPGHOME=/tmp/runtime-gpg-home \
@@ -54,7 +54,7 @@ fingerprint=$(GNUPGHOME=/tmp/runtime-gpg-home \
     awk -F: '$1 == "fpr" {print $10; exit}')
 test "$fingerprint" = "$primary_fingerprint"
 
-size=$(cat /usr/share/hadron/gnupg-runtime-size)
+size=$(cat /usr/share/isotope/gnupg-runtime-size)
 case "$size" in (*[!0-9]*|"") exit 1;; esac
 test "$size" -le "$max_bytes"
 CONTAINER

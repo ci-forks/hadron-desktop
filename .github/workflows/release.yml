@@ -22,14 +22,18 @@ env:
   # Pinned SBOM generator. The exact tag is part of the released evidence, so it
   # is never floated to a moving tag such as `latest`.
   SYFT_IMAGE: anchore/syft:v1.29.0
-  # Upgradable images. hadron-update on an installed system pulls
+  # Upgradable images. isotope-update on an installed system pulls
   # $IMAGE_REPO:<flavor>-<tag> (GPU=full, the standard images for real
   # machines) or $IMAGE_REPO:<flavor>-vm-<tag> (GPU=vm, for virtual machines),
-  # by the GPU line in /etc/hadron-desktop/release, and only for a
+  # by the GPU line in /etc/isotope/release, and only for a
   # tag GitHub reports as the latest *published* release, so an image pushed
   # here is invisible to users until the release job below has verified and
   # published every asset.
   IMAGE_REPO: ghcr.io/${{ github.repository }}
+  # Isotope was Hadron Desktop. A system installed before the rename runs an
+  # updater that looks for upgrades in the old repository, so every upgrade
+  # image is pushed there too, with the same tag.
+  LEGACY_IMAGE_REPO: ghcr.io/kairos-community/hadron-desktop
   # Every agent VM gate resolves its appliance image through this variable
   # (`test/agent/run.sh` takes `${1:-${AGENT_IMAGE:-agent-desktop:dev}}`, and the
   # Makefile declares `AGENT_IMAGE ?= agent-desktop:dev`), so one value keeps the
@@ -349,7 +353,7 @@ jobs:
           fi
 
           mkdir -p dist
-          asset="hadron-desktop-${LINE}-${RELEASE_TAG}-amd64.iso"
+          asset="isotope-${LINE}-${RELEASE_TAG}-amd64.iso"
           cp "${isos[0]}" "dist/$asset"
           cd dist
           sha256sum "$asset" > "$asset.sha256"
@@ -364,7 +368,7 @@ jobs:
 
           # Makefile: `IMAGE ?= $(DESKTOP)-desktop:dev`.
           image="${DESKTOP}-desktop:dev"
-          asset="hadron-desktop-${LINE}-${RELEASE_TAG}-amd64.iso"
+          asset="isotope-${LINE}-${RELEASE_TAG}-amd64.iso"
 
           docker run --rm \
             --volume /var/run/docker.sock:/var/run/docker.sock \
@@ -377,7 +381,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          asset="hadron-desktop-${LINE}-${RELEASE_TAG}-amd64.iso"
+          asset="isotope-${LINE}-${RELEASE_TAG}-amd64.iso"
           ./scripts/release-manifest.sh "$DESKTOP" "$GPU" "$RELEASE_TAG" "${DESKTOP}-desktop:dev" \
             "dist/$asset" "dist/$asset.build.json"
 
@@ -396,6 +400,12 @@ jobs:
           digest="$(docker buildx imagetools inspect "$target" --format '{{json .Manifest}}' | jq -r .digest)"
           [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "could not resolve the pushed digest of $target" >&2; exit 1; }
           cosign sign --yes "${IMAGE_REPO}@${digest}"
+          legacy="${LEGACY_IMAGE_REPO}:${target##*:}"
+          docker tag "$target" "$legacy"
+          docker push "$legacy"
+          legacy_digest="$(docker buildx imagetools inspect "$legacy" --format '{{json .Manifest}}' | jq -r .digest)"
+          [[ "$legacy_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "could not resolve the pushed digest of $legacy" >&2; exit 1; }
+          cosign sign --yes "${LEGACY_IMAGE_REPO}@${legacy_digest}"
 
       - name: Upload ${{ matrix.desktop }} (${{ matrix.gpu }}) workflow artifact
         uses: actions/upload-artifact@v7
@@ -419,7 +429,7 @@ jobs:
   #     so the publish job's asset counts do not change yet;
   #   - the UKI upgrade image <flavor>-uki-<tag>, which holds the signed EFI
   #     files that `kairos-agent upgrade` copies to the ESP of a Trusted Boot
-  #     system. hadron-update must pull it, never <flavor>-<tag>.
+  #     system. isotope-update must pull it, never <flavor>-<tag>.
   #
   # Secrets, all PEM or the binary .auth files base64-encoded, from
   # `auroraboot genkey` run once, offline:
@@ -492,14 +502,14 @@ jobs:
           mapfile -t isos < <(find "build/${DESKTOP}-desktop/uki-iso" -maxdepth 1 -type f -name '*-uki.iso')
           (( ${#isos[@]} == 1 )) || { echo "expected one UKI ISO, found ${#isos[@]}" >&2; exit 1; }
           mkdir -p dist
-          asset="hadron-desktop-${LINE}-${RELEASE_TAG}-amd64.iso"
+          asset="isotope-${LINE}-${RELEASE_TAG}-amd64.iso"
           cp "${isos[0]}" "dist/$asset"
           (cd dist && sha256sum "$asset" > "$asset.sha256")
 
       # The same signed UKI as a container image for `kairos-agent upgrade`.
       # AuroraBoot writes it as a docker-archive without our labels, so it is
-      # wrapped once more to carry the io.kairos.hadron-desktop.* labels that
-      # hadron-update reads before it pulls.
+      # wrapped once more to carry the io.kairos.isotope.* labels that
+      # isotope-update reads before it pulls.
       - name: Build the UKI upgrade image
         shell: bash
         run: |
@@ -509,11 +519,11 @@ jobs:
             -v "$KEYS_DIR":/keys:ro "$(make -s print-aurora-image)" build-uki \
             --output-dir /output --output-type container --public-keys /keys \
             --tpm-pcr-private-key /keys/tpm2-pcr-private.pem --sb-key /keys/db.key --sb-cert /keys/db.pem \
-            --sdboot-in-source --boot-branding "Hadron Desktop" "docker:${DESKTOP}-desktop:uki"
+            --sdboot-in-source --boot-branding "Isotope" "docker:${DESKTOP}-desktop:uki"
           loaded="$(docker load -i "$out"/*.tar | sed -n 's/^Loaded image: //p' | tail -n1)"
           [ -n "$loaded" ] || { echo "no image in the UKI upgrade archive" >&2; exit 1; }
-          printf 'FROM %s\nLABEL io.kairos.hadron-desktop.flavor=%s io.kairos.hadron-desktop.version=%s io.kairos.hadron-desktop.gpu=%s io.kairos.hadron-desktop.trusted-boot=true\n' \
-            "$loaded" "$DESKTOP" "$RELEASE_TAG" "$GPU" | docker build -t "${IMAGE_REPO}:${LINE}-${RELEASE_TAG}" -
+          printf 'FROM %s\nLABEL io.kairos.isotope.flavor=%s io.kairos.isotope.version=%s io.kairos.isotope.gpu=%s io.kairos.isotope.trusted-boot=true io.kairos.hadron-desktop.flavor=%s io.kairos.hadron-desktop.version=%s io.kairos.hadron-desktop.gpu=%s io.kairos.hadron-desktop.trusted-boot=true\n' \
+            "$loaded" "$DESKTOP" "$RELEASE_TAG" "$GPU" "$DESKTOP" "$RELEASE_TAG" "$GPU" | docker build -t "${IMAGE_REPO}:${LINE}-${RELEASE_TAG}" -
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v4.1.3
@@ -527,6 +537,12 @@ jobs:
           digest="$(docker buildx imagetools inspect "$target" --format '{{json .Manifest}}' | jq -r .digest)"
           [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "could not resolve the pushed digest of $target" >&2; exit 1; }
           cosign sign --yes "${IMAGE_REPO}@${digest}"
+          legacy="${LEGACY_IMAGE_REPO}:${target##*:}"
+          docker tag "$target" "$legacy"
+          docker push "$legacy"
+          legacy_digest="$(docker buildx imagetools inspect "$legacy" --format '{{json .Manifest}}' | jq -r .digest)"
+          [[ "$legacy_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "could not resolve the pushed digest of $legacy" >&2; exit 1; }
+          cosign sign --yes "${LEGACY_IMAGE_REPO}@${legacy_digest}"
 
       - name: Upload the Trusted Boot ISO
         uses: actions/upload-artifact@v7
@@ -711,7 +727,7 @@ jobs:
           fi
 
           mkdir -p dist
-          asset="hadron-desktop-agent-${RELEASE_TAG}-amd64.iso"
+          asset="isotope-agent-${RELEASE_TAG}-amd64.iso"
           cp "${isos[0]}" "dist/$asset"
           cd dist
           sha256sum "$asset" > "$asset.sha256"
@@ -721,7 +737,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          asset="hadron-desktop-agent-${RELEASE_TAG}-amd64.iso"
+          asset="isotope-agent-${RELEASE_TAG}-amd64.iso"
 
           docker run --rm \
             --volume /var/run/docker.sock:/var/run/docker.sock \
@@ -748,7 +764,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          asset="hadron-desktop-agent-${RELEASE_TAG}-amd64.iso"
+          asset="isotope-agent-${RELEASE_TAG}-amd64.iso"
           ./scripts/release-manifest.sh agent vm "$RELEASE_TAG" "$AGENT_IMAGE" \
             "dist/$asset" "dist/$asset.build.json"
 
@@ -769,6 +785,12 @@ jobs:
           digest="$(docker buildx imagetools inspect "$target" --format '{{json .Manifest}}' | jq -r .digest)"
           [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "could not resolve the pushed digest of $target" >&2; exit 1; }
           cosign sign --yes "${IMAGE_REPO}@${digest}"
+          legacy="${LEGACY_IMAGE_REPO}:${target##*:}"
+          docker tag "$target" "$legacy"
+          docker push "$legacy"
+          legacy_digest="$(docker buildx imagetools inspect "$legacy" --format '{{json .Manifest}}' | jq -r .digest)"
+          [[ "$legacy_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "could not resolve the pushed digest of $legacy" >&2; exit 1; }
+          cosign sign --yes "${LEGACY_IMAGE_REPO}@${legacy_digest}"
 
       - name: Upload agent workflow artifact
         uses: actions/upload-artifact@v7
@@ -856,7 +878,7 @@ jobs:
               and (.firmware == (.gpu == "full"))
               and (if .desktop_flavor == "agent" then .gpu == "vm" else true end)
               and (if .desktop_flavor == "server" then .gpu == "full" else true end)
-              and (.iso == "hadron-desktop-\(.desktop_flavor)\(if .gpu == "vm" and .desktop_flavor != "agent" then "-vm" else "" end)-\(.release_tag)-amd64.iso")
+              and (.iso == "isotope-\(.desktop_flavor)\(if .gpu == "vm" and .desktop_flavor != "agent" then "-vm" else "" end)-\(.release_tag)-amd64.iso")
               and (if .desktop_flavor == "i3" or .desktop_flavor == "agent"
                    then (.xlibre_version | type == "string" and length > 0)
                    else .xlibre_version == null end)
@@ -885,7 +907,7 @@ jobs:
             exit 1
           fi
 
-      # hadron-update on an installed system pulls without credentials. GHCR
+      # isotope-update on an installed system pulls without credentials. GHCR
       # creates a new package as private, and only the package settings can
       # make it public, so a release whose images need a login would publish
       # an upgrade nobody can install.
@@ -893,21 +915,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          name="${IMAGE_REPO#ghcr.io/}"
-          token="$(curl -fsS "https://ghcr.io/token?scope=repository:${name}:pull" | jq -r '.token // empty')" || true
-          if [[ -z "$token" ]]; then
-            echo "${IMAGE_REPO} needs a login to pull. Make the package public:" >&2
-            echo "https://github.com/orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/${name#*/}/settings" >&2
-            exit 1
-          fi
-          for line in sway i3 cosmic niri sway-vm i3-vm cosmic-vm niri-vm server agent; do
-            ref="${IMAGE_REPO}:${line}-${RELEASE_TAG}"
-            code="$(curl -sS -o /dev/null -w '%{http_code}' --head \
-              -H "Authorization: Bearer $token" \
-              -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json' \
-              "https://ghcr.io/v2/${name}/manifests/${line}-${RELEASE_TAG}")"
-            [[ "$code" == 200 ]] || { echo "$ref is not pullable without a login (HTTP $code)" >&2; exit 1; }
-            echo "$ref: public"
+          # Both repositories: the old one serves systems installed before the
+          # rename to Isotope.
+          for repo in "$IMAGE_REPO" "$LEGACY_IMAGE_REPO"; do
+            name="${repo#ghcr.io/}"
+            token="$(curl -fsS "https://ghcr.io/token?scope=repository:${name}:pull" | jq -r '.token // empty')" || true
+            if [[ -z "$token" ]]; then
+              echo "${repo} needs a login to pull. Make the package public:" >&2
+              echo "https://github.com/orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/${name#*/}/settings" >&2
+              exit 1
+            fi
+            for line in sway i3 cosmic niri sway-vm i3-vm cosmic-vm niri-vm server agent; do
+              ref="${repo}:${line}-${RELEASE_TAG}"
+              code="$(curl -sS -o /dev/null -w '%{http_code}' --head \
+                -H "Authorization: Bearer $token" \
+                -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json' \
+                "https://ghcr.io/v2/${name}/manifests/${line}-${RELEASE_TAG}")"
+              [[ "$code" == 200 ]] || { echo "$ref is not pullable without a login (HTTP $code)" >&2; exit 1; }
+              echo "$ref: public"
+            done
           done
 
       - name: Create or update GitHub Release

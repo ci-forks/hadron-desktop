@@ -8,8 +8,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/mudler/hadron-desktop/agent/internal/api"
-	"github.com/mudler/hadron-desktop/agent/internal/auth"
+	"github.com/kairos-community/isotope/agent/internal/api"
+	"github.com/kairos-community/isotope/agent/internal/auth"
 )
 
 // ---------------------------------------------------------------------------
@@ -246,7 +246,7 @@ func TestMissingTokenRejected(t *testing.T) {
 func TestForgedScopeStillRequiresBearer(t *testing.T) {
 	_, v := adminCreds(t)
 	forged := []string{
-		"Bearer hadron:admin",           // the scope string, not a bearer
+		"Bearer isotope:admin",          // the scope string, not a bearer
 		"Bearer admin",                  // a bare claim
 		"Bearer true",                   // a boolean-ish claim
 		"admin",                         // no scheme, a bare claim

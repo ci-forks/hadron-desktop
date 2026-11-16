@@ -1,24 +1,30 @@
 #!/usr/bin/env python3
-"""Draw the Hadron wallpapers from theme/palette.toml.
+"""Draw the Isotope wallpapers from theme/palette.toml.
 
-"Three quarks, three orbits": the GRUB background's recipe (a vertical base ->
-crust gradient with a faint accent glow above the frame) plus a soft violet
-bloom, three tilted orbits that fade along their path like comet trails, a
-three-dot "quark" nucleus, a light vignette and triangular dithering so the
-dark gradient does not band on 8-bit panels. The "plain" variant is the same
-background without the orbits, for the lock and login screens.
+"Tiles": the Tessellate pattern of the Kairos design system
+(github.com/kairos-io/design). A hex grid whose tiles are split into three
+rhombi, the faces of a cube. Near the right of the frame some faces are filled
+in the three lime tones, and the fill thins out to a faint outline grid on the
+left, which stays calm for the first tiled window and the desktop icons. The
+Isotope mark (a hexagon of six triangles, one pushed out) sits in the field as
+its focal point. Under it all is the GRUB background's recipe: a vertical
+base -> crust gradient with a faint accent glow above the frame, a light
+vignette, and triangular dithering, so the dark gradient does not band on
+8-bit panels. The "plain" variant is the same background without the tiles and
+the mark, for the lock and login screens.
 
 The image is a pure function of the palette, the variant and the size: the
-dither noise comes from a fixed seed, and the PNG has no timestamp, so two runs
-write the same bytes. The Dockerfile runs this at build time (stdlib only, no
-network), so an edit to theme/palette.toml reaches the wallpapers too.
+tile choice and the dither noise come from fixed seeds, and the PNG has no
+timestamp, so two runs write the same bytes. The Dockerfile runs this at build
+time (stdlib only, no network), so an edit to theme/palette.toml reaches the
+wallpapers too. tools/gen-grub-bg.py draws the GRUB background with draw().
 
     gen-wallpaper.py OUTDIR NAME...
 
-NAME is hadron-{orbits|plain}-{night|day}-WIDTHxHEIGHT; each is written to
+NAME is isotope-{tiles|plain}-{night|day}-WIDTHxHEIGHT; each is written to
 OUTDIR/NAME.png. For example:
 
-    python3 tools/gen-wallpaper.py /tmp/wp hadron-orbits-night-1920x1080
+    python3 tools/gen-wallpaper.py /tmp/wp isotope-tiles-night-1920x1080
 """
 import math
 import re
@@ -29,11 +35,20 @@ import zlib
 from pathlib import Path
 
 PALETTE = Path(__file__).resolve().parent.parent / "theme" / "palette.toml"
-NAME = re.compile(r"hadron-(orbits|plain)-(night|day)-([1-9][0-9]{2,4})x([1-9][0-9]{2,4})")
+NAME = re.compile(r"isotope-(tiles|plain)-(night|day)-([1-9][0-9]{2,4})x([1-9][0-9]{2,4})")
+S3 = math.sqrt(3.0)
+# The deep tile of the Isotope mark (isotope-deep in @kairos-io/design). The
+# light and mid tiles are the night palette's glow and accent; the mark keeps
+# its colours in the day theme, as a brand mark does, so it has no role.
+MARK_DEEP = "#4e9a06"
 
 
 def rgb(h):
     return tuple(int(h[i:i + 2], 16) for i in (1, 3, 5))
+
+
+def mix(a, b, t):
+    return tuple(a[i] + (b[i] - a[i]) * t for i in range(3))
 
 
 def write_png(path, w, h, rows):
@@ -50,85 +65,153 @@ def write_png(path, w, h, rows):
         f.write(chunk(b"IEND", b""))
 
 
-def draw(P, mode, W, H, plain):
+def tile_hash(q, r, face):
+    """A fixed pseudo-random number in [0, 1) for one face of one tile."""
+    h = (q * 73856093) ^ (r * 19349663) ^ (face * 83492791) ^ 0x5BD1E995
+    h &= 0xFFFFFFFF
+    h ^= h >> 13
+    h = (h * 0x5BD1E995) & 0xFFFFFFFF
+    h ^= h >> 15
+    return (h & 0xFFFFFF) / float(0x1000000)
+
+
+def hex_round(fq, fr):
+    """Cube rounding of fractional axial coordinates to the nearest tile."""
+    fs = -fq - fr
+    q, r, s = round(fq), round(fr), round(fs)
+    dq, dr, ds = abs(q - fq), abs(r - fr), abs(s - fs)
+    if dq > dr and dq > ds:
+        q = -r - s
+    elif dr > ds:
+        r = -q - s
+    return q, r
+
+
+def mark_triangles(cx, cy, R):
+    """The Isotope mark: six triangles of a pointy-top hexagon around
+    (cx, cy), each shrunk toward its own centre so a gap shows between them,
+    the first pushed out along its outward normal. Returns (points, tone)
+    with tone 0, 1 or 2 (light, mid, deep)."""
+    v = [(cx + R * math.cos(math.radians(-90 + 60 * i)),
+          cy + R * math.sin(math.radians(-90 + 60 * i))) for i in range(6)]
+    tris = []
+    for i in range(6):
+        a, b = v[i], v[(i + 1) % 6]
+        pts = [(cx, cy), a, b]
+        if i == 0:
+            mx, my = (a[0] + b[0]) / 2 - cx, (a[1] + b[1]) / 2 - cy
+            m = math.hypot(mx, my)
+            d = 0.2 * R
+            pts = [(p[0] + mx / m * d, p[1] + my / m * d) for p in pts]
+        gx = sum(p[0] for p in pts) / 3
+        gy = sum(p[1] for p in pts) / 3
+        k = 0.94
+        pts = [(gx + (p[0] - gx) * k, gy + (p[1] - gy) * k) for p in pts]
+        tris.append((pts, i % 3))
+    return tris
+
+
+def tri_coverage(x, y, pts):
+    """Anti-aliased coverage of pixel (x, y) by a triangle: the signed
+    distance to its nearest edge, as a one-pixel ramp."""
+    d = 1e9
+    area = ((pts[1][0] - pts[0][0]) * (pts[2][1] - pts[0][1])
+            - (pts[1][1] - pts[0][1]) * (pts[2][0] - pts[0][0]))
+    sign = 1.0 if area > 0 else -1.0
+    for i in range(3):
+        ax, ay = pts[i]
+        bx, by = pts[(i + 1) % 3]
+        ex, ey = bx - ax, by - ay
+        # Positive inside: the same side of every edge as the third vertex.
+        dd = sign * (ex * (y - ay) - ey * (x - ax)) / math.hypot(ex, ey)
+        d = min(d, dd)
+    return max(0.0, min(1.0, d + 0.5))
+
+
+def draw(P, mode, W, H, plain, layout="desktop", night_palette=None):
+    """Rows of RGB bytes. layout "desktop" is the wallpaper; "grub" keeps the
+    tiles to the right edge and leaves the mark out, so the centred boot menu
+    and its title stay readable. night_palette gives the lime tones of the
+    tiles and the mark; it defaults to P."""
     night = mode == "night"
     top, bot = rgb(P["base"]), rgb(P["crust"])
-    acc, glo, vio = rgb(P["accent"]), rgb(P["glow"]), rgb(P["violet"])
+    acc = rgb(P["accent"])
+    N = night_palette or P
+    tones = (rgb(N["glow"]), rgb(N["accent"]), rgb(MARK_DEEP))
+    line = rgb(P["border"])
     s = H / 1080.0
-    glow_k = 0.18 if night else 0.10
-    line_a = 0.55 if night else 0.45
-    halo_a = 0.16 if night else 0.08
+    glow_k = 0.10 if night else 0.06
+    fill_a = 0.30 if night else 0.34
+    line_a = 0.55 if night else 0.65
 
-    # Orbits around a nucleus on the right third (keeps the left calm for
-    # the first tiled window / desktop icons).
-    cx, cy = W * 0.68, H * 0.56
-    # (tilt, colour, rider phase, semi-major, semi-minor): three nested,
-    # unevenly tilted orbits, not the 60-degree "atom" logo.
-    orbits = [(math.radians(-16), acc, 0.5, H * 0.44, H * 0.135),
-              (math.radians(21), glo, 2.6, H * 0.33, H * 0.105),
-              (math.radians(-58), vio, 4.4, H * 0.23, H * 0.085)]
-    lw = 1.25 * s
-    halo = 9.0 * s
-    quarks = [(cx + 14 * s * math.cos(t), cy + 14 * s * math.sin(t), c)
-              for t, c in ((-math.pi / 2, acc), (math.pi / 6, glo), (5 * math.pi / 6, vio))]
-    # a "particle" riding each orbit at its trail head
-    riders = []
-    for th, col, ph, A, B in orbits:
-        u, v = A * math.cos(ph), B * math.sin(ph)
-        riders.append((cx + u * math.cos(th) - v * math.sin(th),
-                       cy + u * math.sin(th) + v * math.cos(th), col))
+    r_t = 56.0 * s                      # tile radius
+    lw = max(1.0, 1.1 * s)              # outline width
+    apo = r_t * S3 / 2                  # tile apothem
+    spokes = [(math.cos(math.radians(a)), math.sin(math.radians(a))) for a in (-150, -30, 90)]
+
+    if layout == "grub":
+        def bias(u, v):
+            return max(0.0, 0.85 - math.hypot((u - 1.02) * W / H, v - 0.55) * 1.55)
+        mark = []
+        mcx = mcy = mR = 0.0
+    else:
+        def bias(u, v):
+            return max(0.0, 0.92 - math.hypot((u - 0.86) * W / H, v - 0.52) * 1.05)
+        mcx, mcy, mR = W * 0.72, H * 0.50, 150.0 * s
+        mark = mark_triangles(mcx, mcy, mR)
+    # Tiles stay clear of the mark: a hexagon a little larger than it.
+    clear_R = mR * 1.55
 
     gcx, gcy, grad = W * 0.5, -H * 0.15, H * 0.95
-    g2x, g2y, g2r = cx, cy, H * 0.55          # soft violet bloom behind nucleus
-    reach = max(o[3] for o in orbits) + 3 * halo
     seed = 0x9E3779B9
     rows = []
     for y in range(H):
         ty = y / (H - 1)
-        br = top[0] + (bot[0] - top[0]) * ty
-        bg_ = top[1] + (bot[1] - top[1]) * ty
-        bb = top[2] + (bot[2] - top[2]) * ty
+        base = mix(top, bot, ty)
         row = bytearray(W * 3)
         dy0 = y - gcy
-        dyc = y - cy
-        near_orbit = not plain and abs(dyc) < reach
+        near_mark = mark and abs(y - mcy) < mR * 1.3
         for x in range(W):
-            r, g, b = br, bg_, bb
+            r, g, b = base
             dx = x - gcx
-            d = math.sqrt(dx * dx + dy0 * dy0)
-            k = 1.0 - d / grad
+            k = 1.0 - math.sqrt(dx * dx + dy0 * dy0) / grad
             if k > 0:
                 k = k * k * glow_k
                 r += (acc[0] - r) * k; g += (acc[1] - g) * k; b += (acc[2] - b) * k
-            ex, ey = x - g2x, y - g2y
-            k = 1.0 - math.sqrt(ex * ex + ey * ey) / g2r
-            if k > 0:
-                k = k * k * k * (0.07 if night else 0.05)
-                r += (vio[0] - r) * k; g += (vio[1] - g) * k; b += (vio[2] - b) * k
-            if near_orbit and abs(x - cx) < reach:
-                for th, col, ph, A, B in orbits:
-                    c, sn = math.cos(th), math.sin(th)
-                    u = ex * c + ey * sn
-                    v = -ex * sn + ey * c
-                    f = (u / A) ** 2 + (v / B) ** 2 - 1.0
-                    gr = 2.0 * math.sqrt((u / (A * A)) ** 2 + (v / (B * B)) ** 2) + 1e-9
-                    dd = abs(f) / gr
-                    if dd > 3 * halo:
-                        continue
-                    # trail: brightest at the rider (angle ph), fading behind it
-                    ang = math.atan2(v / B, u / A)
-                    t = ((ph - ang) % (2 * math.pi)) / (2 * math.pi)  # 0 at head
-                    trail = 0.18 + 0.82 * (1.0 - t) ** 2.2
-                    a = (line_a * math.exp(-(dd / lw) ** 2)
-                         + halo_a * math.exp(-(dd / halo) ** 2)) * trail
-                    r += (col[0] - r) * a; g += (col[1] - g) * a; b += (col[2] - b) * a
-                for qx, qy, col in quarks + riders:
-                    q = math.hypot(x - qx, y - qy)
-                    rad = 3.2 * s
-                    if q < 40 * s:
-                        a = min(1.0, math.exp(-(q / rad) ** 2) * 0.95
-                                + math.exp(-(q / (14 * s)) ** 2) * 0.22)
-                        r += (col[0] - r) * a; g += (col[1] - g) * a; b += (col[2] - b) * a
+            if not plain:
+                # The tile under (x, y), in axial coordinates.
+                fq = (S3 / 3 * x - y / 3) / r_t
+                fr = (2 / 3 * y) / r_t
+                q, rr = hex_round(fq, fr)
+                tx = r_t * S3 * (q + rr / 2)
+                tyy = r_t * 1.5 * rr
+                ex, ey = x - tx, y - tyy
+                mdx, mdy = tx - mcx, tyy - mcy
+                clear = mark and max(abs(mdx), abs(mdx * 0.5 + mdy * S3 / 2),
+                                     abs(-mdx * 0.5 + mdy * S3 / 2)) < clear_R * S3 / 2
+                if not clear:
+                    # One value per tile, so a face is filled whole or not.
+                    t = bias(tx / W, tyy / (H - 1))
+                    a = math.degrees(math.atan2(ey, ex))
+                    face = 0 if -150 <= a < -30 else (2 if -30 <= a < 90 else 1)
+                    if tile_hash(q, rr, face) < t:
+                        fa = fill_a * min(1.0, 0.35 + t)
+                        col = tones[face]
+                        r += (col[0] - r) * fa; g += (col[1] - g) * fa; b += (col[2] - b) * fa
+                    # Outline: the hexagon's edge and the three spokes.
+                    e = apo - max(abs(ex), abs(ex * 0.5 + ey * S3 / 2), abs(-ex * 0.5 + ey * S3 / 2))
+                    for sx, sy in spokes:
+                        if ex * sx + ey * sy > 0:
+                            e = min(e, abs(ex * sy - ey * sx))
+                    if e < lw + 1:
+                        la = line_a * (0.25 + 0.75 * min(1.0, bias(x / W, ty) * 1.6)) * max(0.0, min(1.0, lw + 0.5 - e))
+                        r += (line[0] - r) * la; g += (line[1] - g) * la; b += (line[2] - b) * la
+                if near_mark and abs(x - mcx) < mR * 1.4:
+                    for pts, tone in mark:
+                        c = tri_coverage(x, y, pts)
+                        if c > 0:
+                            col = tones[tone]
+                            r += (col[0] - r) * c; g += (col[1] - g) * c; b += (col[2] - b) * c
             # vignette
             vx = (x / W - 0.5) * 2; vy = (ty - 0.5) * 2
             v2 = (vx * vx + vy * vy) * (0.10 if night else 0.02)
@@ -146,7 +229,7 @@ def draw(P, mode, W, H, plain):
 
 def main():
     if len(sys.argv) < 3:
-        sys.exit("usage: gen-wallpaper.py OUTDIR hadron-{orbits|plain}-{night|day}-WIDTHxHEIGHT...")
+        sys.exit("usage: gen-wallpaper.py OUTDIR isotope-{tiles|plain}-{night|day}-WIDTHxHEIGHT...")
     out = Path(sys.argv[1])
     with open(PALETTE, "rb") as f:
         pal = tomllib.load(f)
@@ -154,12 +237,12 @@ def main():
     for name in sys.argv[2:]:
         m = NAME.fullmatch(name)
         if not m:
-            sys.exit(f"gen-wallpaper: {name!r} is not hadron-{{orbits|plain}}-{{night|day}}-WIDTHxHEIGHT")
+            sys.exit(f"gen-wallpaper: {name!r} is not isotope-{{tiles|plain}}-{{night|day}}-WIDTHxHEIGHT")
         jobs.append((name, m.group(1) == "plain", m.group(2), int(m.group(3)), int(m.group(4))))
     out.mkdir(parents=True, exist_ok=True)
     for name, plain, mode, w, h in jobs:
         path = out / f"{name}.png"
-        write_png(path, w, h, draw(pal[mode], mode, w, h, plain))
+        write_png(path, w, h, draw(pal[mode], mode, w, h, plain, night_palette=pal["night"]))
         print(f"wrote {path} ({path.stat().st_size} bytes)")
 
 

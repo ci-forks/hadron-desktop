@@ -75,7 +75,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.failed = true
 			// kairos-agent's own output explains its failures, but not one
 			// of the installer's (the disk check): log the error too.
-			m.logs.add("hadron-install-ui: " + msg.err.Error())
+			m.logs.add("isotope-install-ui: " + msg.err.Error())
 			m.showLogs = true // a failure without logs is useless
 			if m.ready {
 				m.vp.SetContent(m.logs.text())
@@ -129,10 +129,11 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// Tokyo Night styles, matching the boot splash so the handoff reads as one
+// Isotope styles, matching the boot splash so the handoff reads as one
 // continuous machine. 16-color VGA palette only: this runs on the kernel VT
 // (TERM=linux), where truecolor and 256-color values round to the wrong hue.
-// 12 = bright blue, 14 = bright cyan, 8 = dark grey, 15 = white-hot,
+// The kernel command line sets the indices from theme/palette.toml:
+// 12 = accent (lime), 14 = glow (light lime), 8 = dim, 15 = text, white-hot,
 // 9 = red (reserved for a real halt).
 var (
 	tnLogo  = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Bold(true)

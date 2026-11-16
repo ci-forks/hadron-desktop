@@ -11,10 +11,10 @@ import (
 // busctl is the D-Bus client. It ships in the Hadron base, and as a
 // `--user` client it honours DBUS_SESSION_BUS_ADDRESS, which is how it reaches
 // the private bus start-desktop opens with dbus-run-session (mako and dunst
-// both own org.freedesktop.Notifications there). HADRON_UPDATE_BUSCTL replaces
+// both own org.freedesktop.Notifications there). ISOTOPE_UPDATE_BUSCTL replaces
 // it, so a test can record the call instead of needing a bus.
 func busctl() string {
-	if p := os.Getenv("HADRON_UPDATE_BUSCTL"); p != "" {
+	if p := os.Getenv("ISOTOPE_UPDATE_BUSCTL"); p != "" {
 		return p
 	}
 	return "/usr/bin/busctl"
@@ -29,7 +29,7 @@ func notifyArgs(summary, body string) []string {
 		"--user", "--", "call",
 		"org.freedesktop.Notifications", "/org/freedesktop/Notifications",
 		"org.freedesktop.Notifications", "Notify", "susssasa{sv}i",
-		"Hadron Desktop", "0", "system-software-update", summary, body,
+		"Isotope", "0", "system-software-update", summary, body,
 		"0", "0", "-1",
 	}
 }
@@ -47,10 +47,10 @@ func Notify(summary, body string) error {
 // restarts every few hours does not repeat the same notification.
 func stateDir() string {
 	if d := os.Getenv("XDG_STATE_HOME"); d != "" {
-		return filepath.Join(d, "hadron-update")
+		return filepath.Join(d, "isotope-update")
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".local", "state", "hadron-update")
+	return filepath.Join(home, ".local", "state", "isotope-update")
 }
 
 func alreadyNotified(tag string) bool {

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Tests for hadron-agent-browser-run: the launch wrapper the user unit execs.
+# Tests for isotope-agent-browser-run: the launch wrapper the user unit execs.
 # A fake flatpak records the `run` argv and answers `info` from a control file,
 # so we assert the launch flags without starting a real browser.
 set -u
 
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
-script="$repo_root/rootfs-agent/usr/bin/hadron-agent-browser-run"
+script="$repo_root/rootfs-agent/usr/bin/isotope-agent-browser-run"
 
 fail=0
 err() { echo "FAIL: $*" >&2; fail=1; }
@@ -35,7 +35,7 @@ EOF
 
 # 1. app not installed -> does not run, exits non-zero (unit retries)
 d="$(mktemp -d)"; make_fake_flatpak "$d"
-if DISPLAY=:0 HADRON_FLATPAK="$d/flatpak" HADRON_BROWSER_EXEC=1 \
+if DISPLAY=:0 ISOTOPE_FLATPAK="$d/flatpak" ISOTOPE_BROWSER_EXEC=1 \
      sh "$script" >/dev/null 2>&1; then
   err "must not launch before the app is installed"
 else ok "app absent -> non-zero, no launch"; fi
@@ -44,7 +44,7 @@ rm -rf "$d"
 
 # 2. no DISPLAY -> does not run, exits non-zero
 d="$(mktemp -d)"; make_fake_flatpak "$d"; : > "$d/installed"
-if env -u DISPLAY HADRON_FLATPAK="$d/flatpak" HADRON_BROWSER_EXEC=1 \
+if env -u DISPLAY ISOTOPE_FLATPAK="$d/flatpak" ISOTOPE_BROWSER_EXEC=1 \
      sh "$script" >/dev/null 2>&1; then
   err "must not launch with no DISPLAY"
 else ok "no DISPLAY -> non-zero, no launch"; fi
@@ -52,7 +52,7 @@ rm -rf "$d"
 
 # 3. installed + DISPLAY -> execs flatpak run with the CDP port and hardening flags
 d="$(mktemp -d)"; make_fake_flatpak "$d"; : > "$d/installed"
-DISPLAY=:0 HADRON_FLATPAK="$d/flatpak" HADRON_BROWSER_EXEC=1 \
+DISPLAY=:0 ISOTOPE_FLATPAK="$d/flatpak" ISOTOPE_BROWSER_EXEC=1 \
   sh "$script" >/dev/null 2>&1
 calls="$(cat "$d/calls" 2>/dev/null)"
 for needle in "run" "org.chromium.Chromium" "--remote-debugging-port=9222" \
@@ -65,7 +65,7 @@ rm -rf "$d"
 # 4. Chromium already running -> waits for it to exit, never opens a window
 #    beside it (each extra `flatpak run` adds an about:blank window)
 d="$(mktemp -d)"; make_fake_flatpak "$d"; : > "$d/installed"; echo 3 > "$d/running"
-DISPLAY=:0 HADRON_FLATPAK="$d/flatpak" HADRON_BROWSER_EXEC=1 HADRON_BROWSER_POLL=0 \
+DISPLAY=:0 ISOTOPE_FLATPAK="$d/flatpak" ISOTOPE_BROWSER_EXEC=1 ISOTOPE_BROWSER_POLL=0 \
   timeout 10 sh "$script" >/dev/null 2>&1
 polls="$(grep -c '^ps ' "$d/calls" 2>/dev/null)"
 [ "$polls" -eq 4 ] && ok "running Chromium -> polled until it exited" \

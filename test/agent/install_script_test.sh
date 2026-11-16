@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Tests for hadron-agent-install + `hadron-agent provision inspect-seed`
+# Tests for isotope-agent-install + `isotope-agent provision inspect-seed`
 # (Phase 3, Task 8): safe interactive AND explicit zero-touch installation.
 #
 # DISK-WIPE SAFETY is the whole point of this suite. The real install command
-# is intercepted through the HADRON_INSTALL_CMD seam by a fake that records
+# is intercepted through the ISOTOPE_INSTALL_CMD seam by a fake that records
 # whether it ran and which device the written cloud-config told it to wipe. A
 # test "installed" iff that fake ran; "did NOT install" iff it never ran.
 #
@@ -12,12 +12,12 @@
 #   2. no seed -> interactive prompt opens; a non-`yes` answer does NOT install.
 #   3. rejection loops: typing anything but `yes` (incl. `y`) never installs;
 #      a final abort exits WITHOUT writing a disk.
-#   4. `yes` -> installs the SELECTED explicit disk; 99_hadron-agent-install.yaml
+#   4. `yes` -> installs the SELECTED explicit disk; 99_isotope-agent-install.yaml
 #      carries that device + enabled=true + the locked agent user; the fake
 #      install cmd received the chosen device.
 #   5. --noninteractive, seed with auto but NO device -> autoinstall FAILS.
 #   6. --noninteractive, install.auto=false -> does NOT install.
-#   7. --noninteractive, auto device + hadron_agent.enabled=true -> installs the
+#   7. --noninteractive, auto device + isotope_agent.enabled=true -> installs the
 #      seed device.
 #   8. --noninteractive, auto device but WITHOUT enabled -> fails (no install).
 #   9. --noninteractive, an unrelated existing cloud-config (no install.auto) ->
@@ -27,7 +27,7 @@
 set -u
 
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
-script="$repo_root/rootfs-agent/usr/local/bin/hadron-agent-install"
+script="$repo_root/rootfs-agent/usr/local/bin/isotope-agent-install"
 
 fail=0
 err() { echo "FAIL: $*" >&2; fail=1; }
@@ -46,19 +46,19 @@ workdir="$(mktemp -d)"
 trap 'rm -rf "$workdir"' EXIT
 
 # ---------------------------------------------------------------------------
-# Build the real hadron-agent binary so --noninteractive exercises the real
+# Build the real isotope-agent binary so --noninteractive exercises the real
 # inspect-seed gate (not a stub).
 # ---------------------------------------------------------------------------
-agent_bin="$workdir/hadron-agent"
-if ! ( cd "$repo_root/agent" && CGO_ENABLED=0 go build -o "$agent_bin" ./cmd/hadron-agent ) 2>"$workdir/build.log"; then
-  echo "FATAL: could not build hadron-agent:" >&2
+agent_bin="$workdir/isotope-agent"
+if ! ( cd "$repo_root/agent" && CGO_ENABLED=0 go build -o "$agent_bin" ./cmd/isotope-agent ) 2>"$workdir/build.log"; then
+  echo "FATAL: could not build isotope-agent:" >&2
   cat "$workdir/build.log" >&2
   exit 1
 fi
-ok "built hadron-agent for inspect-seed"
+ok "built isotope-agent for inspect-seed"
 
 # ---------------------------------------------------------------------------
-# Fake install command (the HADRON_INSTALL_CMD seam). Records a call marker and
+# Fake install command (the ISOTOPE_INSTALL_CMD seam). Records a call marker and
 # the device the written cloud-config asks it to wipe. The real installer takes
 # the device from install.device in /oem, so parsing it here proves the whole
 # chain: script -> 99 yaml -> installer.
@@ -66,10 +66,10 @@ ok "built hadron-agent for inspect-seed"
 fake_install="$workdir/fake-install"
 cat >"$fake_install" <<'EOF'
 #!/bin/sh
-: "${FAKE_CALL_LOG:?}" "${FAKE_DEVICE_FILE:?}" "${HADRON_OEM_DIR:?}"
+: "${FAKE_CALL_LOG:?}" "${FAKE_DEVICE_FILE:?}" "${ISOTOPE_OEM_DIR:?}"
 echo "called $*" >>"$FAKE_CALL_LOG"
 # Extract the device the installer would consume from the generated config.
-dev=$(grep -E '^[[:space:]]*device:' "$HADRON_OEM_DIR/99_hadron-agent-install.yaml" 2>/dev/null \
+dev=$(grep -E '^[[:space:]]*device:' "$ISOTOPE_OEM_DIR/99_isotope-agent-install.yaml" 2>/dev/null \
         | head -n1 | sed -E 's/.*device:[[:space:]]*"?([^"[:space:]]+)"?.*/\1/')
 printf '%s\n' "$dev" >"$FAKE_DEVICE_FILE"
 exit 0
@@ -82,23 +82,23 @@ chmod +x "$fake_install"
 new_case() {
   CD="$workdir/$1"
   rm -rf "$CD"; mkdir -p "$CD/oem" "$CD/sysblock"
-  export HADRON_OEM_DIR="$CD/oem"
+  export ISOTOPE_OEM_DIR="$CD/oem"
   export FAKE_CALL_LOG="$CD/install.calls"
   export FAKE_DEVICE_FILE="$CD/install.device"
-  export HADRON_SYS_BLOCK="$CD/sysblock"
-  export HADRON_INSTALL_CMD="$fake_install"
-  export HADRON_AGENT_BIN="$agent_bin"
+  export ISOTOPE_SYS_BLOCK="$CD/sysblock"
+  export ISOTOPE_INSTALL_CMD="$fake_install"
+  export ISOTOPE_AGENT_BIN="$agent_bin"
   : >"$FAKE_CALL_LOG"
 }
 
 # fake_disk NAME SECTORS: create a fake whole-disk block device entry.
-fake_disk() { mkdir -p "$HADRON_SYS_BLOCK/$1"; echo "$2" >"$HADRON_SYS_BLOCK/$1/size"; }
+fake_disk() { mkdir -p "$ISOTOPE_SYS_BLOCK/$1"; echo "$2" >"$ISOTOPE_SYS_BLOCK/$1/size"; }
 
 installed()     { [ -s "$FAKE_CALL_LOG" ]; }
 device_wiped()  { [ -r "$FAKE_DEVICE_FILE" ] && cat "$FAKE_DEVICE_FILE"; }
 
 run_interactive() { # feed stdin lines; returns script rc
-  printf '%s' "$1" | HADRON_INSTALL_ALLOW_NOTTY=1 sh "$script" >"$2" 2>&1
+  printf '%s' "$1" | ISOTOPE_INSTALL_ALLOW_NOTTY=1 sh "$script" >"$2" 2>&1
 }
 
 # ---------------------------------------------------------------------------
@@ -114,7 +114,7 @@ no
 if grep -qi "Hostname" "$out"; then ok "no seed: interactive prompt opened"; else err "no seed: prompt did not open"; cat "$out"; fi
 if installed; then err "no seed: MUST NOT install on a non-yes answer"; else ok "no seed: did not install"; fi
 [ "$rc" -ne 0 ] && ok "no seed: aborted non-zero without installing" || err "no seed: expected non-zero abort"
-[ -e "$HADRON_OEM_DIR/99_hadron-agent-install.yaml" ] && err "no seed: config written without confirmation" || ok "no seed: no config written"
+[ -e "$ISOTOPE_OEM_DIR/99_isotope-agent-install.yaml" ] && err "no seed: config written without confirmation" || ok "no seed: no config written"
 
 # ---------------------------------------------------------------------------
 # 3. rejection loops: `y` is not `yes`; final abort writes no disk.
@@ -131,7 +131,7 @@ nope
 " "$out"; rc=$?
 if installed; then err "rejection: 'y'/'nope' MUST NOT install"; else ok "rejection: 'y' and 'nope' did not install"; fi
 if grep -qi "starting over" "$out"; then ok "rejection: re-prompted (looped) on non-yes"; else err "rejection: did not loop"; fi
-[ -e "$HADRON_OEM_DIR/99_hadron-agent-install.yaml" ] && err "rejection: config written without a typed yes" || ok "rejection: no config written"
+[ -e "$ISOTOPE_OEM_DIR/99_isotope-agent-install.yaml" ] && err "rejection: config written without a typed yes" || ok "rejection: no config written"
 
 # ---------------------------------------------------------------------------
 # 4. `yes` -> installs the SELECTED disk with the right config.
@@ -147,17 +147,17 @@ if installed; then ok "confirm: typed 'yes' installed"; else err "confirm: 'yes'
 wiped="$(device_wiped)"
 [ "$wiped" = "/dev/sdb" ] && ok "confirm: fake install received the SELECTED device (/dev/sdb)" \
   || err "confirm: install device = '$wiped', want /dev/sdb"
-cfg="$HADRON_OEM_DIR/99_hadron-agent-install.yaml"
+cfg="$ISOTOPE_OEM_DIR/99_isotope-agent-install.yaml"
 if [ -f "$cfg" ]; then
   grep -Eq '^[[:space:]]*device:[[:space:]]*"?/dev/sdb"?' "$cfg" && ok "config: explicit device /dev/sdb" || err "config: missing /dev/sdb device"
   grep -Eq '^[[:space:]]*auto:[[:space:]]*true'   "$cfg" && ok "config: install.auto true"   || err "config: missing auto:true"
   grep -Eq '^[[:space:]]*reboot:[[:space:]]*true' "$cfg" && ok "config: install.reboot true" || err "config: missing reboot:true"
-  grep -Eq '^[[:space:]]*enabled:[[:space:]]*true' "$cfg" && ok "config: hadron_agent.enabled true" || err "config: missing hadron_agent enabled:true"
+  grep -Eq '^[[:space:]]*enabled:[[:space:]]*true' "$cfg" && ok "config: isotope_agent.enabled true" || err "config: missing isotope_agent enabled:true"
   grep -Eq 'name:[[:space:]]*"?agent"?' "$cfg" && ok "config: locked agent user present" || err "config: agent user missing"
   grep -Eq 'lock_passwd:[[:space:]]*true' "$cfg" && ok "config: agent password locked" || err "config: agent not locked"
   # Disk encryption is a desktop installer choice; the appliance is exempt
-  # (it installs through `hadron-install-ui --progress-only`, no wizard).
-  grep -Eq 'encrypted_partitions|hadron-desktop/encryption' "$cfg" \
+  # (it installs through `isotope-install-ui --progress-only`, no wizard).
+  grep -Eq 'encrypted_partitions|isotope/encryption' "$cfg" \
     && err "config: the agent appliance install asks for disk encryption" \
     || ok "config: no disk encryption on the agent appliance"
   # Never grant the human agent a privileged group.
@@ -178,15 +178,15 @@ fi
 # ---------------------------------------------------------------------------
 # Non-interactive (seed-gated) cases.
 # ---------------------------------------------------------------------------
-run_auto() { HADRON_HOSTNAME=ci sh "$script" --noninteractive >"$1" 2>&1; }
+run_auto() { ISOTOPE_HOSTNAME=ci sh "$script" --noninteractive >"$1" 2>&1; }
 
 # 5. auto but NO device -> FAILS.
 new_case case5; cd="$CD"; out="$cd/out"
-cat >"$HADRON_OEM_DIR/50_seed.yaml" <<'EOF'
+cat >"$ISOTOPE_OEM_DIR/50_seed.yaml" <<'EOF'
 #cloud-config
 install:
   auto: true
-hadron_agent:
+isotope_agent:
   enabled: true
 EOF
 run_auto "$out"; rc=$?
@@ -195,12 +195,12 @@ if installed; then err "auto-no-device: MUST NOT install"; else ok "auto-no-devi
 
 # 6. install.auto=false -> does NOT install.
 new_case case6; cd="$CD"; out="$cd/out"
-cat >"$HADRON_OEM_DIR/50_seed.yaml" <<'EOF'
+cat >"$ISOTOPE_OEM_DIR/50_seed.yaml" <<'EOF'
 #cloud-config
 install:
   auto: false
   device: /dev/sda
-hadron_agent:
+isotope_agent:
   enabled: true
 EOF
 run_auto "$out"; rc=$?
@@ -208,29 +208,29 @@ if installed; then err "auto-false: MUST NOT install"; else ok "auto-false: did 
 
 # 7. auto device + enabled -> installs the SEED device.
 new_case case7; cd="$CD"; out="$cd/out"
-cat >"$HADRON_OEM_DIR/50_seed.yaml" <<'EOF'
+cat >"$ISOTOPE_OEM_DIR/50_seed.yaml" <<'EOF'
 #cloud-config
 install:
   auto: true
   device: /dev/vdb
-hadron_agent:
+isotope_agent:
   enabled: true
 EOF
 run_auto "$out"; rc=$?
 if installed; then ok "authorized-auto: installed"; else err "authorized-auto: did not install"; cat "$out"; fi
 wiped="$(device_wiped)"
 [ "$wiped" = "/dev/vdb" ] && ok "authorized-auto: used the SEED device (/dev/vdb)" || err "authorized-auto: device=$wiped want /dev/vdb"
-grep -Eq '^[[:space:]]*device:[[:space:]]*"?/dev/vdb"?' "$HADRON_OEM_DIR/99_hadron-agent-install.yaml" \
+grep -Eq '^[[:space:]]*device:[[:space:]]*"?/dev/vdb"?' "$ISOTOPE_OEM_DIR/99_isotope-agent-install.yaml" \
   && ok "authorized-auto: config carries the seed device" || err "authorized-auto: config missing seed device"
 
 # 8. auto device WITHOUT enabled -> fails.
 new_case case8; cd="$CD"; out="$cd/out"
-cat >"$HADRON_OEM_DIR/50_seed.yaml" <<'EOF'
+cat >"$ISOTOPE_OEM_DIR/50_seed.yaml" <<'EOF'
 #cloud-config
 install:
   auto: true
   device: /dev/sda
-hadron_agent:
+isotope_agent:
   enabled: false
 EOF
 run_auto "$out"; rc=$?
@@ -238,7 +238,7 @@ if installed; then err "auto-not-enabled: MUST NOT install"; else ok "auto-not-e
 
 # 9. unrelated cloud-config (no install.auto) -> no authorization.
 new_case case9; cd="$CD"; out="$cd/out"
-cat >"$HADRON_OEM_DIR/50_seed.yaml" <<'EOF'
+cat >"$ISOTOPE_OEM_DIR/50_seed.yaml" <<'EOF'
 #cloud-config
 hostname: someone-elses-box
 users:
@@ -265,9 +265,9 @@ gate() { # SEED_CONTENT -> exit code of inspect-seed --require-auto-install --qu
 }
 gate "#cloud-config"$'\n' && err "gate absent: expected non-zero" || ok "gate: absent seed skipped (non-zero)"
 gate "#cloud-config"$'\n'"install:"$'\n'"  auto: true"$'\n'"  device: [bad"$'\n' && err "gate malformed: expected non-zero" || ok "gate: malformed seed skipped"
-gate "#cloud-config"$'\n'"install:"$'\n'"  auto: true"$'\n'"  device: /dev/sda"$'\n'"hadron_agent:"$'\n'"  enabled: false"$'\n' && err "gate disabled: expected non-zero" || ok "gate: disabled seed skipped"
-gate "#cloud-config"$'\n'"install:"$'\n'"  auto: true"$'\n'"hadron_agent:"$'\n'"  enabled: true"$'\n' && err "gate device-less: expected non-zero" || ok "gate: device-less seed skipped"
-if gate "#cloud-config"$'\n'"install:"$'\n'"  auto: true"$'\n'"  device: /dev/sda"$'\n'"hadron_agent:"$'\n'"  enabled: true"$'\n'; then
+gate "#cloud-config"$'\n'"install:"$'\n'"  auto: true"$'\n'"  device: /dev/sda"$'\n'"isotope_agent:"$'\n'"  enabled: false"$'\n' && err "gate disabled: expected non-zero" || ok "gate: disabled seed skipped"
+gate "#cloud-config"$'\n'"install:"$'\n'"  auto: true"$'\n'"isotope_agent:"$'\n'"  enabled: true"$'\n' && err "gate device-less: expected non-zero" || ok "gate: device-less seed skipped"
+if gate "#cloud-config"$'\n'"install:"$'\n'"  auto: true"$'\n'"  device: /dev/sda"$'\n'"isotope_agent:"$'\n'"  enabled: true"$'\n'; then
   ok "gate: fully-authorized seed passes (exit 0)"
 else
   err "gate: fully-authorized seed should exit 0"

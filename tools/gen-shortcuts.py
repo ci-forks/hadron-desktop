@@ -3,7 +3,7 @@
 
     gen-shortcuts.py [--check] [--root DIR]
 
-hadron-help (Super+F1) shows rootfs-<variant>/usr/share/hadron/shortcuts.txt.
+isotope-help (Super+F1) shows rootfs-<variant>/usr/share/isotope/shortcuts.txt.
 This script writes that file from the key bindings of the variant, so the
 sheet cannot drift from the config. With --check it writes nothing and exits 1
 when a committed sheet differs from what the configs give (CI runs this).
@@ -13,9 +13,9 @@ Sources
   i3    rootfs-i3/etc/i3/config, then etc/i3/config.d/*
   niri  rootfs-niri/etc/niri/config.kdl (the binds block)
   cosmic  tools/shortcuts-cosmic.txt: COSMIC keeps its defaults upstream, so
-        the keys Hadron documents are listed by hand. A line may end with
+        the keys Isotope documents are listed by hand. A line may end with
         "@ TEXT": the script fails unless the Dockerfile contains TEXT, which
-        ties the line to the override Hadron applies.
+        ties the line to the override Isotope applies.
 
 Descriptions come from comments in the config. A comment must be on its own
 line, directly above the binding, because i3 and sway read "#" after a command
@@ -44,7 +44,7 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUT = "usr/share/hadron/shortcuts.txt"
+OUT = "usr/share/isotope/shortcuts.txt"
 
 # Sheet order of the sections; any other section follows, alphabetically.
 SECTIONS = ["Basics", "Windows", "Workspaces", "System"]

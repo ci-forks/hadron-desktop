@@ -8,14 +8,14 @@ import (
 
 // Image labels the Dockerfile's kairos stage writes (Task 11 uses the same
 // strings). They let an image outside the release repo, such as a mirror,
-// declare that it is a Hadron desktop image.
+// declare that it is an Isotope image.
 const (
-	labelFlavor  = "io.kairos.hadron-desktop.flavor"
-	labelVersion = "io.kairos.hadron-desktop.version"
-	labelHadron  = "io.kairos.hadron-desktop.hadron-version"
+	labelFlavor  = "io.kairos.isotope.flavor"
+	labelVersion = "io.kairos.isotope.version"
+	labelHadron  = "io.kairos.isotope.hadron-version"
 	// labelGPU is the image line, full or vm. Images up to v0.0.7 have
 	// none.
-	labelGPU = "io.kairos.hadron-desktop.gpu"
+	labelGPU = "io.kairos.isotope.gpu"
 )
 
 var (
@@ -27,14 +27,14 @@ var (
 	// server over a desktop, is a different system, not an upgrade.
 	ErrServerImage  = errors.New("this is a server edition image; a desktop system cannot install it")
 	ErrDesktopImage = errors.New("this is a desktop image; the server edition installs only server images")
-	// ErrNotHadron and ErrNotRelease are the refusals the daemon's advanced
+	// ErrNotIsotope and ErrNotRelease are the refusals the daemon's advanced
 	// mode may override.
-	ErrNotHadron = errors.New("this is not a Hadron desktop image")
+	ErrNotIsotope = errors.New("this is not an Isotope image")
 	// ErrNotRelease is the daemon's refusal of an image that Classify
-	// accepts but does not trust: labelled as Hadron, but not a published
+	// accepts but does not trust: labelled as Isotope, but not a published
 	// release of the release repository. The spec accepts images from other
 	// repositories only through advanced mode.
-	ErrNotRelease = errors.New("this is not a published Hadron Desktop release")
+	ErrNotRelease = errors.New("this is not a published Isotope release")
 )
 
 // desktopFlavors are the flavors that ship the daemon and tray.
@@ -72,7 +72,7 @@ type Verdict struct {
 	// installed like one of another flavor: allowed, and the CLI says so.
 	GPU     string
 	Trusted bool // named like a release published in the release repo
-	Hadron  bool // trusted, or labelled as a desktop image
+	Isotope bool // trusted, or labelled as a desktop image
 }
 
 // Classify decides whether info may be installed. The agent check runs first
@@ -80,10 +80,10 @@ type Verdict struct {
 // The edition check runs next, on the label and on a release repo tag, so a
 // server image cannot pass for a desktop one or the other way round.
 func Classify(info ImageInfo, rel Release, published []Latest) (Verdict, error) {
-	if info.Labels[labelFlavor] == "agent" || strings.HasPrefix(info.Ref.Tag, "agent-") {
+	if label(info, labelFlavor) == "agent" || strings.HasPrefix(info.Ref.Tag, "agent-") {
 		return Verdict{}, ErrAgentImage
 	}
-	if err := editionRefusal(rel, info.Labels[labelFlavor]); err != nil {
+	if err := editionRefusal(rel, label(info, labelFlavor)); err != nil {
 		return Verdict{}, err
 	}
 	if tagFlavor, _, ok := strings.Cut(info.Ref.Tag, "-"); ok && rel.ImageRepo != "" && info.Ref.Repo() == rel.ImageRepo {
@@ -105,20 +105,37 @@ func Classify(info ImageInfo, rel Release, published []Latest) (Verdict, error) 
 		}
 		if ok && allowed[flavor] && (flavor != flavorServer || line == gpuFull) && strictTag.MatchString(tag) {
 			if isPublished(tag, published) {
-				return Verdict{Flavor: flavor, Version: tag, GPU: line, Trusted: true, Hadron: true}, nil
+				return Verdict{Flavor: flavor, Version: tag, GPU: line, Trusted: true, Isotope: true}, nil
 			}
 		}
 	}
 
-	flavor, version := info.Labels[labelFlavor], info.Labels[labelVersion]
+	flavor, version := label(info, labelFlavor), label(info, labelVersion)
 	if allowed[flavor] && strictTag.MatchString(version) {
-		line := info.Labels[labelGPU]
+		line := label(info, labelGPU)
 		if line != gpuFull && line != gpuVM {
 			line = ""
 		}
-		return Verdict{Flavor: flavor, Version: version, GPU: line, Hadron: true}, nil
+		return Verdict{Flavor: flavor, Version: version, GPU: line, Isotope: true}, nil
 	}
-	return Verdict{}, ErrNotHadron
+	return Verdict{}, ErrNotIsotope
+}
+
+// legacyLabelPrefix is the label prefix from before the rename to Isotope.
+// Images built before it carry only these labels, and an agent image among
+// them must still be refused.
+const (
+	labelPrefix       = "io.kairos.isotope."
+	legacyLabelPrefix = "io.kairos.hadron-desktop."
+)
+
+// label returns the image's label key, or the same label under the old
+// prefix when the image has no label of the new name.
+func label(info ImageInfo, key string) string {
+	if v, ok := info.Labels[key]; ok {
+		return v
+	}
+	return info.Labels[legacyLabelPrefix+strings.TrimPrefix(key, labelPrefix)]
 }
 
 func isPublished(tag string, published []Latest) bool {
