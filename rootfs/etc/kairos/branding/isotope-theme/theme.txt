@@ -1,0 +1,86 @@
+# Isotope GRUB theme.
+#
+# gfxterm theme matching the ly login + waybar palette. Used by the installed
+# system's boot menu (grubmenu.cfg switches to gfxterm and `set theme=` to this
+# file, which the 09_isotope_grub_theme oem stage places on COS_STATE alongside
+# background.tga). desktop-image is resolved relative to this file, so the bare
+# filename works once the whole isotope-theme dir lands in themes/isotope/.
+#
+# The subtitle is a build-time placeholder: this file lives in the COMMON rootfs
+# overlay but the subtitle is per-variant, so the Dockerfile substitutes
+# @VARIANT_SUBTITLE@ from /etc/isotope/session after kairos-init. Before
+# that substitution existed the i3 variant's boot menu claimed to be sway.
+#
+# Image is TGA, not PNG: GRUB's png.mod rejects valid PNGs with "unsupported
+# format", which makes gfxmenu discard the entire theme; tga.mod decodes cleanly.
+# Font: "Unifont Regular 16" is the unicode.pf2 that `loadfont unicode` loads on
+# the installed system. The live ISO loads our vendored copy from the theme dir.
+
+desktop-image: "background.tga"
+title-text: ""
+terminal-font: "Unifont Regular 16"
+
+# Brand wordmark (accent lime / muted).
++ label {
+    id    = "__brand__"
+    top   = 15%
+    left  = 0
+    width = 100%
+    align = "center"
+    color = "#8fd12e"
+    font  = "Unifont Regular 16"
+    text  = "I S O T O P E"
+}
++ label {
+    top   = 15%+26
+    left  = 0
+    width = 100%
+    align = "center"
+    color = "#5c596a"
+    font  = "Unifont Regular 16"
+    text  = "@VARIANT_SUBTITLE@"
+}
+
+# Boot menu: foreground text dim, selected entry light lime.
++ boot_menu {
+    left                 = 28%
+    width                = 44%
+    top                  = 38%
+    height               = 38%
+    item_font            = "Unifont Regular 16"
+    item_color           = "#cbc8d6"
+    selected_item_color  = "#c6f36b"
+    item_height          = 26
+    item_padding         = 6
+    item_spacing         = 6
+    icon_width           = 0
+    icon_height          = 0
+    scrollbar            = false
+}
+
+# Timeout countdown as a lime progress bar.
++ progress_bar {
+    id           = "__timeout__"
+    left         = 28%
+    width        = 44%
+    top          = 80%
+    height       = 16
+    show_text    = true
+    font         = "Unifont Regular 16"
+    text_color   = "#8f8ba3"
+    fg_color     = "#8fd12e"
+    bg_color     = "#15141c"
+    border_color = "#3c3a49"
+    text         = "@TIMEOUT_NOTIFICATION_MIDDLE@"
+}
+
+# Footer hint.
++ label {
+    top   = 90%
+    left  = 0
+    width = 100%
+    align = "center"
+    color = "#8f8ba3"
+    font  = "Unifont Regular 16"
+    text  = "up/down select   enter boot   e edit   c console"
+}

@@ -9,21 +9,21 @@ import (
 )
 
 // The tray icons are drawn here at startup instead of shipped as PNG files:
-// a coloured disc (one Hadron palette colour per state) with a dark glyph,
+// a coloured disc (one Isotope palette colour per state) with a dark glyph,
 // so the repository carries no binary assets. The disc stands out on the
 // dark panels; the glyph is the palette's on_accent, which has at least
 // 4.5:1 contrast on every disc colour (white on the yellow disc was 1.9:1).
 // Colours: generated from theme/palette.toml by tools/gen-theme.py.
 
 var iconColors = map[string]color.NRGBA{
-	"idle":   rgb(0x7aa2f7),
-	"update": rgb(0x9ece6a),
+	"idle":   rgb(0x8fd12e),
+	"update": rgb(0x3faf6e),
 	"busy":   rgb(0xe0af68),
-	"reboot": rgb(0xbb9af7),
+	"reboot": rgb(0xb49cf2),
 	"error":  rgb(0xf7768e),
 }
 
-var glyphColor = rgb(0x16161e)
+var glyphColor = rgb(0x15141c)
 
 // rgb is the opaque colour 0xRRGGBB.
 func rgb(v uint32) color.NRGBA {

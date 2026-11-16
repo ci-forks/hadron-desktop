@@ -7,14 +7,14 @@
 #
 # On an INSTALL that config reaches the installed system for free: kairos-agent
 # install merges it into the installed /oem (as 90_custom.yaml), so
-# hadron-agent-provision -- which only reads `--oem-dir /oem` -- finds the
+# isotope-agent-provision -- which only reads `--oem-dir /oem` -- finds the
 # configured bearer digests there. On a LIVE boot nothing performs that merge,
 # so provision saw no digests at all and minted a throwaway first-run token
 # instead, silently ignoring the auth the operator baked into the ISO. A live
 # appliance was therefore unreachable with its own configured credentials.
 #
 # Copy it into /oem here. This runs in the `boot` stage, and
-# hadron-agent-provision.service is ordered After=cos-setup-boot.service, so the
+# isotope-agent-provision.service is ordered After=cos-setup-boot.service, so the
 # file is in place before provision reads it. The 99_ prefix sorts last in
 # /oem's merge, so a config explicitly provisioned onto the machine still wins
 # over the ISO's embedded one. The copy is skipped once it exists (idempotent
@@ -23,13 +23,13 @@
 #
 # Guarded on !install-mode (the installer path already merges it) and on the
 # agent profile marker, so this is a hard no-op on any non-agent image.
-name: "Hadron agent embedded cloud-config"
+name: "Isotope agent embedded cloud-config"
 stages:
   boot:
-    - if: '! grep -q "install-mode" /proc/cmdline && [ -f /etc/hadron-agent/profile ] && [ -f /run/initramfs/live/config.yaml ] && [ ! -f /oem/99_hadron_embedded_config.yaml ]'
+    - if: '! grep -q "install-mode" /proc/cmdline && [ -f /etc/isotope-agent/profile ] && [ -f /run/initramfs/live/config.yaml ] && [ ! -f /oem/99_isotope_embedded_config.yaml ] && [ ! -f /oem/99_hadron_embedded_config.yaml ]'
       name: "publish the ISO's embedded cloud-config into /oem"
       commands:
         - mkdir -p /oem
         # Written 0600: it carries the appliance's bearer digests, and /oem is
         # readable by more than root on some layouts.
-        - install -m 0600 /run/initramfs/live/config.yaml /oem/99_hadron_embedded_config.yaml
+        - install -m 0600 /run/initramfs/live/config.yaml /oem/99_isotope_embedded_config.yaml

@@ -1,4 +1,4 @@
-# The Hadron Cua agent VM fixture
+# The Isotope Cua agent VM fixture
 
 `test/agent/run.sh fixture` boots the agent appliance as a **long-lived,
 VNC-visible virtual machine** and hands you a small JSON descriptor pointing at
@@ -273,7 +273,7 @@ completion and returns its output; a GUI application never completes.
 { "action": "start", "command": "/home/agent/e2e/bin/myapp", "args": [] }
 ```
 
-Each started process gets its own cgroup leaf named `hadron-proc-<id>`, which
+Each started process gets its own cgroup leaf named `isotope-proc-<id>`, which
 is the authoritative kill boundary: `terminate` kills the leaf, so nothing the
 application spawned — not even a `setsid` grandchild — survives it. The
 contract suite proves exactly this.
@@ -454,8 +454,8 @@ func (rt bearerRT) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func main() {
-	// HADRON_AGENT_FIXTURE is the descriptor path the fixture exports.
-	raw, err := os.ReadFile(os.Getenv("HADRON_AGENT_FIXTURE"))
+	// ISOTOPE_AGENT_FIXTURE is the descriptor path the fixture exports.
+	raw, err := os.ReadFile(os.Getenv("ISOTOPE_AGENT_FIXTURE"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -524,15 +524,15 @@ repository.
 ```yaml
 jobs:
   agent-ui-e2e:
-    uses: mudler/hadron-desktop/.github/workflows/reusable-agent-ui-e2e.yml@main
+    uses: kairos-community/isotope/.github/workflows/reusable-agent-ui-e2e.yml@main
     with:
-      agent_iso_url: https://github.com/.../hadron-desktop-agent-v0.1.0-amd64.iso
+      agent_iso_url: https://github.com/.../isotope-agent-v0.1.0-amd64.iso
       agent_iso_sha256: 3f2a…            # mandatory; an unverified ISO fails the job
-      hadron_ref: v0.1.0
+      isotope_ref: v0.1.0
       test_command: go test ./e2e/... -run TestAgentUI
 ```
 
-Your `test_command` runs with `HADRON_AGENT_FIXTURE` set to the descriptor
+Your `test_command` runs with `ISOTOPE_AGENT_FIXTURE` set to the descriptor
 path, in your repository's checkout. The workflow always stops the VM
 (`if: always()`) and uploads redacted artifacts whether you pass or fail.
 

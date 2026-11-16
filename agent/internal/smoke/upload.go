@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mudler/hadron-desktop/agent/internal/api"
+	"github.com/kairos-community/isotope/agent/internal/api"
 )
 
 // RunUpload copies a local file into the guest through the public write_file

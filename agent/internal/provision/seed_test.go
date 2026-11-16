@@ -37,27 +37,27 @@ func TestInspectSeed(t *testing.T) {
 		},
 		{
 			name:    "auto false does not authorize",
-			content: "#cloud-config\ninstall:\n  auto: false\n  device: /dev/sda\nhadron_agent:\n  enabled: true\n",
+			content: "#cloud-config\ninstall:\n  auto: false\n  device: /dev/sda\nisotope_agent:\n  enabled: true\n",
 		},
 		{
 			name:    "auto true but no device does not authorize",
-			content: "#cloud-config\ninstall:\n  auto: true\nhadron_agent:\n  enabled: true\n",
+			content: "#cloud-config\ninstall:\n  auto: true\nisotope_agent:\n  enabled: true\n",
 		},
 		{
 			name:    "auto true but empty device does not authorize",
-			content: "#cloud-config\ninstall:\n  auto: true\n  device: \"\"\nhadron_agent:\n  enabled: true\n",
+			content: "#cloud-config\ninstall:\n  auto: true\n  device: \"\"\nisotope_agent:\n  enabled: true\n",
 		},
 		{
 			name:    "auto true but non-dev device does not authorize",
-			content: "#cloud-config\ninstall:\n  auto: true\n  device: auto\nhadron_agent:\n  enabled: true\n",
+			content: "#cloud-config\ninstall:\n  auto: true\n  device: auto\nisotope_agent:\n  enabled: true\n",
 		},
 		{
 			name:    "auto+device but agent disabled does not authorize",
-			content: "#cloud-config\ninstall:\n  auto: true\n  device: /dev/sda\nhadron_agent:\n  enabled: false\n",
+			content: "#cloud-config\ninstall:\n  auto: true\n  device: /dev/sda\nisotope_agent:\n  enabled: false\n",
 		},
 		{
 			name:       "fully authorized",
-			content:    "#cloud-config\ninstall:\n  auto: true\n  device: /dev/vda\nhadron_agent:\n  enabled: true\n",
+			content:    "#cloud-config\ninstall:\n  auto: true\n  device: /dev/vda\nisotope_agent:\n  enabled: true\n",
 			wantAuth:   true,
 			wantDevice: "/dev/vda",
 		},
@@ -114,7 +114,7 @@ func TestInspectSeedMissingDir(t *testing.T) {
 	}
 }
 
-// Later files win for install.auto/device, matching hadron_agent scalar merge.
+// Later files win for install.auto/device, matching isotope_agent scalar merge.
 func TestLoadInstallSeedLastFileWins(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "10_a.yaml"),

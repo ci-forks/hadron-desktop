@@ -1,12 +1,12 @@
 #!/bin/sh
-# Check rootfs/usr/bin/hadron-night-light: the saved setting, toggle, restore
+# Check rootfs/usr/bin/isotope-night-light: the saved setting, toggle, restore
 # at session start, and that each variant starts and stops its own tool. The
 # tools (wlsunset, xsct, noctalia, busctl) and the clock are fakes that log
 # their arguments, so no display is needed.
 #
 #   test/night-light/check-night-light.sh
 #
-# The script reads /etc/hadron-desktop/session, so the checks run as root in
+# The script reads /etc/isotope/session, so the checks run as root in
 # a throwaway Alpine container.
 set -eu
 
@@ -16,7 +16,7 @@ if [ "${NIGHT_LIGHT_IN_CONTAINER:-}" != 1 ]; then
         alpine:3.22 sh /src/test/night-light/check-night-light.sh
 fi
 
-script=/src/rootfs/usr/bin/hadron-night-light
+script=/src/rootfs/usr/bin/isotope-night-light
 fail=0
 ok()  { echo "ok   $1"; }
 bad() { echo "FAIL $1"; fail=1; }
@@ -26,7 +26,7 @@ check() { # name, command...
 }
 
 t=$(mktemp -d)
-mkdir -p "$t/bin" /etc/hadron-desktop
+mkdir -p "$t/bin" /etc/isotope
 log=$t/log
 : > "$log"
 
@@ -68,10 +68,10 @@ export PATH="$t/bin:$PATH" FAKE_LOG="$log" FAKE_HHMM=1200 \
     FAKE_NOCTALIA_DOWN="$t/down" HOME="$t/home" XDG_RUNTIME_DIR="$t/run"
 unset XDG_STATE_HOME
 mkdir -p "$HOME" "$XDG_RUNTIME_DIR"
-state="$HOME/.local/state/hadron-desktop/night-light"
-pidf="$XDG_RUNTIME_DIR/hadron-night-light.pid"
+state="$HOME/.local/state/isotope/night-light"
+pidf="$XDG_RUNTIME_DIR/isotope-night-light.pid"
 
-session() { printf 'DESKTOP_NAME=%s\n' "$1" > /etc/hadron-desktop/session; }
+session() { printf 'DESKTOP_NAME=%s\n' "$1" > /etc/isotope/session; }
 reset() { : > "$log"; rm -rf "$HOME/.local" "$pidf" "$t/down"; }
 saved() { mkdir -p "$(dirname "$state")" && echo "$1" > "$state"; }
 has() { grep -q -- "$1" "$log"; }
@@ -94,6 +94,11 @@ rc=0; "$script" bogus 2>/dev/null || rc=$?
 check "an unknown command exits 2" [ "$rc" = 2 ]
 saved garbage
 check "a damaged state file reads as off" [ "$("$script" status)" = off ]
+# Isotope was Hadron Desktop: the setting saved before the rename still counts.
+reset
+mkdir -p "$HOME/.local/state/hadron-desktop" && echo on > "$HOME/.local/state/hadron-desktop/night-light"
+check "the setting from before the rename is kept" [ "$("$script" status)" = on ]
+check "and copied to the new place" [ "$(cat "$state")" = on ]
 
 # --- Sway: wlsunset --------------------------------------------------------
 reset

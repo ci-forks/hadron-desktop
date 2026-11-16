@@ -1,19 +1,19 @@
-/* Waybar: the Hadron palette. Matches the sway, foot, fuzzel and mako colours. */
+/* Waybar: the Isotope palette. Matches the sway, foot, fuzzel and mako colours. */
 /* Colours: generated from theme/palette.toml by tools/gen-theme.py. Edit the
    palette, not these values. */
-@define-color base      #1a1b26;
-@define-color surface   #24283b;
-@define-color overlay   #292e42;
-@define-color border    #414868;
-@define-color dim       #737aa2;
-@define-color text      #c0caf5;
-@define-color accent    #7aa2f7;
-@define-color glow      #7dcfff;
-@define-color violet    #bb9af7;
-@define-color success   #9ece6a;
+@define-color base      #15141c;
+@define-color surface   #1f1e28;
+@define-color overlay   #2a2935;
+@define-color border    #3c3a49;
+@define-color dim       #8f8ba3;
+@define-color text      #f2f1f5;
+@define-color accent    #8fd12e;
+@define-color glow      #c6f36b;
+@define-color violet    #b49cf2;
+@define-color success   #3faf6e;
 @define-color warning   #e0af68;
 @define-color error     #f7768e;
-@define-color on_accent #16161e;
+@define-color on_accent #15141c;
 
 /* Floating capsules: the bar itself is transparent and sits 6 px below the
    top edge (margins in the config); each module is a capsule with radius 8,

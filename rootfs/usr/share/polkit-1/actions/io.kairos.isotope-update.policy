@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!--
+  Actions of isotope-updated. The defaults refuse everyone: the rule in
+  rules.d/50-isotope-update.rules grants every action to the admin group, and
+  the service never asks for interactive authentication.
+-->
+<policyconfig>
+  <vendor>Isotope</vendor>
+  <vendor_url>https://github.com/kairos-community/isotope</vendor_url>
+
+  <action id="io.kairos.isotope-update.apply">
+    <description>Install or cancel an Isotope system update</description>
+    <message>Only members of the admin group can install or cancel a system update.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>no</allow_active>
+    </defaults>
+  </action>
+
+  <action id="io.kairos.isotope-update.reboot">
+    <description>Restart the system to finish an Isotope update, or into the previous system</description>
+    <message>Only members of the admin group can restart the system from the updater.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>no</allow_active>
+    </defaults>
+  </action>
+
+  <action id="io.kairos.isotope-update.extensions">
+    <description>Install, enable, disable or remove a system extension</description>
+    <message>Only members of the admin group can change system extensions: they run as root.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>no</allow_active>
+    </defaults>
+  </action>
+  <action id="io.kairos.isotope-update.recovery">
+    <description>Show, replace or reseal the disk recovery key</description>
+    <message>Only members of the admin group can change how the disk is unlocked.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>no</allow_active>
+    </defaults>
+  </action>
+</policyconfig>

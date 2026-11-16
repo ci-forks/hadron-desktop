@@ -88,7 +88,7 @@ func TestRenderCloudConfigIncludesSSHWhenGithubSet(t *testing.T) {
 
 func TestConfigPresentDetectsUsersOrInstallBlock(t *testing.T) {
 	dir := t.TempDir()
-	out := filepath.Join(dir, "99_hadron-user.yaml")
+	out := filepath.Join(dir, "99_isotope-user.yaml")
 
 	// Empty dir: nothing present.
 	if got, err := ConfigPresent(dir, out); err != nil || got {
@@ -117,7 +117,7 @@ func TestConfigPresentIgnoresUnrelatedKeys(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "10_other.yaml"), []byte("stages:\n  boot: []\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	got, err := ConfigPresent(dir, filepath.Join(dir, "99_hadron-user.yaml"))
+	got, err := ConfigPresent(dir, filepath.Join(dir, "99_isotope-user.yaml"))
 	if err != nil || got {
 		t.Fatalf("got %v err %v, want false nil", got, err)
 	}
@@ -134,7 +134,7 @@ func TestConfigPresentIgnoresUnrelatedKeys(t *testing.T) {
 // alone do not distinguish Abs from a naive compare.
 func TestConfigPresentIgnoresOwnOutputAcrossPathSpellings(t *testing.T) {
 	const body = "users:\n  - name: x\n"
-	const outName = "99_hadron-user.yaml"
+	const outName = "99_isotope-user.yaml"
 
 	t.Run("relative oemDir, absolute outPath", func(t *testing.T) {
 		dir := t.TempDir()
@@ -156,7 +156,7 @@ func TestConfigPresentIgnoresOwnOutputAcrossPathSpellings(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Chdir(dir)
-		// Glob yields "<dir>/99_hadron-user.yaml" against a bare relative name.
+		// Glob yields "<dir>/99_isotope-user.yaml" against a bare relative name.
 		got, err := ConfigPresent(dir, outName)
 		if err != nil || got {
 			t.Fatalf("got %v err %v, want false nil", got, err)

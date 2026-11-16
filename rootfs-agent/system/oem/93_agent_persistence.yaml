@@ -1,6 +1,6 @@
 # Persist the agent's provisioned state across reboots.
 #
-# Kairos does not persist /var/lib, so /var/lib/hadron-agent -- which holds the
+# Kairos does not persist /var/lib, so /var/lib/isotope-agent -- which holds the
 # gateway's TLS identity, its config, and the root helper's enablement flag --
 # lived on the ephemeral overlay. The provisioner re-materialized it on every
 # boot, and because provision.resolveTLS only reuses an EXISTING tls.crt/tls.key
@@ -31,15 +31,15 @@
 #
 # There is deliberately NO `if:` guard. The rootfs stage runs in the initramfs
 # context, where the installed system's /etc is not yet the running one, so a
-# guard on /etc/hadron-agent/profile silently skips the stage -- which is
+# guard on /etc/isotope-agent/profile silently skips the stage -- which is
 # exactly what happened on the first attempt at this fix, leaving the
 # certificate still rotating. 92_docker.yaml sets its bind mount unconditionally
 # for the same reason. The guard is unnecessary anyway: this file ships only in
 # the agent overlay, so its mere presence is the profile check.
-name: "Hadron agent persistent state"
+name: "Isotope agent persistent state"
 stages:
   rootfs:
-    - name: "persist /var/lib/hadron-agent across reboots"
+    - name: "persist /var/lib/isotope-agent across reboots"
       commands:
         - |
           layout=/run/cos/cos-layout.env
@@ -47,11 +47,11 @@ stages:
           # shellcheck source=/dev/null
           . "$layout" 2>/dev/null || true
           case " ${CUSTOM_BIND_MOUNTS:-} " in
-            *" /var/lib/hadron-agent "*)
+            *" /var/lib/isotope-agent "*)
               # Already listed: nothing to do, and re-adding would duplicate it.
               exit 0
               ;;
           esac
-          merged="${CUSTOM_BIND_MOUNTS:-} /var/lib/hadron-agent"
+          merged="${CUSTOM_BIND_MOUNTS:-} /var/lib/isotope-agent"
           sed -i '/^CUSTOM_BIND_MOUNTS=/d' "$layout"
           printf 'CUSTOM_BIND_MOUNTS="%s"\n' "${merged# }" >> "$layout"

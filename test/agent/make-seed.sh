@@ -22,7 +22,7 @@
 #   --mode=install (the default, a full zero-touch install seed) and is
 #   OMITTED ENTIRELY in --mode=live (a live/contract seed that boots an
 #   already-installed disk, where install: would be a no-op at best).
-#   Top-level `hadron_agent:` is always present. `auth.admin_token_hash` is
+#   Top-level `isotope_agent:` is always present. `auth.admin_token_hash` is
 #   OMITTED (not left blank) when --no-admin is given, and no admin bearer
 #   is minted for that seed.
 #
@@ -55,10 +55,10 @@
 #                          live: live/contract seed, omits the install: block.
 #   --live / --install     shorthand for --mode live / --mode install.
 #   --no-admin              mint no admin bearer; omit auth.admin_token_hash.
-#   --hostname NAME         cloud-config hostname (default: hadron-agent-e2e)
+#   --hostname NAME         cloud-config hostname (default: isotope-agent-e2e)
 #   --device PATH            install.device (default: /dev/vda; ignored
 #                          under --mode=live)
-#   --listen ADDR           hadron_agent.endpoint.listen (default:
+#   --listen ADDR           isotope_agent.endpoint.listen (default:
 #                          0.0.0.0:7443)
 #   --iso PATH               seed ISO output path (default:
 #                          <seed-dir>/seed.iso)
@@ -84,7 +84,7 @@ USAGE
 
 MODE="install"
 ADMIN=1
-HOSTNAME_VAL="hadron-agent-e2e"
+HOSTNAME_VAL="isotope-agent-e2e"
 DEVICE="/dev/vda"
 LISTEN="0.0.0.0:7443"
 SEED_ISO=""
@@ -206,7 +206,7 @@ fi
     echo "  device: ${DEVICE}"
     echo "  reboot: true"
   fi
-  echo "hadron_agent:"
+  echo "isotope_agent:"
   echo "  enabled: true"
   echo "  endpoint:"
   echo "    listen: \"${LISTEN}\""

@@ -46,8 +46,8 @@ const goodRelease = `# written by the Dockerfile
 FLAVOR=sway
 VERSION="v0.1.0"
 HADRON_VERSION=v0.6.3
-IMAGE_REPO=ghcr.io/kairos-community/hadron-desktop
-GITHUB_REPO=kairos-community/hadron-desktop
+IMAGE_REPO=ghcr.io/kairos-community/isotope
+GITHUB_REPO=kairos-community/isotope
 `
 
 func TestLoadRelease(t *testing.T) {
@@ -58,7 +58,7 @@ func TestLoadRelease(t *testing.T) {
 	if r.Version != "v0.1.0" || r.Flavor != "sway" || r.HadronVersion != "v0.6.3" {
 		t.Fatalf("unexpected release %+v", r)
 	}
-	if got, want := r.ImageFor("v0.2.0"), "ghcr.io/kairos-community/hadron-desktop:sway-v0.2.0"; got != want {
+	if got, want := r.ImageFor("v0.2.0"), "ghcr.io/kairos-community/isotope:sway-v0.2.0"; got != want {
 		t.Fatalf("ImageFor = %q, want %q", got, want)
 	}
 }
@@ -87,14 +87,14 @@ func TestReleaseLines(t *testing.T) {
 	cases := []struct {
 		flavor, gpu, line, image string
 	}{
-		{"sway", "", gpuFull, "ghcr.io/kairos-community/hadron-desktop:sway-v0.2.0"},
-		{"sway", "full", gpuFull, "ghcr.io/kairos-community/hadron-desktop:sway-v0.2.0"},
-		{"sway", "vm", gpuVM, "ghcr.io/kairos-community/hadron-desktop:sway-vm-v0.2.0"},
-		{"cosmic", "vm", gpuVM, "ghcr.io/kairos-community/hadron-desktop:cosmic-vm-v0.2.0"},
-		{"agent", "vm", gpuVM, "ghcr.io/kairos-community/hadron-desktop:agent-v0.2.0"},
-		{"agent", "", gpuFull, "ghcr.io/kairos-community/hadron-desktop:agent-v0.2.0"},
-		{"server", "full", gpuFull, "ghcr.io/kairos-community/hadron-desktop:server-v0.2.0"},
-		{"server", "vm", gpuVM, "ghcr.io/kairos-community/hadron-desktop:server-v0.2.0"},
+		{"sway", "", gpuFull, "ghcr.io/kairos-community/isotope:sway-v0.2.0"},
+		{"sway", "full", gpuFull, "ghcr.io/kairos-community/isotope:sway-v0.2.0"},
+		{"sway", "vm", gpuVM, "ghcr.io/kairos-community/isotope:sway-vm-v0.2.0"},
+		{"cosmic", "vm", gpuVM, "ghcr.io/kairos-community/isotope:cosmic-vm-v0.2.0"},
+		{"agent", "vm", gpuVM, "ghcr.io/kairos-community/isotope:agent-v0.2.0"},
+		{"agent", "", gpuFull, "ghcr.io/kairos-community/isotope:agent-v0.2.0"},
+		{"server", "full", gpuFull, "ghcr.io/kairos-community/isotope:server-v0.2.0"},
+		{"server", "vm", gpuVM, "ghcr.io/kairos-community/isotope:server-v0.2.0"},
 	}
 	for _, c := range cases {
 		body := strings.Replace(goodRelease, "FLAVOR=sway", "FLAVOR="+c.flavor, 1)

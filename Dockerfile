@@ -1,4 +1,4 @@
-# Hadron desktop environment: Sway/Wayland or i3/XLibre.
+# Isotope environment: Sway/Wayland or i3/XLibre.
 #
 # Builds a complete desktop on top of the Hadron base image. DESKTOP=sway keeps
 # the existing Wayland/Sway stack; DESKTOP=i3 selects XLibre and i3. BuildKit
@@ -48,13 +48,13 @@ FROM ghcr.io/kairos-io/hadron-toolchain:${HADRON_VERSION} AS toolchain
 # frame and one with the passphrase panel, each a PPM of exactly the
 # requested size.
 # ---------------------------------------------------------------------------
-FROM toolchain AS hadron-splash
+FROM toolchain AS isotope-splash
 COPY splash/ /build/splash/
 RUN cd /build/splash && make clean && make && make test && \
-    ./hadron-splash | grep -q HADRON && \
-    ./hadron-splash --render=/tmp/frame.ppm --size=640x400 --at=2 && \
+    ./isotope-splash | grep -q ISOTOPE && \
+    ./isotope-splash --render=/tmp/frame.ppm --size=640x400 --at=2 && \
     [ "$(stat -c %s /tmp/frame.ppm)" -eq $((15 + 640 * 400 * 3)) ] && \
-    ./hadron-splash --render=/tmp/prompt.ppm --size=640x400 --at=2 --prompt=retry && \
+    ./isotope-splash --render=/tmp/prompt.ppm --size=640x400 --at=2 --prompt=retry && \
     [ "$(stat -c %s /tmp/prompt.ppm)" -eq $((15 + 640 * 400 * 3)) ]
 
 
@@ -380,7 +380,7 @@ WORKDIR /build
 RUN curl --retry 5 --retry-delay 3 --retry-all-errors -L https://download.sourceforge.net/libpng/libpng-${LIBPNG_VERSION}.tar.xz -o libpng.tar.xz && tar -xf libpng.tar.xz && rm libpng.tar.xz && mv libpng-* libpng-src
 WORKDIR /build/libpng-src
 RUN ./configure ${COMMON_CONFIGURE_ARGS} --disable-dependency-tracking
-# The Hadron cross-style target tuple causes libpng's generated DFA feature
+# The Isotope cross-style target tuple causes libpng's generated DFA feature
 # header to disable every read/write API. Use libpng's shipped, standard
 # feature profile so Cairo, grim, and gdk-pixbuf get the normal PNG surface.
 RUN sed -i 's/^pnglibconf\.h: pnglibconf\.out$/pnglibconf.h:/' Makefile && \
@@ -1331,7 +1331,7 @@ RUN DESTDIR=/wireplumber ninja -C buildDir install
 # --- waybar — the status bar / panel ---------------------------------------
 # Native modules drive NetworkManager / WirePlumber / BlueZ directly (clickable
 # wifi, volume, bluetooth), plus an SNI system tray (libdbusmenu) for external
-# applet icons. Click actions reuse the variant-aware Hadron network/audio menus.
+# applet icons. Click actions reuse the variant-aware Isotope network/audio menus.
 # Defined after wireplumber/pipewire so every COPY --from resolves backwards.
 FROM toolchain AS waybar
 COPY --from=libucontext /libucontext /
@@ -1395,15 +1395,15 @@ RUN curl -fL --retry 5 --retry-delay 3 --retry-all-errors https://github.com/rya
     && tar -xf n.tar.xz -C /nerdfont/usr/share/fonts/nerd-fonts SymbolsNerdFont-Regular.ttf SymbolsNerdFontMono-Regular.ttf \
     && rm n.tar.xz
 
-# The Hadron typefaces: Inter for the interface, JetBrains Mono for terminals,
+# The Isotope typefaces: Inter for the interface, JetBrains Mono for terminals,
 # both SIL OFL 1.1, with their licences. Data only: the variable TTFs (one file
 # covers every weight), no static cuts, no web fonts. rootfs/etc/fonts/conf.d/
-# 60-hadron.conf makes them the sans-serif and monospace defaults; DejaVu and
+# 60-isotope.conf makes them the sans-serif and monospace defaults; DejaVu and
 # the Nerd Font symbols stay as fallbacks. Neither project publishes checksums,
 # so the release zips are checked against SHA256s computed when pinned: a
 # Renovate bump fails here until the PR updates the matching *_SHA256 too.
 # The toolchain has no unzip; Python's zipfile module extracts the zips.
-FROM toolchain AS hadron-fonts
+FROM toolchain AS isotope-fonts
 # renovate: datasource=github-releases depName=rsms/inter extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG INTER_VERSION=4.1
 ARG INTER_SHA256=9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e
@@ -1416,7 +1416,7 @@ RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://github.com/rsm
     curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://github.com/JetBrains/JetBrainsMono/releases/download/v${JETBRAINS_MONO_VERSION}/JetBrainsMono-${JETBRAINS_MONO_VERSION}.zip -o jbm.zip && \
     echo "${JETBRAINS_MONO_SHA256}  jbm.zip" | sha256sum -c - && \
     python3 -m zipfile -e inter.zip inter && python3 -m zipfile -e jbm.zip jbm && \
-    f=/hadron-fonts/usr/share/fonts l=/hadron-fonts/usr/share/licenses && \
+    f=/isotope-fonts/usr/share/fonts l=/isotope-fonts/usr/share/licenses && \
     install -Dm0644 -t $f/inter inter/InterVariable.ttf inter/InterVariable-Italic.ttf && \
     install -Dm0644 -t $l/inter inter/LICENSE.txt && \
     install -Dm0644 -t $f/jetbrains-mono 'jbm/fonts/variable/JetBrainsMono[wght].ttf' 'jbm/fonts/variable/JetBrainsMono-Italic[wght].ttf' && \
@@ -1424,14 +1424,14 @@ RUN curl --retry 5 --retry-delay 3 --retry-all-errors -fL https://github.com/rsm
     rm -rf inter.zip jbm.zip inter jbm
 
 # Emoji, on every variant: the Noto Color Emoji font (SIL OFL 1.1) and the
-# list that hadron-emoji, the emoji picker, shows. Data only. 60-hadron.conf
+# list that isotope-emoji, the emoji picker, shows. Data only. 60-isotope.conf
 # adds the font as the last fallback of the generic families and as the
 # "emoji" family. The font's glyphs are PNG images (CBDT), which is why the
 # freetype stage is built with libpng.
 # noto-emoji publishes no font in its release assets, so the font and its
 # licence come from the tagged tree. The list is made from Unicode's
 # emoji-test.txt by tools/gen-emoji-list.sh: one "<emoji> <name>" line per
-# fully-qualified emoji, in /usr/share/hadron/emoji.txt. Nothing publishes
+# fully-qualified emoji, in /usr/share/isotope/emoji.txt. Nothing publishes
 # checksums, so all three files are checked against SHA256s computed when
 # pinned: a Renovate bump of NOTO_EMOJI_VERSION fails here until the PR
 # updates NOTO_EMOJI_SHA256 too. Unicode has no tags Renovate can read; bump
@@ -1455,31 +1455,31 @@ RUN n=https://raw.githubusercontent.com/googlefonts/noto-emoji/v${NOTO_EMOJI_VER
     echo "${UNICODE_EMOJI_SHA256}  emoji-test.txt" | sha256sum -c - && \
     install -Dm0644 -t /emoji/usr/share/fonts/noto-emoji NotoColorEmoji.ttf && \
     install -Dm0644 -t /emoji/usr/share/licenses/noto-emoji OFL.txt && \
-    mkdir -p /emoji/usr/share/hadron && \
-    sh /build/gen-emoji-list.sh emoji-test.txt > /emoji/usr/share/hadron/emoji.txt && \
+    mkdir -p /emoji/usr/share/isotope && \
+    sh /build/gen-emoji-list.sh emoji-test.txt > /emoji/usr/share/isotope/emoji.txt && \
     # A format change in emoji-test.txt must fail here, not ship an empty
     # picker: Unicode 17 has 3944 fully-qualified emoji.
-    [ "$(wc -l < /emoji/usr/share/hadron/emoji.txt)" -gt 3000 ] && \
-    grep -qx '😀 grinning face' /emoji/usr/share/hadron/emoji.txt && \
+    [ "$(wc -l < /emoji/usr/share/isotope/emoji.txt)" -gt 3000 ] && \
+    grep -qx '😀 grinning face' /emoji/usr/share/isotope/emoji.txt && \
     rm -f NotoColorEmoji.ttf OFL.txt emoji-test.txt
 
-# The Hadron wallpapers, drawn at build time from theme/palette.toml by
+# The Isotope wallpapers, drawn at build time from theme/palette.toml by
 # tools/gen-wallpaper.py (stdlib Python, fixed dither seed, no network), so a
 # palette edit reaches them and the repository carries no multi-megabyte PNGs.
-# Every variant gets the night orbits (the desktop) and the plain night image
+# Every variant gets the night tiles (the desktop) and the plain night image
 # (swaylock); niri and COSMIC, whose shells have a light mode, also get the day
-# orbits. The 4K images are scaled down to fit smaller screens.
-FROM toolchain AS hadron-wallpapers
+# tiles. The 4K images are scaled down to fit smaller screens.
+FROM toolchain AS isotope-wallpapers
 COPY theme/palette.toml /build/theme/palette.toml
 COPY tools/gen-wallpaper.py /build/tools/gen-wallpaper.py
-RUN python3 /build/tools/gen-wallpaper.py /hadron-wallpapers/usr/share/backgrounds/hadron \
-      hadron-orbits-night-3840x2160 hadron-plain-night-1920x1080
+RUN python3 /build/tools/gen-wallpaper.py /isotope-wallpapers/usr/share/backgrounds/isotope \
+      isotope-tiles-night-3840x2160 isotope-plain-night-1920x1080
 
-FROM toolchain AS hadron-wallpapers-day
+FROM toolchain AS isotope-wallpapers-day
 COPY theme/palette.toml /build/theme/palette.toml
 COPY tools/gen-wallpaper.py /build/tools/gen-wallpaper.py
-RUN python3 /build/tools/gen-wallpaper.py /hadron-wallpapers-day/usr/share/backgrounds/hadron \
-      hadron-orbits-day-3840x2160
+RUN python3 /build/tools/gen-wallpaper.py /isotope-wallpapers-day/usr/share/backgrounds/isotope \
+      isotope-tiles-day-3840x2160
 
 # --- docker (static bundle) — rootful OCI containers ------------------------
 # Docker's daemon + CLI + containerd + runc ship as fully-static Go binaries in
@@ -1726,7 +1726,7 @@ COPY --from=sqlite-gnupg /sqlite-gnupg /
 COPY --from=gnupg /gnupg /
 COPY --from=gnupg /gnupg /signed-flatpak-runtime
 RUN mkdir -p /signed-flatpak-runtime/usr/lib \
-      /signed-flatpak-runtime/usr/share/hadron && \
+      /signed-flatpak-runtime/usr/share/isotope && \
     cp -a /usr/lib/libgcrypt.so* /signed-flatpak-runtime/usr/lib/ && \
     cp -a /usr/lib/libksba.so* /signed-flatpak-runtime/usr/lib/ && \
     cp -a /usr/lib/libnpth.so* /signed-flatpak-runtime/usr/lib/ && \
@@ -1740,27 +1740,27 @@ ARG FLATHUB_DESCRIPTOR_SHA256=3371dd250e61d9e1633630073fefda153cd4426f72f4afa0c3
 ARG FLATHUB_PRIMARY_FINGERPRINT=6E5C05D979C76DAF93C081354184DD4D907A7CAE
 RUN curl -fL --retry 5 --retry-delay 3 --retry-all-errors \
       https://dl.flathub.org/repo/flathub.flatpakrepo \
-      -o /signed-flatpak-runtime/usr/share/hadron/flathub.flatpakrepo && \
-    echo "${FLATHUB_DESCRIPTOR_SHA256}  /signed-flatpak-runtime/usr/share/hadron/flathub.flatpakrepo" | \
+      -o /signed-flatpak-runtime/usr/share/isotope/flathub.flatpakrepo && \
+    echo "${FLATHUB_DESCRIPTOR_SHA256}  /signed-flatpak-runtime/usr/share/isotope/flathub.flatpakrepo" | \
       sha256sum -c - && \
     test "$(grep -c '^GPGKey=' \
-      /signed-flatpak-runtime/usr/share/hadron/flathub.flatpakrepo)" -eq 1 && \
+      /signed-flatpak-runtime/usr/share/isotope/flathub.flatpakrepo)" -eq 1 && \
     sed -n 's/^GPGKey=//p' \
-      /signed-flatpak-runtime/usr/share/hadron/flathub.flatpakrepo | \
-      base64 -d > /signed-flatpak-runtime/usr/share/hadron/flathub.gpg && \
+      /signed-flatpak-runtime/usr/share/isotope/flathub.flatpakrepo | \
+      base64 -d > /signed-flatpak-runtime/usr/share/isotope/flathub.gpg && \
     install -d -m700 /tmp/gnupg-home && \
     test "$(GNUPGHOME=/tmp/gnupg-home gpg --batch --with-colons --show-keys \
-      /signed-flatpak-runtime/usr/share/hadron/flathub.gpg 2>/dev/null | \
+      /signed-flatpak-runtime/usr/share/isotope/flathub.gpg 2>/dev/null | \
       awk -F: '$1 == "fpr" {print $10; exit}')" = \
       "${FLATHUB_PRIMARY_FINGERPRINT}"
-RUN : > /signed-flatpak-runtime/usr/share/hadron/gnupg-runtime-size && \
+RUN : > /signed-flatpak-runtime/usr/share/isotope/gnupg-runtime-size && \
     bytes="$(du -sb /signed-flatpak-runtime | awk '{print $1}')" && \
     printf '%s\n' "$bytes" > \
-      /signed-flatpak-runtime/usr/share/hadron/gnupg-runtime-size && \
+      /signed-flatpak-runtime/usr/share/isotope/gnupg-runtime-size && \
     bytes="$(du -sb /signed-flatpak-runtime | awk '{print $1}')" && \
     test "$bytes" -le 20971520 && \
     printf '%s\n' "$bytes" > \
-      /signed-flatpak-runtime/usr/share/hadron/gnupg-runtime-size
+      /signed-flatpak-runtime/usr/share/isotope/gnupg-runtime-size
 
 # AppStream trio — flatpak 1.16 hard-requires libappstream at build.
 FROM toolchain AS libyaml
@@ -2045,9 +2045,9 @@ RUN meson setup buildDir ${COMMON_MESON_FLAGS}
 RUN DESTDIR=/wl-clipboard ninja -C buildDir install
 
 
-# cliphist — the clipboard history of Sway and COSMIC (hadron-clipboard).
+# cliphist — the clipboard history of Sway and COSMIC (isotope-clipboard).
 # `wl-paste --watch cliphist store` records each copy. Static Go binary
-# (CGO_ENABLED=0), like hadron-update, so it runs on musl with no runtime
+# (CGO_ENABLED=0), like isotope-update, so it runs on musl with no runtime
 # linkage. niri needs none: Noctalia keeps its own history.
 FROM golang:1.25.0-alpine3.22 AS cliphist
 # renovate: datasource=github-tags depName=sentriz/cliphist extractVersion=^v(?<version>\d+(\.\d+)*)$
@@ -2122,7 +2122,7 @@ RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dpam=enabled -Dgdk-pixbuf=disabl
 RUN DESTDIR=/swaylock ninja -C buildDir install
 
 
-# wlsunset — the sway night light, started by hadron-night-light. It warms the
+# wlsunset — the sway night light, started by isotope-night-light. It warms the
 # screen through wlr-gamma-control, at fixed times (Hadron has no location).
 # niri does not need it: Noctalia has its own night light.
 FROM toolchain AS wlsunset
@@ -2666,7 +2666,7 @@ RUN DESTDIR=/i3 ninja -C buildDir install
 
 # Native X11 desktop tools: xauth for Ly's X session cookie, st terminal, dmenu
 # launcher, xsel clipboard and clipnotify for the clipboard history. These
-# replace foot/fuzzel/wl-clipboard/cliphist; the hadron-xroot stage below
+# replace foot/fuzzel/wl-clipboard/cliphist; the isotope-xroot stage below
 # replaces swaybg.
 FROM toolchain AS x11-desktop-tools
 COPY --from=xorgproto /xorgproto /
@@ -2702,8 +2702,8 @@ RUN curl --retry-all-errors -fL --retry 5 https://dl.suckless.org/st/st-${ST_VER
     sed -i -e 's|Liberation Mono:pixelsize=12:antialias=true:autohint=true|JetBrains Mono:pixelsize=15:antialias=true:autohint=true|' \
            -e 's|static int borderpx = 2;|static int borderpx = 10;|' \
            -e 's|char \*termname = "st-256color";|char *termname = "xterm-256color";|' \
-           -e 's|"gray90", /\* default foreground colour \*/|"#c0caf5", /* default foreground colour */|' \
-           -e 's|"black", /\* default background colour \*/|"#1a1b26", /* default background colour */|' config.def.h && \
+           -e 's|"gray90", /\* default foreground colour \*/|"#f2f1f5", /* default foreground colour */|' \
+           -e 's|"black", /\* default background colour \*/|"#15141c", /* default background colour */|' config.def.h && \
     grep -q '"JetBrains Mono:pixelsize=15:' config.def.h && \
     make -j"$(nproc)" CC=cc && install -m0755 st /x11-desktop-tools/usr/bin/st
 
@@ -2738,7 +2738,7 @@ RUN curl --retry-all-errors -fL --retry 5 https://github.com/astrand/xclip/archi
     autoreconf -fi && ./configure ${COMMON_CONFIGURE_ARGS} && \
     make -j"$(nproc)" && install -m0755 xclip /x11-desktop-tools/usr/bin/xclip
 
-# xsct is the i3 night light: hadron-night-light runs it every minute, and it
+# xsct is the i3 night light: isotope-night-light runs it every minute, and it
 # sets the X RandR gamma once and exits. One C file against libX11 and
 # libXrandr, which the i3 image already has.
 # renovate: datasource=github-tags depName=faf0/sct extractVersion=^(?<version>\d+(\.\d+)*)$
@@ -2747,7 +2747,7 @@ RUN curl --retry-all-errors -fL --retry 5 https://github.com/faf0/sct/archive/re
     tar -xf sct.tar.gz && cd sct-${XSCT_VERSION} && \
     make CC=cc LDFLAGS=-s && install -m0755 xsct /x11-desktop-tools/usr/bin/xsct
 # clipnotify waits for the next clipboard change (XFixes) and exits; the
-# hadron-clipboard daemon runs it in a loop to record the i3 clipboard
+# isotope-clipboard daemon runs it in a loop to record the i3 clipboard
 # history, reading the text with xsel and the types with xclip. One C file.
 # Not clipmenu: its C rewrite has no release tag to pin, and its last tagged
 # release is a bash script.
@@ -2759,9 +2759,9 @@ RUN curl --retry-all-errors -fL --retry 5 https://github.com/cdown/clipnotify/ar
     install -m0755 clipnotify /x11-desktop-tools/usr/bin/clipnotify
 
 
-# hadron-xroot: the i3 wallpaper. Paints a PNG scaled to fill each monitor on
+# isotope-xroot: the i3 wallpaper. Paints a PNG scaled to fill each monitor on
 # the X root window, with cairo (already in the i3 image for i3 and dunst).
-FROM toolchain AS hadron-xroot
+FROM toolchain AS isotope-xroot
 COPY --from=xorgproto /xorgproto /
 COPY --from=xcbproto /xcbproto /
 COPY --from=libxau /libxau /
@@ -2772,10 +2772,10 @@ COPY --from=freetype /freetype /
 COPY --from=fontconfig /fontconfig /
 COPY --from=libpng /libpng /
 COPY --from=cairo-x11 /cairo-x11 /
-COPY tools/hadron-xroot.c /build/hadron-xroot.c
-RUN mkdir -p /hadron-xroot/usr/bin && \
-    cc -O2 -Wall -Wextra -Werror /build/hadron-xroot.c $(pkg-config --cflags --libs cairo-xlib cairo-png xrandr x11) -lm \
-      -o /hadron-xroot/usr/bin/hadron-xroot
+COPY tools/isotope-xroot.c /build/isotope-xroot.c
+RUN mkdir -p /isotope-xroot/usr/bin && \
+    cc -O2 -Wall -Wextra -Werror /build/isotope-xroot.c $(pkg-config --cflags --libs cairo-xlib cairo-png xrandr x11) -lm \
+      -o /isotope-xroot/usr/bin/isotope-xroot
 
 
 # X11 notification daemon replacing mako.
@@ -3802,8 +3802,8 @@ RUN d=/adwaita-cursors/usr/share/icons && mkdir -p $d/Adwaita $d/default && \
 # Flatpak apps learn the colour scheme (org.freedesktop.appearance
 # color-scheme) and, for GTK3 apps, the theme and fonts. xdg-desktop-portal-gtk
 # reads them from org.gnome.desktop.interface. Hadron's defaults are a vendor
-# override: dark colour scheme, Adwaita-dark for GTK3, and the Hadron fonts
-# (the hadron-fonts stage) by their real family names, because a Flatpak sees
+# override: dark colour scheme, Adwaita-dark for GTK3, and the Isotope fonts
+# (the isotope-fonts stage) by their real family names, because a Flatpak sees
 # the host's font files but not its fontconfig aliases. GTK3 has the dark
 # Adwaita built in only as a variant, so the theme named Adwaita-dark is a
 # one-line stylesheet that imports it.
@@ -3826,11 +3826,11 @@ RUN pip3 install meson ninja
 RUN meson setup buildDir ${COMMON_MESON_FLAGS} -Dintrospection=false && \
     DESTDIR=/gsettings-desktop-schemas ninja -C buildDir install
 RUN d=/gsettings-desktop-schemas/usr/share && \
-    printf '%s\n' '# Hadron Desktop defaults: dark apps and the Hadron fonts, including Flatpak apps through the portal.' \
+    printf '%s\n' '# Isotope defaults: dark apps and the Isotope fonts, including Flatpak apps through the portal.' \
       '[org.gnome.desktop.interface]' "color-scheme='prefer-dark'" "gtk-theme='Adwaita-dark'" \
       "font-name='Inter Variable 10.5'" "document-font-name='Inter Variable 10.5'" \
       "monospace-font-name='JetBrains Mono 10.5'" \
-      > $d/glib-2.0/schemas/90_hadron.gschema.override && \
+      > $d/glib-2.0/schemas/90_isotope.gschema.override && \
     mkdir -p $d/themes/Adwaita-dark/gtk-3.0 && \
     printf '@import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css");\n' \
       > $d/themes/Adwaita-dark/gtk-3.0/gtk.css && \
@@ -4351,9 +4351,9 @@ COPY --from=cpp-date /cpp-date /
 COPY --from=libdbusmenu /libdbusmenu /
 COPY --from=waybar /waybar /
 COPY --from=nerdfont /nerdfont /
-COPY --from=hadron-fonts /hadron-fonts /
+COPY --from=isotope-fonts /isotope-fonts /
 COPY --from=emoji /emoji /
-COPY --from=hadron-wallpapers /hadron-wallpapers /
+COPY --from=isotope-wallpapers /isotope-wallpapers /
 # Fallback icon theme and the Adwaita cursors (system default via
 # /usr/share/icons/default), as on niri.
 COPY --from=hicolor-icon-theme /hicolor-icon-theme /
@@ -4370,7 +4370,7 @@ COPY --from=xdg-desktop-portal /xdg-desktop-portal /
 COPY --from=xdg-desktop-portal-gtk /xdg-desktop-portal-gtk /
 COPY --from=xdg-desktop-portal-wlr /xdg-desktop-portal-wlr /
 COPY --from=gsettings-desktop-schemas /gsettings-desktop-schemas /
-# polkit, which answers hadron-updated's "may this user install updates?"
+# polkit, which answers isotope-updated's "may this user install updates?"
 COPY --from=duktape /duktape /
 COPY --from=polkit /polkit /
 
@@ -4408,7 +4408,7 @@ COPY --from=xlibre /xlibre /
 COPY --from=xlibre-input-libinput /xlibre-input-libinput /
 COPY --from=i3 /i3 /
 COPY --from=x11-desktop-tools /x11-desktop-tools /
-COPY --from=hadron-xroot /hadron-xroot /
+COPY --from=isotope-xroot /isotope-xroot /
 COPY --from=dunst /dunst /
 COPY --from=i3lock /i3lock /
 COPY --from=xss-lock /xss-lock /
@@ -4431,9 +4431,9 @@ COPY --from=sbc /sbc /
 COPY --from=bluez /bluez /
 # Shared visual assets + login manager.
 COPY --from=nerdfont /nerdfont /
-COPY --from=hadron-fonts /hadron-fonts /
+COPY --from=isotope-fonts /isotope-fonts /
 COPY --from=emoji /emoji /
-COPY --from=hadron-wallpapers /hadron-wallpapers /
+COPY --from=isotope-wallpapers /isotope-wallpapers /
 COPY --from=hicolor-icon-theme /hicolor-icon-theme /
 COPY --from=adwaita-cursors /adwaita-cursors /
 COPY --from=ly /ly /
@@ -4445,7 +4445,7 @@ COPY --from=gtk3-x11 /gtk3-x11 /
 COPY --from=xdg-desktop-portal /xdg-desktop-portal /
 COPY --from=xdg-desktop-portal-gtk-x11 /xdg-desktop-portal-gtk-x11 /
 COPY --from=gsettings-desktop-schemas /gsettings-desktop-schemas /
-# polkit, which answers hadron-updated's "may this user install updates?", and
+# polkit, which answers isotope-updated's "may this user install updates?", and
 # the update tray's host: snixembed shows its StatusNotifierItem in i3bar,
 # which hosts only XEmbed icons. It uses the same GTK3 X11 build as the portal.
 COPY --from=duktape /duktape /
@@ -4515,13 +4515,13 @@ COPY --from=xdg-desktop-portal /xdg-desktop-portal /
 COPY --from=greetd /greetd /
 COPY --from=pop-launcher /pop-launcher /
 COPY --from=cosmic /cosmic /
-# fuzzel and the font library it links: the picker of the Hadron menu
-# (hadron-pick) and the emoji picker.
+# fuzzel and the font library it links: the picker of the Isotope menu
+# (isotope-pick) and the emoji picker.
 COPY --from=fcft /fcft /
 COPY --from=fuzzel /fuzzel /
 # wl-clipboard: wl-copy puts the emoji picker's choice on the clipboard
-# (hadron-emoji), and wl-paste --watch feeds cliphist the clipboard history
-# (hadron-clipboard). cosmic-comp offers the data-control protocols to every
+# (isotope-emoji), and wl-paste --watch feeds cliphist the clipboard history
+# (isotope-clipboard). cosmic-comp offers the data-control protocols to every
 # client that is not in a sandbox, so wl-paste needs no setting.
 COPY --from=wl-clipboard /wl-clipboard /
 COPY --from=cliphist /cliphist /
@@ -4529,10 +4529,10 @@ COPY --from=cosmic-fonts /cosmic-fonts /
 COPY --from=hicolor-icon-theme /hicolor-icon-theme /
 COPY --from=musl-locales /musl-locales /
 COPY --from=nerdfont /nerdfont /
-COPY --from=hadron-fonts /hadron-fonts /
+COPY --from=isotope-fonts /isotope-fonts /
 COPY --from=emoji /emoji /
-COPY --from=hadron-wallpapers /hadron-wallpapers /
-COPY --from=hadron-wallpapers-day /hadron-wallpapers-day /
+COPY --from=isotope-wallpapers /isotope-wallpapers /
+COPY --from=isotope-wallpapers-day /isotope-wallpapers-day /
 
 
 FROM scratch AS niri-rootfs
@@ -4616,15 +4616,15 @@ COPY --from=gsettings-desktop-schemas /gsettings-desktop-schemas /
 COPY --from=tllist /tllist /
 COPY --from=fcft /fcft /
 COPY --from=foot /foot /
-# fuzzel: the picker of the Hadron menu (hadron-pick).
+# fuzzel: the picker of the Isotope menu (isotope-pick).
 COPY --from=fuzzel /fuzzel /
 COPY --from=wl-clipboard /wl-clipboard /
 COPY --from=cosmic-fonts /cosmic-fonts /
 COPY --from=nerdfont /nerdfont /
-COPY --from=hadron-fonts /hadron-fonts /
+COPY --from=isotope-fonts /isotope-fonts /
 COPY --from=emoji /emoji /
-COPY --from=hadron-wallpapers /hadron-wallpapers /
-COPY --from=hadron-wallpapers-day /hadron-wallpapers-day /
+COPY --from=isotope-wallpapers /isotope-wallpapers /
+COPY --from=isotope-wallpapers-day /isotope-wallpapers-day /
 COPY --from=hicolor-icon-theme /hicolor-icon-theme /
 COPY --from=adwaita-cursors /adwaita-cursors /
 COPY --from=ly /ly /
@@ -4669,19 +4669,19 @@ COPY --from=duktape /duktape /
 COPY --from=polkit /polkit /
 
 FROM scratch AS server-config
-# The disk passphrase prompt in the initramfs (hadron-unlock, and the splash
+# The disk passphrase prompt in the initramfs (isotope-unlock, and the splash
 # answering the password agent), the console font and the GRUB theme.
 COPY rootfs/etc/dracut.conf.d/ /etc/dracut.conf.d/
 COPY rootfs/usr/lib/dracut/ /usr/lib/dracut/
 COPY rootfs/etc/vconsole.conf /etc/vconsole.conf
 COPY rootfs/etc/kairos/ /etc/kairos/
-COPY rootfs/usr/libexec/hadron-grub-theme /usr/libexec/hadron-grub-theme
-COPY rootfs/system/oem/09_hadron_grub_theme.yaml rootfs/system/oem/10_hadron_grub_env.yaml /system/oem/
+COPY rootfs/usr/libexec/isotope-grub-theme /usr/libexec/isotope-grub-theme
+COPY rootfs/system/oem/08_isotope_rename.yaml rootfs/system/oem/09_isotope_grub_theme.yaml rootfs/system/oem/10_isotope_grub_env.yaml /system/oem/
 # The installer, and system extensions.
-COPY rootfs/system/oem/90_desktop_installer.yaml rootfs/system/oem/93_hadron_extensions.yaml /system/oem/
-COPY rootfs/etc/hadron-desktop/extensions.conf /etc/hadron-desktop/extensions.conf
+COPY rootfs/system/oem/90_desktop_installer.yaml rootfs/system/oem/93_isotope_extensions.yaml /system/oem/
+COPY rootfs/etc/isotope/extensions.conf /etc/isotope/extensions.conf
 # The update service, its D-Bus activation and its polkit policy.
-COPY rootfs/usr/lib/systemd/system/hadron-updated.service /usr/lib/systemd/system/hadron-updated.service
+COPY rootfs/usr/lib/systemd/system/isotope-updated.service /usr/lib/systemd/system/isotope-updated.service
 COPY rootfs/usr/share/dbus-1/ /usr/share/dbus-1/
 COPY rootfs/usr/share/polkit-1/ /usr/share/polkit-1/
 # Docker: its units, and the boot stage that persists /var/lib/docker and
@@ -4723,13 +4723,13 @@ COPY install-ui/ ./
 # fails the RUN -- written as `... && bin --nonsense; [ $? -eq 2 ]` the RUN's
 # status would be the test's alone, and a build that happened to exit 2 would
 # "pass" having produced no binary at all.
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/hadron-install-ui . \
-    && { /out/hadron-install-ui --nonsense 2>/dev/null; [ $? -eq 2 ]; }
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/isotope-install-ui . \
+    && { /out/isotope-install-ui --nonsense 2>/dev/null; [ $? -eq 2 ]; }
 
 
 # ---------------------------------------------------------------------------
-# hadron-update: release checker, desktop notifier, `kairos-agent upgrade`
-# wrapper and the root update service on the system bus (hadron-updated). Static
+# isotope-update: release checker, desktop notifier, `kairos-agent upgrade`
+# wrapper and the root update service on the system bus (isotope-updated). Static
 # (CGO_ENABLED=0), like the installer TUI, and for the same reasons kept out of
 # the --no-cache-filter list. Not stdlib-only any more: the D-Bus service needs
 # godbus, downloaded in its own layer so a source change does not refetch it.
@@ -4742,8 +4742,8 @@ COPY update/go.mod update/go.sum ./
 RUN go mod download
 COPY update/ ./
 RUN CGO_ENABLED=0 go test ./... \
-    && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/hadron-update . \
-    && { /out/hadron-update --nonsense >/dev/null 2>&1; [ $? -eq 2 ]; }
+    && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/isotope-update . \
+    && { /out/isotope-update --nonsense >/dev/null 2>&1; [ $? -eq 2 ]; }
 
 
 FROM ${BASE_IMAGE} AS desktop-default
@@ -4796,7 +4796,7 @@ COPY --from=desktop-config / /
 # The boot splash, at the path kairos-init's units and dracut module exec. It
 # must be in place before the kairos stage runs kairos-init, which then keeps it
 # instead of linking the stock `kairos splash` there.
-COPY --from=hadron-splash /build/splash/hadron-splash /usr/bin/kairos-splash
+COPY --from=isotope-splash /build/splash/isotope-splash /usr/bin/kairos-splash
 
 # System setup. NOTE: no user is created here — the desktop user is defined at
 # install time via a Kairos cloud-config (see cloud-config.yaml) and lives on
@@ -4807,7 +4807,7 @@ RUN chmod 1777 /tmp; \
     # Register the bundled fonts for the selected bar, terminal, and launcher.
     fc-cache -f 2>/dev/null || true; \
     # Compile the GSettings schemas the variant ships (GTK's, and on Sway, i3
-    # and niri gsettings-desktop-schemas with Hadron's dark override): the
+    # and niri gsettings-desktop-schemas with Isotope's dark override): the
     # stages install them under DESTDIR, where meson skips this, and GLib
     # aborts a GTK app that opens a file chooser with no compiled schemas. On
     # i3 the AT-SPI bus launcher, which GTK starts for snixembed, aborts too.
@@ -4820,18 +4820,18 @@ RUN chmod 1777 /tmp; \
     # bounce straight back to the login screen. The installer TUI lives in
     # /usr/bin for the same reason (it is COPYied in after this block, already
     # executable, so the glob below deliberately does not have to reach it).
-    chmod +x /usr/bin/hadron-*; \
+    chmod +x /usr/bin/isotope-*; \
     if [ -e /usr/bin/start-desktop ]; then chmod +x /usr/bin/start-desktop; fi; \
     if [ -e /usr/lib/systemd/system/ly@.service ]; then \
     # ly runs on tty1 via the ly@tty1 instance of the ly@.service template (ly
     # 1.3.x dropped the plain ly.service and the config `tty` option — the tty is
     # the systemd instance). It authenticates the cloud-config user and launches
     # the selected Sway or i3 session via its desktop entry.
-    # Hadron colours for ly, in eight-colour mode. The Linux console has 16
+    # Isotope colours for ly, in eight-colour mode. The Linux console has 16
     # colours: it maps ly's 24-bit values to the nearest of them by hue, so
     # the accent came out cyan and the navy background black. Instead ly asks
     # for the console's own colours, which the kernel command line sets to the
-    # Hadron palette (vt.default_* in grubmenu.cfg): the default background is
+    # Isotope palette (vt.default_* in grubmenu.cfg): the default background is
     # colour 0 (base), bright white is 15 (text), bright blue is 12 (accent),
     # red is 1 (error). The values are 0xSSRRGGBB: styling 0x40 is TB_BRIGHT,
     # 0x01 is bold, and the low byte is a termbox colour (2 red, 5 blue,
@@ -4845,7 +4845,7 @@ RUN chmod 1777 /tmp; \
       -e 's/^border_fg = .*/border_fg = 0x40000005/' \
       -e 's/^error_fg = .*/error_fg = 0x01000002/' \
       -e 's/^error_bg = .*/error_bg = 0x00000000/' \
-      -e 's/^box_title = .*/box_title = Hadron Desktop/' \
+      -e 's/^box_title = .*/box_title = Isotope/' \
       -e 's/^clock = .*/clock = %H:%M/' \
       /etc/ly/config.ini 2>/dev/null || true; \
     # XLibre's libseat integration is initialized before its later automatic
@@ -4874,13 +4874,13 @@ RUN chmod 1777 /tmp; \
       # path, compiled in; exec follows the link to the setuid target.
       mkdir -p /usr/libexec && ln -sf /usr/lib/polkit-1/polkit-agent-helper-1 /usr/libexec/polkit-agent-helper-1; \
       # COSMIC's play/pause, next and previous keys run playerctl, which Hadron
-      # does not ship; hadron-media-key does the same over MPRIS with busctl.
+      # does not ship; isotope-media-key does the same over MPRIS with busctl.
       # The build fails if upstream renames these actions, so the keys cannot
       # silently stop working.
       f=/usr/share/cosmic/com.system76.CosmicSettings.Shortcuts/v1/system_actions; \
-      sed -i -E 's/"playerctl (play-pause|next|previous)"/"hadron-media-key \1"/' "$f" || exit 1; \
-      grep -q '"hadron-media-key play-pause"' "$f" && ! grep -q playerctl "$f" || exit 1; \
-      # Super+Escape opens the Hadron menu, as in every variant. COSMIC binds
+      sed -i -E 's/"playerctl (play-pause|next|previous)"/"isotope-media-key \1"/' "$f" || exit 1; \
+      grep -q '"isotope-media-key play-pause"' "$f" && ! grep -q playerctl "$f" || exit 1; \
+      # Super+Escape opens the Isotope menu, as in every variant. COSMIC binds
       # it to the screen lock, which moves to Super+Alt+L, the lock key of the
       # other variants (Super+Alt+Right still moves to the output on the right).
       # The build fails if upstream changes either line.
@@ -4892,20 +4892,20 @@ RUN chmod 1777 /tmp; \
       # binds nothing to it; the build fails if upstream starts to.
       ! grep -qF '(modifiers: [Super, Ctrl], key: "v")' "$f" || exit 1; \
       sed -i \
-        -e 's/(modifiers: \[Super\], key: "Escape"): System(LockScreen),/(modifiers: [Super], key: "Escape"): Spawn("hadron-menu"),\n    (modifiers: [Super], key: "semicolon"): Spawn("hadron-emoji"),/' \
+        -e 's/(modifiers: \[Super\], key: "Escape"): System(LockScreen),/(modifiers: [Super], key: "Escape"): Spawn("isotope-menu"),\n    (modifiers: [Super], key: "semicolon"): Spawn("isotope-emoji"),/' \
         -e 's/(modifiers: \[Super, Alt\], key: "l"): SwitchOutput(Right),/(modifiers: [Super, Alt], key: "l"): System(LockScreen),/' \
-        -e '/(modifiers: \[Super\], key: "Escape"): Spawn("hadron-menu"),/a\    (modifiers: [Super, Ctrl], key: "v"): Spawn("hadron-clipboard"),' \
+        -e '/(modifiers: \[Super\], key: "Escape"): Spawn("isotope-menu"),/a\    (modifiers: [Super, Ctrl], key: "v"): Spawn("isotope-clipboard"),' \
         "$f" || exit 1; \
-      grep -qF '(modifiers: [Super], key: "Escape"): Spawn("hadron-menu"),' "$f" || exit 1; \
+      grep -qF '(modifiers: [Super], key: "Escape"): Spawn("isotope-menu"),' "$f" || exit 1; \
       grep -qF '(modifiers: [Super, Alt], key: "l"): System(LockScreen),' "$f" || exit 1; \
       # Super+Alt+BackSpace turns do not disturb on and off, as in the other
-      # variants (hadron-notify-key). COSMIC has no command to close a
+      # variants (isotope-notify-key). COSMIC has no command to close a
       # notification, so the other notification keys are not bound here.
-      sed -i 's/\((modifiers: \[Super\], key: "Escape"): Spawn("hadron-menu"),\)/\1\n    (modifiers: [Super, Alt], key: "BackSpace"): Spawn("hadron-notify-key dnd"),/' "$f" || exit 1; \
-      grep -qF '(modifiers: [Super, Alt], key: "BackSpace"): Spawn("hadron-notify-key dnd"),' "$f" || exit 1; \
+      sed -i 's/\((modifiers: \[Super\], key: "Escape"): Spawn("isotope-menu"),\)/\1\n    (modifiers: [Super, Alt], key: "BackSpace"): Spawn("isotope-notify-key dnd"),/' "$f" || exit 1; \
+      grep -qF '(modifiers: [Super, Alt], key: "BackSpace"): Spawn("isotope-notify-key dnd"),' "$f" || exit 1; \
       [ "$(grep -cF '(modifiers: [Super], key: "semicolon")' "$f")" -eq 1 ] || exit 1; \
-      grep -qF '(modifiers: [Super], key: "semicolon"): Spawn("hadron-emoji"),' "$f" || exit 1; \
-      [ "$(grep -cF '(modifiers: [Super, Ctrl], key: "v"): Spawn("hadron-clipboard"),' "$f")" -eq 1 ] || exit 1; \
+      grep -qF '(modifiers: [Super], key: "semicolon"): Spawn("isotope-emoji"),' "$f" || exit 1; \
+      [ "$(grep -cF '(modifiers: [Super, Ctrl], key: "v"): Spawn("isotope-clipboard"),' "$f")" -eq 1 ] || exit 1; \
       mkdir -p /etc/systemd/system/multi-user.target.wants; \
       for u in cosmic-greeter cosmic-greeter-daemon accounts-daemon; do \
         ln -sf /usr/lib/systemd/system/$u.service /etc/systemd/system/multi-user.target.wants/$u.service; \
@@ -4959,22 +4959,22 @@ RUN chmod 1777 /tmp; \
     # Per-user setup (Flathub remote) runs late on the booted system via a
     # systemd oneshot. Like ly/bluetooth it must be pulled into
     # multi-user.target directly (Kairos forces that target).
-    chmod +x /usr/bin/hadron-user-setup; \
-    systemctl enable hadron-user-setup.service 2>/dev/null || true; \
-    ln -sf /usr/lib/systemd/system/hadron-user-setup.service /etc/systemd/system/multi-user.target.wants/hadron-user-setup.service
+    chmod +x /usr/bin/isotope-user-setup; \
+    systemctl enable isotope-user-setup.service 2>/dev/null || true; \
+    ln -sf /usr/lib/systemd/system/isotope-user-setup.service /etc/systemd/system/multi-user.target.wants/isotope-user-setup.service
 
 # Installer TUI. /usr/bin, not /usr/local/bin: /usr/local is shadowed by an empty
 # overlay at runtime on Kairos, so a binary there is invisible to the installed
 # system. (The shell installer it replaces lived in /usr/local/bin and only
 # worked because the installer runs in the live environment.)
-COPY --from=install-ui-build /out/hadron-install-ui /usr/bin/hadron-install-ui
+COPY --from=install-ui-build /out/isotope-install-ui /usr/bin/isotope-install-ui
 # Update checker + upgrade CLI. /usr/bin for the same /usr/local reason.
-COPY --from=update-build /out/hadron-update /usr/bin/hadron-update
-# hadron-ext is the same binary: run under that name it is `hadron-update ext`
+COPY --from=update-build /out/isotope-update /usr/bin/isotope-update
+# isotope-ext is the same binary: run under that name it is `isotope-update ext`
 # (system extensions, see update/ext.go).
-RUN ln -sf hadron-update /usr/bin/hadron-ext
-# And hadron-recovery, the disk recovery key (`hadron-update recovery`).
-RUN ln -sf hadron-update /usr/bin/hadron-recovery
+RUN ln -sf isotope-update /usr/bin/isotope-ext
+# And isotope-recovery, the disk recovery key (`isotope-update recovery`).
+RUN ln -sf isotope-update /usr/bin/isotope-recovery
 
 
 # The server edition's image. Keep the binaries at the end in step with
@@ -4992,13 +4992,13 @@ COPY --from=firmware /firmware /
 COPY --from=docker /docker /
 COPY --from=server-config / /
 # The splash is kept for one job: in the initramfs it asks for the disk
-# passphrase (51hadron-askpass), and falls back to text without a framebuffer.
-COPY --from=hadron-splash /build/splash/hadron-splash /usr/bin/kairos-splash
+# passphrase (51isotope-askpass), and falls back to text without a framebuffer.
+COPY --from=isotope-splash /build/splash/isotope-splash /usr/bin/kairos-splash
 # The installer puts its user in the desktop groups (install-ui/config.go);
 # a group that does not exist would stop the user from being created.
 # NetworkManager starts at boot; nmcli changes need root (sudo), see
 # rootfs-server/etc/NetworkManager/NetworkManager.conf. polkit answers the
-# update service only (50-hadron-update.rules: the admin group, no prompt),
+# update service only (50-isotope-update.rules: the admin group, no prompt),
 # so it works the same from SSH and from the console. Docker stays disabled
 # in the image, as on the desktop: the live ISO's /var is an overlayfs, where
 # overlay2 fails its nested-overlay check. 92_docker.yaml starts it on the
@@ -5017,10 +5017,10 @@ RUN chmod 1777 /tmp; \
     done; \
     systemctl enable NetworkManager.service; \
     test -L /etc/systemd/system/multi-user.target.wants/NetworkManager.service
-COPY --from=install-ui-build /out/hadron-install-ui /usr/bin/hadron-install-ui
-COPY --from=update-build /out/hadron-update /usr/bin/hadron-update
-RUN ln -sf hadron-update /usr/bin/hadron-ext
-RUN ln -sf hadron-update /usr/bin/hadron-recovery
+COPY --from=install-ui-build /out/isotope-install-ui /usr/bin/isotope-install-ui
+COPY --from=update-build /out/isotope-update /usr/bin/isotope-update
+RUN ln -sf isotope-update /usr/bin/isotope-ext
+RUN ln -sf isotope-update /usr/bin/isotope-recovery
 
 # The image the kairos stage turns bootable: the desktop for sway, i3, cosmic
 # and niri, the server edition for server.
@@ -5053,11 +5053,11 @@ ARG FIPS=no-fips
 # kairos-init builds the initramfs, gives both halves of the boot the same one.
 RUN mkdir -p /etc/kairos/branding/splash && printf '%s\n' "${VERSION}" > /etc/kairos/branding/splash/version
 # System extensions from the catalogs are unsigned; the normal install merges
-# them anyway (rootfs/etc/kairos/90_hadron_extensions.yaml and
-# rootfs/system/oem/93_hadron_extensions.yaml). A Trusted Boot image keeps
+# them anyway (rootfs/etc/kairos/90_isotope_extensions.yaml and
+# rootfs/system/oem/93_isotope_extensions.yaml). A Trusted Boot image keeps
 # signatures on: it gets neither file.
 RUN [ "${TRUSTED_BOOT}" = false ] || \
-    rm -f /etc/kairos/90_hadron_extensions.yaml /system/oem/93_hadron_extensions.yaml
+    rm -f /etc/kairos/90_isotope_extensions.yaml /system/oem/93_isotope_extensions.yaml
 RUN --mount=type=bind,from=kairos-init,src=/kairos-init,dst=/kairos-init \
     fips_flag=""; [ "$FIPS" = "fips" ] && fips_flag="--fips"; \
     /kairos-init -l debug -s install -m "${MODEL}" -t "${TRUSTED_BOOT}" --version "${VERSION}" $fips_flag && \
@@ -5074,66 +5074,73 @@ RUN --mount=type=bind,source=scripts/kairos-user-live-only.sh,target=/tmp/kairos
 # /etc/kairos-release (which kairos-init just generated) when install.grub-entry-
 # name is unset, preferring it over /etc/os-release. The OS identity fields in
 # /etc/os-release are intentionally left untouched.
-RUN echo 'GRUB_ENTRY_NAME="hadron-desktop"' >> /etc/kairos-release
-# Release identity for hadron-update. FLAVOR and GPU name the image line this
-# system upgrades along: hadron-update pulls ${IMAGE_REPO}:${FLAVOR}-<tag> for
+RUN echo 'GRUB_ENTRY_NAME="isotope"' >> /etc/kairos-release
+# Release identity for isotope-update. FLAVOR and GPU name the image line this
+# system upgrades along: isotope-update pulls ${IMAGE_REPO}:${FLAVOR}-<tag> for
 # GPU=full and ${IMAGE_REPO}:${FLAVOR}-vm-<tag> for GPU=vm, which release.yml
 # pushes for every published release. Dockerfile.agent rewrites FLAVOR to
 # `agent` for the appliance, which has the one line agent-<tag>. VERSION is the
 # release tag, so a dev build (v0.0.0) never sorts as newer than a real
 # release.
-ARG IMAGE_REPO=ghcr.io/kairos-community/hadron-desktop
+ARG IMAGE_REPO=ghcr.io/kairos-community/isotope
 ARG HADRON_VERSION
 ARG DESKTOP
 ARG GPU
 ARG FIRMWARE=false
 RUN case "${GPU}" in full|vm) ;; *) echo "GPU must be full or vm, not '${GPU}'" >&2; exit 1 ;; esac && \
     printf 'FLAVOR=%s\nGPU=%s\nVERSION=%s\nHADRON_VERSION=%s\nIMAGE_REPO=%s\nGITHUB_REPO=%s\nTRUSTED_BOOT=%s\n' \
-      "${DESKTOP}" "${GPU}" "${VERSION}" "${HADRON_VERSION}" "${IMAGE_REPO}" kairos-community/hadron-desktop "${TRUSTED_BOOT}" \
-      > /etc/hadron-desktop/release
-# The same identity as OCI labels, so hadron-update can tell a Hadron Desktop
+      "${DESKTOP}" "${GPU}" "${VERSION}" "${HADRON_VERSION}" "${IMAGE_REPO}" kairos-community/isotope "${TRUSTED_BOOT}" \
+      > /etc/isotope/release
+# The same identity as OCI labels, so isotope-update can tell an Isotope
 # image from any other one without pulling it (the registry config blob carries
 # them). Kept in this last stage, after every expensive one, because the value
 # changes per release and a LABEL ahead of them would invalidate their cache.
 # The keys must match the constants in update/policy.go.
+LABEL io.kairos.isotope.flavor="${DESKTOP}" \
+      io.kairos.isotope.version="${VERSION}" \
+      io.kairos.isotope.hadron-version="${HADRON_VERSION}" \
+      io.kairos.isotope.gpu="${GPU}" \
+      io.kairos.isotope.firmware="${FIRMWARE}"
+# The same labels under the name from before the rename to Isotope, which the
+# updater of a system installed before it reads.
 LABEL io.kairos.hadron-desktop.flavor="${DESKTOP}" \
       io.kairos.hadron-desktop.version="${VERSION}" \
       io.kairos.hadron-desktop.hadron-version="${HADRON_VERSION}" \
       io.kairos.hadron-desktop.gpu="${GPU}" \
       io.kairos.hadron-desktop.firmware="${FIRMWARE}"
-# Tokyo Night GRUB menu colours — text-mode fallback. The main menu renders from
+# Isotope GRUB menu colours — text-mode fallback. The main menu renders from
 # /etc/cos/grub.cfg (copied to COS_STATE at install) before grubmenu.cfg switches
 # to the gfxterm theme, and these 16-colour accents also apply if gfxterm/the
 # theme ever fail to load. Inserted after `loadfont unicode`, before the menu.
 # A Trusted Boot image has no GRUB: kairos-init writes no /etc/cos/grub.cfg
 # with -t true, and systemd-boot boots the signed UKIs directly.
-RUN [ "${TRUSTED_BOOT}" = true ] || sed -i '/^loadfont unicode/a set color_normal=light-gray/black\nset color_highlight=black/cyan\nset menu_color_normal=cyan/black\nset menu_color_highlight=black/cyan' /etc/cos/grub.cfg
-# Tokyo Night gfxterm theme with a background image. kairos-init's branding stage
+RUN [ "${TRUSTED_BOOT}" = true ] || sed -i '/^loadfont unicode/a set color_normal=light-gray/black\nset color_highlight=black/light-green\nset menu_color_normal=light-green/black\nset menu_color_highlight=black/light-green' /etc/cos/grub.cfg
+# The Isotope gfxterm theme with a background image. kairos-init's branding stage
 # writes its own /etc/kairos/branding/grubmenu.cfg (bundled.ExtraGrubCfg),
 # clobbering the overlay copy, so re-apply ours AFTER kairos-init: it switches the
-# installed menu to gfxterm and `set theme=` to themes/hadron/theme.txt. 08_grub
-# copies this to COS_STATE/grubmenu at install; 09_hadron_grub_theme.yaml (oem)
-# runs /usr/libexec/hadron-grub-theme, which puts the theme dir, the font and the
+# installed menu to gfxterm and `set theme=` to themes/isotope/theme.txt. 08_grub
+# copies this to COS_STATE/grubmenu at install; 09_isotope_grub_theme.yaml (oem)
+# runs /usr/libexec/isotope-grub-theme, which puts the theme dir, the font and the
 # EFI grub modules on STATE so gfxmenu/tga/the theme all resolve there.
-# (hadron-theme/ isn't written by kairos-init, so its COPY at line ~1982 survives.)
+# (isotope-theme/ isn't written by kairos-init, so its COPY at line ~1982 survives.)
 COPY rootfs/etc/kairos/branding/grubmenu.cfg /etc/kairos/branding/grubmenu.cfg
 # Console font. kairos-init may regenerate /etc/vconsole.conf, so re-apply ours
 # after it — same treatment as /etc/issue and /etc/motd below.
 COPY rootfs/etc/vconsole.conf /etc/vconsole.conf
 # Per-variant GRUB theme subtitle. theme.txt ships in the COMMON overlay with an
 # @VARIANT_SUBTITLE@ placeholder; the variant overlay supplies DESKTOP_NAME and
-# DISPLAY_NAME via /etc/hadron-desktop/session. Lowercased to match the theme's
+# DISPLAY_NAME via /etc/isotope/session. Lowercased to match the theme's
 # typographic style ("i3 · xlibre · kairos").
 #
 # The chain is a single && list ending in `! grep`, so ANY link failing (missing
 # session file, empty names, sed error) or the placeholder surviving fails the
 # build: a theme with a literal @VARIANT_SUBTITLE@ would render that text on the
 # boot menu.
-RUN . /etc/hadron-desktop/session && \
+RUN . /etc/isotope/session && \
     [ -n "$DESKTOP_NAME" ] && [ -n "$DISPLAY_NAME" ] && \
     subtitle="$(printf '%s · %s · kairos' "$DESKTOP_NAME" "$DISPLAY_NAME" | tr '[:upper:]' '[:lower:]')" && \
-    sed -i "s|@VARIANT_SUBTITLE@|${subtitle}|" /etc/kairos/branding/hadron-theme/theme.txt && \
-    ! grep -q '@VARIANT_SUBTITLE@' /etc/kairos/branding/hadron-theme/theme.txt
+    sed -i "s|@VARIANT_SUBTITLE@|${subtitle}|" /etc/kairos/branding/isotope-theme/theme.txt && \
+    ! grep -q '@VARIANT_SUBTITLE@' /etc/kairos/branding/isotope-theme/theme.txt
 # kairos-init regenerates /etc/motd (and may touch /etc/issue); re-apply the
 # branded console banners from the selected desktop overlay on top.
 COPY --from=desktop-config /etc/issue /etc/motd /etc/

@@ -15,7 +15,7 @@ Or via make, which runs the suite for whichever variants are already built:
 |---|---|
 | `check-splash.sh` | `/usr/bin/kairos-splash` is our binary (not kairos-init's symlink), runs in both the non-tty and `--render` paths, shows the release, unit ordered before ly, old splash units gone |
 | `check-initramfs.sh` | splash **and** release version baked into `/boot/initrd`, the initramfs copy identical to the image's, and it execs inside it |
-| `check-branding.sh` | `vconsole.conf`, per-variant GRUB theme subtitle, `grubmenu.cfg` log level, release identity file, `hadron-update` |
+| `check-branding.sh` | `vconsole.conf`, per-variant GRUB theme subtitle, `grubmenu.cfg` log level, release identity file, `isotope-update` |
 | `check-iso-overlay.sh` | staged live `grub.cfg` is retitled, themed, quiet, and has no unrendered `{{...}}` placeholders |
 
 These do not boot anything. The animation itself, and the themed GRUB menu, need

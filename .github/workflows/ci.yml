@@ -27,7 +27,7 @@ jobs:
           go-version-file: update/go.mod
           cache: false
 
-      - name: hadron-update tests
+      - name: isotope-update tests
         working-directory: update
         run: go vet ./... && go test ./...
 
@@ -41,7 +41,7 @@ jobs:
       - name: Version pins are tracked by Renovate
         run: scripts/check-renovate-pins.sh
 
-      - name: Configs match the Hadron palette
+      - name: Configs match the Isotope palette
         run: python3 tools/gen-theme.py --check
 
       # The splash's password agent: ask-file parsing, the panel title, the
@@ -56,12 +56,12 @@ jobs:
         run: |
           set -euo pipefail
           for d in a b; do
-            python3 tools/gen-wallpaper.py "$RUNNER_TEMP/$d" hadron-orbits-night-480x270 hadron-plain-day-480x270
+            python3 tools/gen-wallpaper.py "$RUNNER_TEMP/$d" isotope-tiles-night-480x270 isotope-plain-day-480x270
           done
-          cmp "$RUNNER_TEMP/a/hadron-orbits-night-480x270.png" "$RUNNER_TEMP/b/hadron-orbits-night-480x270.png"
-          cmp "$RUNNER_TEMP/a/hadron-plain-day-480x270.png" "$RUNNER_TEMP/b/hadron-plain-day-480x270.png"
+          cmp "$RUNNER_TEMP/a/isotope-tiles-night-480x270.png" "$RUNNER_TEMP/b/isotope-tiles-night-480x270.png"
+          cmp "$RUNNER_TEMP/a/isotope-plain-day-480x270.png" "$RUNNER_TEMP/b/isotope-plain-day-480x270.png"
           python3 tools/gen-grub-bg.py "$RUNNER_TEMP/background.tga"
-          cmp "$RUNNER_TEMP/background.tga" rootfs/etc/kairos/branding/hadron-theme/background.tga
+          cmp "$RUNNER_TEMP/background.tga" rootfs/etc/kairos/branding/isotope-theme/background.tga
 
       - name: Prebuilt stage keys
         run: |
@@ -96,14 +96,14 @@ jobs:
             if head -n1 "$f" | grep -q bash; then bash -n "$f"; else sh -n "$f"; fi
           done
           jq empty rootfs-sway/etc/xdg/waybar/config
-          jq empty rootfs-niri/usr/share/hadron-desktop/noctalia-palettes/Hadron.json
+          jq empty rootfs-niri/usr/share/isotope/noctalia-palettes/Isotope.json
 
       # The selection and stamp logic, against a fake flatpak in Alpine.
       - name: First-run app picker
         run: test/first-run/check-first-run-apps.sh
 
       # Docker runs it in a throwaway Alpine container, with fake tools.
-      - name: hadron-night-light state and toggle
+      - name: isotope-night-light state and toggle
         run: test/night-light/check-night-light.sh
       - name: Clipboard history dispatch and wiring
         run: test/clipboard/dispatch_test.sh

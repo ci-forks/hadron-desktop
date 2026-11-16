@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mudler/hadron-desktop/agent/internal/auth"
+	"github.com/kairos-community/isotope/agent/internal/auth"
 )
 
 // TestLoadGatewayConfigRoundTrip writes machine state via Materialize with a

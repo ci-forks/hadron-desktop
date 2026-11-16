@@ -1,4 +1,4 @@
-module github.com/mudler/hadron-desktop/agent
+module github.com/kairos-community/isotope/agent
 
 go 1.25.0
 

@@ -10,7 +10,7 @@ import (
 )
 
 // InstallSeed carries the two TOP-LEVEL Kairos install keys that gate a
-// zero-touch (autoinstall) disk wipe. These are NOT part of the hadron_agent
+// zero-touch (autoinstall) disk wipe. These are NOT part of the isotope_agent
 // section: they live directly under the cloud-config root ("install.auto" and
 // "install.device") and are merged here across every /oem/*.yaml file.
 type InstallSeed struct {
@@ -29,8 +29,8 @@ type InstallSeed struct {
 //
 // A missing directory or no matching files is NOT an error: it yields a zero
 // InstallSeed (Auto == false, Device == ""), which never authorizes a wipe.
-// Unlike hadron_agent parsing this is deliberately NON-strict: every unrelated
-// Kairos key (users, stages, hadron_agent, ...) is ignored simply by not
+// Unlike isotope_agent parsing this is deliberately NON-strict: every unrelated
+// Kairos key (users, stages, isotope_agent, ...) is ignored simply by not
 // appearing in the decode target, so an ordinary cloud-config that merely sets
 // other keys is parsed cleanly and reports Auto == false.
 func LoadInstallSeed(oemDir string) (InstallSeed, error) {
@@ -69,7 +69,7 @@ func LoadInstallSeed(oemDir string) (InstallSeed, error) {
 type SeedAuthorization struct {
 	// Authorized is true ONLY when all three independent conditions hold:
 	// install.auto == true, install.device is a non-empty "/dev/..." path, and
-	// the hadron_agent runtime is enabled. It is the single field the
+	// the isotope_agent runtime is enabled. It is the single field the
 	// autoinstall path may act on; when it is false, ordinary NON-destructive
 	// live mode must proceed.
 	Authorized bool
@@ -85,7 +85,7 @@ type SeedAuthorization struct {
 //
 //  1. install.auto is explicitly true,
 //  2. install.device is a non-empty "/dev/..." path, and
-//  3. hadron_agent.enabled is true (an explicit "enabled: false" suppresses it).
+//  3. isotope_agent.enabled is true (an explicit "enabled: false" suppresses it).
 //
 // It returns Authorized == true (with Device set) only when every condition is
 // met; otherwise Authorized is false and Reason names the first failing
@@ -109,7 +109,7 @@ func InspectSeed(oemDir string) (SeedAuthorization, error) {
 		return SeedAuthorization{Reason: fmt.Sprintf("install.device %q is not a non-empty /dev/... path", seed.Device)}, nil
 	}
 	if !cfg.Enabled {
-		return SeedAuthorization{Reason: "hadron_agent.enabled is not true"}, nil
+		return SeedAuthorization{Reason: "isotope_agent.enabled is not true"}, nil
 	}
 	return SeedAuthorization{Authorized: true, Device: device}, nil
 }

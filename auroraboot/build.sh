@@ -8,7 +8,7 @@
 # Env:
 #   ARCH                        target arch (default amd64)
 #   AURORA_IMAGE                AuroraBoot image (default matches the Makefile pin)
-#   HADRON_EXTRA_LIVE_CMDLINE   extra args appended to every live menuentry
+#   ISOTOPE_EXTRA_LIVE_CMDLINE   extra args appended to every live menuentry
 #   STAGE_ONLY=1                stage the overlay dir and exit (used by tests)
 #
 # AuroraBoot reads the source image straight from the host Docker daemon via the
@@ -22,7 +22,7 @@ ISO_NAME="${3:-}"
 ARCH="${ARCH:-amd64}"
 AURORA_IMAGE="${AURORA_IMAGE:-quay.io/kairos/auroraboot:v0.29.0}"
 
-THEME_SRC="rootfs/etc/kairos/branding/hadron-theme"
+THEME_SRC="rootfs/etc/kairos/branding/isotope-theme"
 OVERLAY_DIR="$OUT_DIR/iso-overlay"
 
 mkdir -p "$OUT_DIR"
@@ -39,29 +39,29 @@ case "$ARCH" in
   amd64|x86_64) NOMODESET=" nomodeset" ;;
   *)            NOMODESET="" ;;
 esac
-EXTEND_CMDLINE="${HADRON_EXTRA_LIVE_CMDLINE:+ ${HADRON_EXTRA_LIVE_CMDLINE}}"
+EXTEND_CMDLINE="${ISOTOPE_EXTRA_LIVE_CMDLINE:+ ${ISOTOPE_EXTRA_LIVE_CMDLINE}}"
 
 rm -rf "$OVERLAY_DIR"
-mkdir -p "$OVERLAY_DIR/boot/grub2/themes/hadron"
+mkdir -p "$OVERLAY_DIR/boot/grub2/themes/isotope"
 sed -e "s|{{NOMODESET}}|${NOMODESET}|g" \
     -e "s|{{EXTEND_CMDLINE}}|${EXTEND_CMDLINE}|g" \
     auroraboot/live-grub.cfg.tmpl > "$OVERLAY_DIR/boot/grub2/grub.cfg"
 
-# Ship the Tokyo Night theme alongside the menu so the LIVE boot is themed too.
-# Same three files the installed system gets from the 09_hadron_grub_theme oem
+# Ship the Isotope theme alongside the menu so the LIVE boot is themed too.
+# Same three files the installed system gets from the 09_isotope_grub_theme oem
 # stage — one source of truth for both. The font must travel with the theme:
 # theme.txt references "Unifont Regular 16", which only exists once our vendored
 # unicode.pf2 is loaded. The background is TGA because GRUB's png.mod rejects
 # valid PNGs with "unsupported format".
 cp "$THEME_SRC/theme.txt" "$THEME_SRC/unicode.pf2" "$THEME_SRC/background.tga" \
-   "$OVERLAY_DIR/boot/grub2/themes/hadron/"
+   "$OVERLAY_DIR/boot/grub2/themes/isotope/"
 
 # theme.txt carries an @VARIANT_SUBTITLE@ placeholder that the Dockerfile
 # substitutes inside the image. The copy we ship on the ISO comes from the repo
 # working tree, so substitute it here too — an unrendered placeholder would be
 # drawn literally on the boot menu.
 #
-# Ask the IMAGE, don't guess from its tag. /etc/hadron-desktop/session is the
+# Ask the IMAGE, don't guess from its tag. /etc/isotope/session is the
 # same source of truth the Dockerfile uses for the installed system's theme, so
 # reading it here keeps the live menu and the installed menu in agreement. A
 # tag-shaped heuristic cannot: the agent variant is tagged `agent-*` but runs i3,
@@ -73,20 +73,20 @@ cp "$THEME_SRC/theme.txt" "$THEME_SRC/unicode.pf2" "$THEME_SRC/background.tga" \
 # script dies right here with no diagnostic. Swallowing it lets the explicit
 # check below report WHY the build stopped.
 SUBTITLE="$(docker run --rm --entrypoint sh "$IMAGE" -c \
-  '. /etc/hadron-desktop/session && printf "%s · %s · kairos" "$DESKTOP_NAME" "$DISPLAY_NAME"' \
+  '. /etc/isotope/session && printf "%s · %s · kairos" "$DESKTOP_NAME" "$DISPLAY_NAME"' \
   2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
 # Hard failure, unlike the best-effort GRUB assets below: a theme with an empty
 # or literal-placeholder subtitle draws that on the boot menu of every install.
 # The pattern also rejects "$SUBTITLE" with an empty DESKTOP_NAME/DISPLAY_NAME,
 # which a bare -z test would let through as " ·  · kairos".
 if [[ ! "$SUBTITLE" =~ ^[^[:space:]]+\ ·\ [^[:space:]]+\ ·\ kairos$ ]]; then
-  echo "!! could not read a subtitle from /etc/hadron-desktop/session in $IMAGE" \
+  echo "!! could not read a subtitle from /etc/isotope/session in $IMAGE" \
        "(got: '$SUBTITLE')" >&2
   exit 1
 fi
 echo "==> live menu subtitle: $SUBTITLE"
-sed -i "s|@VARIANT_SUBTITLE@|${SUBTITLE}|" "$OVERLAY_DIR/boot/grub2/themes/hadron/theme.txt"
-if grep -q '@VARIANT_SUBTITLE@' "$OVERLAY_DIR/boot/grub2/themes/hadron/theme.txt"; then
+sed -i "s|@VARIANT_SUBTITLE@|${SUBTITLE}|" "$OVERLAY_DIR/boot/grub2/themes/isotope/theme.txt"
+if grep -q '@VARIANT_SUBTITLE@' "$OVERLAY_DIR/boot/grub2/themes/isotope/theme.txt"; then
   echo "!! @VARIANT_SUBTITLE@ survived substitution" >&2
   exit 1
 fi

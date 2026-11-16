@@ -1,18 +1,18 @@
-# Point the Kairos auto-installer at the Hadron desktop installer.
+# Point the Kairos auto-installer at the Isotope installer.
 #
 # kairos-init bakes /system/oem/...installer.yaml which generates a
 # kairos-installer.service running `kairos-agent install` on tty1 in
 # install-mode. This stage (90, same initramfs stage, same install-mode guard)
-# drops a systemd override so that service runs /usr/bin/hadron-install-ui
+# drops a systemd override so that service runs /usr/bin/isotope-install-ui
 # instead — a Go TUI that collects user/password/disk/hostname, writes a
 # cloud-config to /oem, then runs `kairos-agent install` as a subprocess behind a
 # branded progress screen. If a cloud-config with a user/install block was already
 # provided, it skips the prompts and runs the normal unattended install.
-name: "Hadron desktop installer UI"
+name: "Isotope installer UI"
 stages:
   initramfs:
     - if: 'grep -q "install-mode" /proc/cmdline && ([ -f /run/cos/live_mode ] || [ -f /run/cos/uki_install_mode ])'
-      name: "point kairos-installer at the Hadron desktop installer"
+      name: "point kairos-installer at the Isotope installer"
       files:
         - path: /etc/systemd/system/kairos-installer.service.d/10-desktop.conf
           permissions: 0644
@@ -21,19 +21,19 @@ stages:
           content: |
             [Service]
             ExecStart=
-            ExecStart=/usr/bin/hadron-install-ui
+            ExecStart=/usr/bin/isotope-install-ui
       commands:
         - systemctl daemon-reload
     # A Trusted Boot (UKI) install medium has no install-mode entry to pick:
     # immucore writes /run/cos/install_mode_interactive on every UKI medium
     # boot, and kairos-init's 52_installer.yaml then starts
     # kairos-interactive.service, the stock Kairos installer, not
-    # kairos-installer.service. Point that one at the Hadron installer too.
+    # kairos-installer.service. Point that one at the Isotope installer too.
     # The UKI medium's root is read-only apart from /etc, /var, /srv and /home,
-    # so /oem cannot take the wizard's answers: HADRON_CONFIG_OUT puts them in
+    # so /oem cannot take the wizard's answers: ISOTOPE_CONFIG_OUT puts them in
     # /etc/kairos, one of the directories kairos-agent reads its config from.
     - if: '[ -f /run/cos/uki_install_mode ] && [ -f /run/cos/install_mode_interactive ]'
-      name: "point the UKI interactive installer at the Hadron desktop installer"
+      name: "point the UKI interactive installer at the Isotope installer"
       files:
         - path: /etc/systemd/system/kairos-interactive.service.d/10-desktop.conf
           permissions: 0644
@@ -41,8 +41,8 @@ stages:
           group: 0
           content: |
             [Service]
-            Environment=HADRON_CONFIG_OUT=/etc/kairos/99_hadron-user.yaml
+            Environment=ISOTOPE_CONFIG_OUT=/etc/kairos/99_isotope-user.yaml
             ExecStart=
-            ExecStart=/usr/bin/hadron-install-ui
+            ExecStart=/usr/bin/isotope-install-ui
       commands:
         - systemctl daemon-reload

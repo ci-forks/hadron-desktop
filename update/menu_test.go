@@ -55,7 +55,7 @@ func TestBuildMenuUpdateAvailable(t *testing.T) {
 
 func TestBuildMenuPinned(t *testing.T) {
 	st := menuStatus(StateUpToDate)
-	st.Pin = "ghcr.io/kairos-community/hadron-desktop:sway-v0.0.5"
+	st.Pin = "ghcr.io/kairos-community/isotope:sway-v0.0.5"
 	m := BuildMenu(st, menuReleases, "sway", gpuFull)
 	it, ok := find(m, "install-latest")
 	if !ok || it.Label != "Install latest (v0.0.6)" || !it.Enabled {
@@ -174,11 +174,11 @@ func TestBuildMenuStatusLines(t *testing.T) {
 		st   Status
 		want string
 	}{
-		{Status{State: StateIdle, Installed: "v0.0.5"}, "Hadron Desktop v0.0.5"},
+		{Status{State: StateIdle, Installed: "v0.0.5"}, "Isotope v0.0.5"},
 		{Status{State: StateChecking, Installed: "v0.0.5"}, "Checking for updates"},
-		{Status{State: StateUpToDate, Installed: "v0.0.5"}, "Hadron Desktop v0.0.5 is up to date"},
-		{Status{State: StateUpToDate, Installed: "v0.0.5", Pin: "x"}, "Hadron Desktop v0.0.5 (pinned)"},
-		{Status{State: StateUpdateAvailable, Installed: "v0.0.5", Latest: "v0.0.6"}, "Hadron Desktop v0.0.6 is available"},
+		{Status{State: StateUpToDate, Installed: "v0.0.5"}, "Isotope v0.0.5 is up to date"},
+		{Status{State: StateUpToDate, Installed: "v0.0.5", Pin: "x"}, "Isotope v0.0.5 (pinned)"},
+		{Status{State: StateUpdateAvailable, Installed: "v0.0.5", Latest: "v0.0.6"}, "Isotope v0.0.6 is available"},
 		{Status{State: StateApplying}, "Installing the update"},
 		{Status{State: StateRebootPending}, "Update installed; restart to use it"},
 		{Status{State: StateRebootPending, Pending: pendingInstalled}, "Update installed; restart to use it"},

@@ -35,14 +35,14 @@ run_stage() { # $1 = layout file the stage should edit
 # Helper: what CUSTOM_BIND_MOUNTS ends up as.
 value_of() { sed -n 's/^CUSTOM_BIND_MOUNTS="\(.*\)"$/\1/p' "$1"; }
 
-# 1. appends alongside existing docker + hadron-agent entries
-w="$(mktemp)"; printf 'CUSTOM_BIND_MOUNTS="/var/lib/docker /var/lib/hadron-agent"\n' > "$w"
+# 1. appends alongside existing docker + isotope-agent entries
+w="$(mktemp)"; printf 'CUSTOM_BIND_MOUNTS="/var/lib/docker /var/lib/isotope-agent"\n' > "$w"
 run_stage "$w"
 v="$(value_of "$w")"
 case " $v " in
   *" /var/lib/docker "*) : ;; *) err "dropped /var/lib/docker (got: $v)";; esac
 case " $v " in
-  *" /var/lib/hadron-agent "*) : ;; *) err "dropped /var/lib/hadron-agent (got: $v)";; esac
+  *" /var/lib/isotope-agent "*) : ;; *) err "dropped /var/lib/isotope-agent (got: $v)";; esac
 case " $v " in
   *" /var/lib/flatpak "*) ok "appended /var/lib/flatpak, kept the rest";;
   *) err "did not append /var/lib/flatpak (got: $v)";; esac

@@ -28,9 +28,9 @@ func fakeGitHubReleases(t *testing.T, tag, releases string) {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/repos/kairos-community/hadron-desktop/releases/latest":
+		case "/repos/kairos-community/isotope/releases/latest":
 			fmt.Fprintf(w, `{"tag_name":%q,"html_url":"https://example.invalid/%s"}`, tag, tag)
-		case "/repos/kairos-community/hadron-desktop/releases":
+		case "/repos/kairos-community/isotope/releases":
 			if r.URL.Query().Get("per_page") != "100" {
 				http.Error(w, "want per_page=100", http.StatusBadRequest)
 				return
@@ -41,7 +41,7 @@ func fakeGitHubReleases(t *testing.T, tag, releases string) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	t.Setenv("HADRON_UPDATE_API", srv.URL)
+	t.Setenv("ISOTOPE_UPDATE_API", srv.URL)
 }
 
 // fakeTool writes a script that records its argv to a file and exits code.
@@ -96,10 +96,10 @@ func newFakeRegistry(t *testing.T, private bool, published ...string) *fakeReg {
 				return
 			}
 			fmt.Fprint(w, `{"token":"anon"}`)
-		case strings.HasPrefix(r.URL.Path, "/v2/kairos-community/hadron-desktop/"):
+		case strings.HasPrefix(r.URL.Path, "/v2/kairos-community/isotope/"):
 			if r.Header.Get("Authorization") != "Bearer anon" {
 				w.Header().Set("WWW-Authenticate", fmt.Sprintf(
-					`Bearer realm="%s/token",service="ghcr.io",scope="repository:kairos-community/hadron-desktop:pull"`, srv.URL))
+					`Bearer realm="%s/token",service="ghcr.io",scope="repository:kairos-community/isotope:pull"`, srv.URL))
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
@@ -116,7 +116,7 @@ func newFakeRegistry(t *testing.T, private bool, published ...string) *fakeReg {
 				w.Write(d.body)
 				return
 			}
-			tag := strings.TrimPrefix(key, "hadron-desktop/manifests/")
+			tag := strings.TrimPrefix(key, "isotope/manifests/")
 			for _, p := range published {
 				if p == tag {
 					return
@@ -128,7 +128,7 @@ func newFakeRegistry(t *testing.T, private bool, published ...string) *fakeReg {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	t.Setenv("HADRON_UPDATE_REGISTRY", srv.URL)
+	t.Setenv("ISOTOPE_UPDATE_REGISTRY", srv.URL)
 	return reg
 }
 
@@ -196,7 +196,7 @@ func setupFlavor(t *testing.T, flavor, installed, latest string) {
 	fakeRegistry(t, false, "sway-v0.1.0", "sway-v0.2.0", "agent-v0.1.0", "agent-v0.2.0")
 	rf := strings.Replace(goodRelease, `"v0.1.0"`, installed, 1)
 	rf = strings.Replace(rf, "FLAVOR=sway", "FLAVOR="+flavor, 1)
-	t.Setenv("HADRON_UPDATE_RELEASE_FILE", writeRelease(t, rf))
+	t.Setenv("ISOTOPE_UPDATE_RELEASE_FILE", writeRelease(t, rf))
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	fakeGitHub(t, latest)
 	oldRoot, oldReboot := needRoot, rebootCommand
@@ -235,7 +235,7 @@ func TestCheckExitCodes(t *testing.T) {
 func TestUpgradeRunsKairosAgentWithTheFlavorImage(t *testing.T) {
 	setupAgent(t, "v0.1.0", "v0.2.0")
 	agent, argv := fakeTool(t, 0)
-	t.Setenv("HADRON_UPDATE_AGENT", agent)
+	t.Setenv("ISOTOPE_UPDATE_AGENT", agent)
 
 	reboot, rebootArgv := fakeTool(t, 0)
 	rebootCommand = func() *exec.Cmd { return exec.Command(reboot, "reboot") }
@@ -248,7 +248,7 @@ func TestUpgradeRunsKairosAgentWithTheFlavorImage(t *testing.T) {
 		t.Fatalf("code %d, stderr %q", code, errOut)
 	}
 	got, _ := os.ReadFile(argv)
-	want := "upgrade\n--source\noci:ghcr.io/kairos-community/hadron-desktop:agent-v0.2.0\n"
+	want := "upgrade\n--source\noci:ghcr.io/kairos-community/isotope:agent-v0.2.0\n"
 	if string(got) != want {
 		t.Fatalf("kairos-agent argv = %q, want %q", got, want)
 	}
@@ -263,7 +263,7 @@ func TestUpgradeRunsKairosAgentWithTheFlavorImage(t *testing.T) {
 func TestUpgradeCancelledTouchesNothing(t *testing.T) {
 	setupAgent(t, "v0.1.0", "v0.2.0")
 	agent, argv := fakeTool(t, 0)
-	t.Setenv("HADRON_UPDATE_AGENT", agent)
+	t.Setenv("ISOTOPE_UPDATE_AGENT", agent)
 
 	if code, out, _ := runCLI("n\n", "upgrade"); code != exitOK || !strings.Contains(out, "Cancelled") {
 		t.Fatalf("code %d, out %q", code, out)
@@ -276,7 +276,7 @@ func TestUpgradeCancelledTouchesNothing(t *testing.T) {
 func TestUpgradeUpToDateIsANoop(t *testing.T) {
 	setupAgent(t, "v0.2.0", "v0.2.0")
 	agent, argv := fakeTool(t, 0)
-	t.Setenv("HADRON_UPDATE_AGENT", agent)
+	t.Setenv("ISOTOPE_UPDATE_AGENT", agent)
 
 	if code, out, _ := runCLI("", "upgrade", "--yes"); code != exitOK || !strings.Contains(out, "nothing to do") {
 		t.Fatalf("code %d, out %q", code, out)
@@ -289,7 +289,7 @@ func TestUpgradeUpToDateIsANoop(t *testing.T) {
 func TestUpgradePinnedVersionAndFailure(t *testing.T) {
 	setupAgent(t, "v0.2.0", "v0.2.0")
 	agent, argv := fakeTool(t, 3)
-	t.Setenv("HADRON_UPDATE_AGENT", agent)
+	t.Setenv("ISOTOPE_UPDATE_AGENT", agent)
 
 	// --version installs what was asked for even when it is not the latest,
 	// which is also how a user rolls back.
@@ -298,7 +298,7 @@ func TestUpgradePinnedVersionAndFailure(t *testing.T) {
 		t.Fatalf("code %d, stderr %q", code, errOut)
 	}
 	got, _ := os.ReadFile(argv)
-	if !strings.Contains(string(got), "hadron-desktop:agent-v0.1.0") {
+	if !strings.Contains(string(got), "isotope:agent-v0.1.0") {
 		t.Fatalf("kairos-agent argv = %q", got)
 	}
 
@@ -318,14 +318,14 @@ func notifyDaemon(t *testing.T, st Status) *fakeDaemon {
 func TestNotifyOnceNotifiesOncePerRelease(t *testing.T) {
 	setup(t, "v0.1.0", "v0.2.0")
 	busctl, argv := fakeTool(t, 0)
-	t.Setenv("HADRON_UPDATE_BUSCTL", busctl)
+	t.Setenv("ISOTOPE_UPDATE_BUSCTL", busctl)
 	f := notifyDaemon(t, Status{State: StateUpdateAvailable, Installed: "v0.1.0", Latest: "v0.2.0"})
 
 	if code, _, errOut := runCLI("", "notify", "--once"); code != exitOK {
 		t.Fatalf("code %d, stderr %q", code, errOut)
 	}
 	got, _ := os.ReadFile(argv)
-	if !strings.Contains(string(got), "Hadron Desktop v0.2.0 is available") ||
+	if !strings.Contains(string(got), "Isotope v0.2.0 is available") ||
 		!strings.Contains(string(got), "org.freedesktop.Notifications") {
 		t.Fatalf("busctl argv = %q", got)
 	}
@@ -345,7 +345,7 @@ func TestNotifyOnceNotifiesOncePerRelease(t *testing.T) {
 func TestNotifyOnceSilentWhenUpToDate(t *testing.T) {
 	setup(t, "v0.2.0", "v0.2.0")
 	busctl, argv := fakeTool(t, 0)
-	t.Setenv("HADRON_UPDATE_BUSCTL", busctl)
+	t.Setenv("ISOTOPE_UPDATE_BUSCTL", busctl)
 	notifyDaemon(t, Status{State: StateUpToDate, Installed: "v0.2.0", Latest: "v0.2.0"})
 
 	if code, _, _ := runCLI("", "notify", "--once"); code != exitOK {
@@ -360,7 +360,7 @@ func TestNotifyOnceSilentWhenUpToDate(t *testing.T) {
 func TestNotifyOnceSilentWhilePinned(t *testing.T) {
 	setup(t, "v0.1.0", "v0.2.0")
 	busctl, argv := fakeTool(t, 0)
-	t.Setenv("HADRON_UPDATE_BUSCTL", busctl)
+	t.Setenv("ISOTOPE_UPDATE_BUSCTL", busctl)
 	notifyDaemon(t, Status{State: StateUpToDate, Installed: "v0.1.0", Latest: "v0.2.0", Pin: "ghcr.io/x/y:z"})
 
 	if code, _, _ := runCLI("", "notify", "--once"); code != exitOK {
@@ -414,7 +414,7 @@ func TestNotifyArgsEndOptionParsing(t *testing.T) {
 func TestUpgradeRefusesAnImageThatIsNotThere(t *testing.T) {
 	setupAgent(t, "v0.1.0", "v0.3.0") // v0.3.0 has a release but no image
 	agent, argv := fakeTool(t, 0)
-	t.Setenv("HADRON_UPDATE_AGENT", agent)
+	t.Setenv("ISOTOPE_UPDATE_AGENT", agent)
 
 	code, _, errOut := runCLI("", "upgrade", "--yes")
 	if code != exitError || !strings.Contains(errOut, "agent-v0.3.0 does not exist") {
@@ -429,7 +429,7 @@ func TestUpgradeExplainsAPrivatePackage(t *testing.T) {
 	setupAgent(t, "v0.1.0", "v0.2.0")
 	fakeRegistry(t, true, "agent-v0.2.0")
 	agent, argv := fakeTool(t, 0)
-	t.Setenv("HADRON_UPDATE_AGENT", agent)
+	t.Setenv("ISOTOPE_UPDATE_AGENT", agent)
 
 	code, _, errOut := runCLI("", "upgrade", "--yes")
 	if code != exitError || !strings.Contains(errOut, "private or does not exist") {
@@ -444,15 +444,15 @@ func TestUpgradeExplainsAPrivatePackage(t *testing.T) {
 // answered, and must not need the registry: the parent checked it.
 func TestRootChildOnlyRunsTheAgent(t *testing.T) {
 	setupAgent(t, "v0.1.0", "v0.2.0")
-	t.Setenv("HADRON_UPDATE_REGISTRY", "http://127.0.0.1:1") // unreachable
+	t.Setenv("ISOTOPE_UPDATE_REGISTRY", "http://127.0.0.1:1") // unreachable
 	agent, argv := fakeTool(t, 0)
-	t.Setenv("HADRON_UPDATE_AGENT", agent)
+	t.Setenv("ISOTOPE_UPDATE_AGENT", agent)
 
 	code, out, errOut := runCLI("", "upgrade", "--as-root", "--yes", "--version", "v0.2.0")
 	if code != exitOK {
 		t.Fatalf("code %d, stderr %q", code, errOut)
 	}
-	if strings.Contains(out, "Upgrading Hadron Desktop") || strings.Contains(out, "Continue?") {
+	if strings.Contains(out, "Upgrading Isotope") || strings.Contains(out, "Continue?") {
 		t.Fatalf("the root child repeated the plan: %q", out)
 	}
 	if _, err := os.Stat(argv); err != nil {
@@ -463,7 +463,7 @@ func TestRootChildOnlyRunsTheAgent(t *testing.T) {
 func TestNotifyOnceStaysQuietWithoutAnImage(t *testing.T) {
 	setup(t, "v0.1.0", "v0.3.0") // released, but no sway-v0.3.0 image
 	busctl, argv := fakeTool(t, 0)
-	t.Setenv("HADRON_UPDATE_BUSCTL", busctl)
+	t.Setenv("ISOTOPE_UPDATE_BUSCTL", busctl)
 	f := notifyDaemon(t, Status{State: StateUpdateAvailable, Installed: "v0.1.0", Latest: "v0.3.0"})
 	f.inspectEr = []error{errors.New("manifest unknown")}
 

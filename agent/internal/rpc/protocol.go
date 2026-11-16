@@ -1,4 +1,4 @@
-// Package rpc defines hadron-agent's fixed internal Unix-socket RPC
+// Package rpc defines isotope-agent's fixed internal Unix-socket RPC
 // protocol: the four endpoints (POST /v1/call, GET /v1/health, POST
 // /v1/pause, POST /v1/resume) the public gateway (a later Phase-2 task)
 // uses to reach the two brokers -- the unprivileged session broker and the
@@ -27,13 +27,13 @@ import (
 // permissions/ownership, is systemd's and Phase 3's responsibility.
 const (
 	// SessionSocketPath is the unprivileged session broker's socket.
-	SessionSocketPath = "/run/hadron-agent/session/session.sock"
+	SessionSocketPath = "/run/isotope-agent/session/session.sock"
 	// RootSocketPath is the privileged root helper's socket. A Server
 	// bound to this path must be constructed with Config.RequireAuth set.
-	RootSocketPath = "/run/hadron-agent/root/root.sock"
+	RootSocketPath = "/run/isotope-agent/root/root.sock"
 	// ControlSocketPath is the local control socket used for pause/resume
 	// and health of the gateway itself.
-	ControlSocketPath = "/run/hadron-agent/control/control.sock"
+	ControlSocketPath = "/run/isotope-agent/control/control.sock"
 )
 
 // ---------------------------------------------------------------------------

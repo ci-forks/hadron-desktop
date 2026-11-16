@@ -140,7 +140,7 @@ class Cosmic(unittest.TestCase):
 
 
 class Repository(unittest.TestCase):
-    """The committed sheets, the real configs and the real hadron-help."""
+    """The committed sheets, the real configs and the real isotope-help."""
 
     def test_committed_sheets_are_current(self):
         self.assertEqual(gen.main(["--check"]), 0)
@@ -152,7 +152,7 @@ class Repository(unittest.TestCase):
                 got = rows(f.read())
             self.assertIn(("Basics", "Super + F1", "This help"), got, v)
 
-    def test_every_variant_documents_the_hadron_menu(self):
+    def test_every_variant_documents_the_isotope_menu(self):
         for v in ("sway", "i3", "niri", "cosmic"):
             with open(os.path.join(gen.ROOT, "rootfs-" + v, gen.OUT), encoding="utf-8") as f:
                 keys = [r[1] for r in rows(f.read())]

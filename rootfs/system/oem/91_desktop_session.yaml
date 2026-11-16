@@ -10,7 +10,7 @@
 # Guarded so it does NOT run during the live/installer boot: there the installer
 # (kairos-installer.service) owns tty1, and ly's own ConditionKernelCommandLine
 # /ConditionPathExists drop-in keeps it from stealing the VT.
-name: "Hadron desktop session"
+name: "Isotope session"
 stages:
   boot:
     - if: '! grep -q "install-mode" /proc/cmdline && [ ! -f /run/cos/live_mode ]'

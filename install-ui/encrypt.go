@@ -28,7 +28,7 @@ import (
 
 // encryptionMarker is the file the installed system keeps to say how its
 // disk is encrypted. It holds no secret.
-const encryptionMarker = "/etc/hadron-desktop/encryption"
+const encryptionMarker = "/etc/isotope/encryption"
 
 // encryptedPartition is the one partition the installer encrypts: it holds
 // /home and /var. COS_OEM stays readable (GRUB reads it); kcrypt refuses the
@@ -37,7 +37,7 @@ const encryptedPartition = "COS_PERSISTENT"
 
 // kcryptPassphraseMethod and kcryptSubsystem are the kcrypt.method value that
 // selects the passphrase encryptor, and the LUKS2 subsystem that encryptor
-// writes. The boot prompt (hadron-unlock in the initramfs) keys on the
+// writes. The boot prompt (isotope-unlock in the initramfs) keys on the
 // subsystem.
 const (
 	kcryptPassphraseMethod = "passphrase"
@@ -59,7 +59,7 @@ func trustedBootMedium(marker string) bool {
 
 // passphraseFile is the hand-off to kcrypt (kcrypt.passphrase_file). /run is
 // a tmpfs on the live system, so the file never touches a disk.
-var passphraseFile = "/run/hadron-install/passphrase"
+var passphraseFile = "/run/isotope-install/passphrase"
 
 // minPassphraseLen is the shortest disk passphrase the installer takes. The
 // passphrase is the only key, and anyone with the disk can guess offline, so
@@ -230,7 +230,7 @@ type luksMeta struct {
 // prompt, whose keyslots all use argon2id, and that the passphrase opens.
 // log receives progress lines, never a secret.
 func verifyEncryption(run runner, disk, passphrase string, log func(string)) error {
-	log("hadron: checking the disk passphrase")
+	log("isotope: checking the disk passphrase")
 	// kairos-agent has just closed the container; let udev catch up so lsblk
 	// reports its label.
 	_, _ = run("udevadm", []string{"settle"}, nil)
@@ -242,7 +242,7 @@ func verifyEncryption(run runner, disk, passphrase string, log func(string)) err
 	if err != nil {
 		return err
 	}
-	log("hadron: encrypted partition " + dev)
+	log("isotope: encrypted partition " + dev)
 
 	out, err = run("blkid", []string{"-o", "value", "-s", "SUBSYSTEM", dev}, nil)
 	if err != nil {
@@ -273,6 +273,6 @@ func verifyEncryption(run runner, disk, passphrase string, log func(string)) err
 		[]byte(passphrase)); err != nil {
 		return fmt.Errorf("the passphrase does not open %s: %w", dev, err)
 	}
-	log("hadron: the passphrase opens " + dev)
+	log("isotope: the passphrase opens " + dev)
 	return nil
 }

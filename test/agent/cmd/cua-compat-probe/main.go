@@ -6,7 +6,7 @@
 // etc/i3/config.d/99-cua-compat.conf.
 //
 // The probe writes three artifacts the Task 4 collector waits on, all under
-// /run/user/1000/hadron-cua-compat: result.json (the typed probe.Result),
+// /run/user/1000/isotope-cua-compat: result.json (the typed probe.Result),
 // cua-desktop.png (a full-display Cua capture), and result.status (exactly
 // PASS or FAIL, written last). All writes are atomic (temp file + rename).
 //
@@ -33,19 +33,19 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/mudler/hadron-desktop/agent/internal/cua"
-	"github.com/mudler/hadron-desktop/agent/internal/probe"
+	"github.com/kairos-community/isotope/agent/internal/cua"
+	"github.com/kairos-community/isotope/agent/internal/probe"
 )
 
 const (
-	runtimeDir    = "/run/user/1000/hadron-cua-compat"
-	gtkStatePath  = "/run/user/1000/hadron-cua-gtk-state.json"
+	runtimeDir    = "/run/user/1000/isotope-cua-compat"
+	gtkStatePath  = "/run/user/1000/isotope-cua-gtk-state.json"
 	driverBinary  = "/usr/bin/cua-driver"
-	gtkTitle      = "Hadron Cua GTK Fixture"
-	chromiumTitle = "Hadron Cua Chromium Fixture"
+	gtkTitle      = "Isotope Cua GTK Fixture"
+	chromiumTitle = "Isotope Cua Chromium Fixture"
 
 	deliveryForeground = "foreground"
-	typedText          = "hadron"
+	typedText          = "isotope"
 	namedKey           = "F5"
 	chromiumTypedText  = "cua"
 	chromiumCDPPort    = 9222

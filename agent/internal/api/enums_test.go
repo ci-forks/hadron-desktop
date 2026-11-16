@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/mudler/hadron-desktop/agent/internal/api"
+	"github.com/kairos-community/isotope/agent/internal/api"
 )
 
 // propertyEnum returns the enum values the published schema for In advertises

@@ -32,16 +32,16 @@ static const char *SYSTEMD_ASK =
     "Echo=0\n"
     "NotAfter=0\n"
     "Silent=0\n"
-    "Id=hadron-unlock:vda5\n"
-    "Message=Enter the passphrase for the Hadron disk (/dev/vda5):\n"
+    "Id=isotope-unlock:vda5\n"
+    "Message=Enter the passphrase for the Isotope disk (/dev/vda5):\n"
     "Icon=drive-harddisk\n";
 
 static void test_parse(void) {
     ask_t a;
     CHECK(ask_parse(SYSTEMD_ASK, &a) == 0);
     CHECK_STR(a.socket, "/run/systemd/ask-password/sck.0123abcd");
-    CHECK_STR(a.id, "hadron-unlock:vda5");
-    CHECK_STR(a.message, "Enter the passphrase for the Hadron disk (/dev/vda5):");
+    CHECK_STR(a.id, "isotope-unlock:vda5");
+    CHECK_STR(a.message, "Enter the passphrase for the Isotope disk (/dev/vda5):");
     CHECK(a.pid == 1);
     CHECK(a.not_after == 0);
     CHECK(a.echo == 0 && a.silent == 0);
@@ -87,8 +87,8 @@ static void test_title(void) {
 #define TITLE(msg, want) do { snprintf(a.message, sizeof a.message, "%s", msg); CHECK_STR(ask_title(&a, t, sizeof t), want); } while (0)
     TITLE("", "Enter the disk passphrase");
     /* PR #60's question: 40 characters without the device, too wide. */
-    TITLE("Enter the passphrase for the Hadron disk (/dev/vda5):", "Enter the disk passphrase");
-    TITLE("Unlock the Hadron disk (/dev/vda5):", "Unlock the Hadron disk");
+    TITLE("Enter the passphrase for the Isotope disk (/dev/vda5):", "Enter the disk passphrase");
+    TITLE("Unlock the Isotope disk (/dev/vda5):", "Unlock the Isotope disk");
     TITLE("Wrong passphrase. Try again (/dev/vda5):", "Enter the disk passphrase");
     TITLE("Please enter passphrase for disk luks-0f1e2d3c (home):", "Enter the disk passphrase");
     TITLE("Passphrase for /dev/sda2:", "Enter the disk passphrase");
@@ -106,7 +106,7 @@ static void test_retry(void) {
     ask_t a;
     ask_parse(SYSTEMD_ASK, &a);
     CHECK(!ask_is_retry(&a, ""));
-    CHECK(ask_is_retry(&a, "hadron-unlock:vda5"));
+    CHECK(ask_is_retry(&a, "isotope-unlock:vda5"));
     CHECK(!ask_is_retry(&a, "kcrypt:vda5"));
     snprintf(a.id, sizeof a.id, "%s", "");
     CHECK(!ask_is_retry(&a, ""));             /* an empty Id never matches */
@@ -149,14 +149,14 @@ static void write_ask(const char *dir, const char *name, const char *sock, const
     snprintf(tmp, sizeof tmp, "%s/tmp.%s", dir, name);
     snprintf(dst, sizeof dst, "%s/%s", dir, name);
     FILE *f = fopen(tmp, "w");
-    fprintf(f, "[Ask]\nPID=%d\nSocket=%s\nId=%s\nMessage=Enter the passphrase for the Hadron disk (/dev/vda5):\n%s",
+    fprintf(f, "[Ask]\nPID=%d\nSocket=%s\nId=%s\nMessage=Enter the passphrase for the Isotope disk (/dev/vda5):\n%s",
             (int)getpid(), sock, id, extra);
     fclose(f);
     rename(tmp, dst);   /* systemd writes a temporary file and renames it */
 }
 
 static void test_agent_roundtrip(void) {
-    char dir[] = "/tmp/hadron-agent-test.XXXXXX";
+    char dir[] = "/tmp/isotope-agent-test.XXXXXX";
     CHECK(mkdtemp(dir) != NULL);
     char sock[256], ask[256];
     snprintf(sock, sizeof sock, "%s/sck.1", dir);
@@ -173,10 +173,10 @@ static void test_agent_roundtrip(void) {
     write_ask(dir, "sck.ignored-not-ask", sock, "x", "");
     CHECK(agent_poll(&ag, now_s()) == 0);
 
-    write_ask(dir, "ask.1", sock, "hadron-unlock:vda5", "");
+    write_ask(dir, "ask.1", sock, "isotope-unlock:vda5", "");
     CHECK(agent_poll(&ag, now_s()) == 1);
     CHECK(ag.active);
-    CHECK_STR(ag.cur.id, "hadron-unlock:vda5");
+    CHECK_STR(ag.cur.id, "isotope-unlock:vda5");
     CHECK(!ask_is_retry(&ag.cur, ag.last_id));
 
     CHECK(agent_answer(&ag, "wr0ng") == 0);
@@ -191,7 +191,7 @@ static void test_agent_roundtrip(void) {
 
     /* The asker removes it and asks again with the same Id: a retry. */
     unlink(ask);
-    write_ask(dir, "ask.2", sock, "hadron-unlock:vda5", "");
+    write_ask(dir, "ask.2", sock, "isotope-unlock:vda5", "");
     CHECK(agent_poll(&ag, now_s() + 4) == 1);
     CHECK(ask_is_retry(&ag.cur, ag.last_id));
 
@@ -232,7 +232,7 @@ static void test_agent_roundtrip(void) {
 
 /* The directory may not exist when the splash starts. */
 static void test_agent_late_dir(void) {
-    char base[] = "/tmp/hadron-agent-late.XXXXXX";
+    char base[] = "/tmp/isotope-agent-late.XXXXXX";
     CHECK(mkdtemp(base) != NULL);
     char dir[300];
     snprintf(dir, sizeof dir, "%s/ask-password", base);

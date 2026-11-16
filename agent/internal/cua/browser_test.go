@@ -8,7 +8,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/mudler/hadron-desktop/agent/internal/api"
+	"github.com/kairos-community/isotope/agent/internal/api"
 )
 
 // browserWindows is a list_windows reply with one Chromium window and one
@@ -166,10 +166,10 @@ func TestBrowserAmbiguousWindowIsAnError(t *testing.T) {
 // including the wrapped/escaped reply shape.
 func TestBrowserSnapshotReturnsRefsAndBounds(t *testing.T) {
 	caller := newBrowserCaller(t, func(script string) *mcp.CallToolResult {
-		if !strings.Contains(script, "window.__hadronRefs=refs") {
-			t.Error("snapshot script must leave the nodes in window.__hadronRefs for later ref actions")
+		if !strings.Contains(script, "window.__isotopeRefs=refs") {
+			t.Error("snapshot script must leave the nodes in window.__isotopeRefs for later ref actions")
 		}
-		if strings.Contains(script, "data-hadron") || strings.Contains(script, "setAttribute") {
+		if strings.Contains(script, "data-isotope") || strings.Contains(script, "setAttribute") {
 			t.Error("snapshot must not stamp attributes onto the DOM: the page's own selectors and CSS can see them")
 		}
 		return jsReply(t, map[string]any{

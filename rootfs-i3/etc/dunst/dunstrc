@@ -1,4 +1,4 @@
-# dunst notifications for the i3 variant: the Hadron palette.
+# dunst notifications for the i3 variant: the Isotope palette.
 # Colours: generated from theme/palette.toml by tools/gen-theme.py.
 [global]
     monitor = 0
@@ -15,7 +15,7 @@
     padding = 12
     horizontal_padding = 14
     frame_width = 2
-    frame_color = "#7aa2f7"
+    frame_color = "#8fd12e"
     separator_color = frame
     font = Inter Variable 10.5
     markup = full
@@ -27,17 +27,17 @@
     mouse_left_click = do_action, close_current
 
 [urgency_low]
-    background = "#1a1b26"
-    foreground = "#a9b1d6"
-    highlight = "#7aa2f7"
+    background = "#15141c"
+    foreground = "#cbc8d6"
+    highlight = "#8fd12e"
 
 [urgency_normal]
-    background = "#1a1b26"
-    foreground = "#c0caf5"
-    highlight = "#7aa2f7"
+    background = "#15141c"
+    foreground = "#f2f1f5"
+    highlight = "#8fd12e"
 
 [urgency_critical]
-    background = "#1a1b26"
+    background = "#15141c"
     foreground = "#f7768e"
     highlight = "#f7768e"
     frame_color = "#f7768e"

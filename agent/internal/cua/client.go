@@ -94,7 +94,7 @@ func connectChild(ctx context.Context, options Options) (*mcp.ClientSession, err
 	cmd.Env = append(os.Environ(), options.Env...)
 
 	client := mcp.NewClient(&mcp.Implementation{
-		Name:    "hadron-cua-client",
+		Name:    "isotope-cua-client",
 		Version: "v0.0.1",
 	}, nil)
 	return client.Connect(ctx, &mcp.CommandTransport{

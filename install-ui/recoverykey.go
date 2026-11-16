@@ -38,7 +38,7 @@ const (
 // (tmpfs), written just before the keyslot is added and deleted right after,
 // like the disk passphrase file. The key is never in the cloud-config, which
 // kairos-agent copies to OEM.
-var recoveryKeyFile = "/run/hadron-install/recovery-key"
+var recoveryKeyFile = "/run/isotope-install/recovery-key"
 
 // recoveryTokenType marks the keyslot as a recovery key in the LUKS2 header.
 // It is the type systemd-cryptenroll --recovery-key writes; kcrypt reads it
@@ -174,7 +174,7 @@ func enrollRecoveryKey(run runner, disk, key string, log func(string)) error {
 // normal edition), and cryptsetup reads the existing key from there instead
 // of the TPM token. nil keeps the TPM.
 func enrollRecoveryKeyWith(run runner, disk, key string, unlockFile *string, log func(string)) error {
-	log("hadron: adding the recovery key")
+	log("isotope: adding the recovery key")
 	_, _ = run("udevadm", []string{"settle"}, nil)
 	out, err := run("lsblk", []string{"-P", "-p", "-o", "NAME,FSTYPE,LABEL", disk}, nil)
 	if err != nil {
@@ -226,7 +226,7 @@ func enrollRecoveryKeyWith(run runner, disk, key string, unlockFile *string, log
 			"--key-slot", slot, "--key-file", "-", dev}, []byte(key)); err != nil {
 			return fmt.Errorf("the recovery key does not open %s: %w", dev, err)
 		}
-		log("hadron: recovery key added to " + dev + " (keyslot " + slot + ")")
+		log("isotope: recovery key added to " + dev + " (keyslot " + slot + ")")
 	}
 	return nil
 }
@@ -249,9 +249,9 @@ func recoveryGroupToConfirm(r io.Reader) int {
 	return int(b[0]) % recoveryKeyGroups
 }
 
-// errRecoveryKeyNonInteractive refuses HADRON_RECOVERY_KEY in the
+// errRecoveryKeyNonInteractive refuses ISOTOPE_RECOVERY_KEY in the
 // unattended installer: the key must be shown to a person, once.
-var errRecoveryKeyNonInteractive = errors.New("HADRON_RECOVERY_KEY: the recovery key is shown once on screen, so it needs the interactive installer")
+var errRecoveryKeyNonInteractive = errors.New("ISOTOPE_RECOVERY_KEY: the recovery key is shown once on screen, so it needs the interactive installer")
 
 // ordinal is "1st", "2nd" ... for the confirmation prompt.
 func ordinal(n int) string {

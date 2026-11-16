@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mudler/hadron-desktop/agent/internal/api"
-	"github.com/mudler/hadron-desktop/agent/internal/control"
+	"github.com/kairos-community/isotope/agent/internal/api"
+	"github.com/kairos-community/isotope/agent/internal/control"
 )
 
 // fixture bundles a gateway with its two fake brokers and credentials.
@@ -136,7 +136,7 @@ func TestInsufficientScopeRejected403(t *testing.T) {
 	// Require the admin scope on /mcp; a user bearer carries only the user
 	// scope and must be refused with 403 by the SDK bearer middleware.
 	f := newFixture(t, func(cfg *Config, _ *fixture) {
-		cfg.RequiredScopes = []string{"hadron:admin"}
+		cfg.RequiredScopes = []string{"isotope:admin"}
 	})
 	ts := httptest.NewServer(f.g.Handler())
 	t.Cleanup(ts.Close)

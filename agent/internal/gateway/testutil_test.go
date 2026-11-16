@@ -20,8 +20,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	appauth "github.com/mudler/hadron-desktop/agent/internal/auth"
-	"github.com/mudler/hadron-desktop/agent/internal/rpc"
+	appauth "github.com/kairos-community/isotope/agent/internal/auth"
+	"github.com/kairos-community/isotope/agent/internal/rpc"
 )
 
 // ---------------------------------------------------------------------------
@@ -162,7 +162,7 @@ func selfSignedTLS(t *testing.T) (*tls.Config, *x509.CertPool) {
 	}
 	tmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
-		Subject:      pkix.Name{CommonName: "hadron-agent-test"},
+		Subject:      pkix.Name{CommonName: "isotope-agent-test"},
 		NotBefore:    time.Now().Add(-time.Hour),
 		NotAfter:     time.Now().Add(time.Hour),
 		DNSNames:     []string{"localhost"},

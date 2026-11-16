@@ -72,16 +72,16 @@ const (
 func errNotExtName(name string) error { return fmt.Errorf("%q is not an extension name", name) }
 
 func extConfFile() string {
-	if p := os.Getenv("HADRON_UPDATE_EXT_CONF"); p != "" {
+	if p := os.Getenv("ISOTOPE_UPDATE_EXT_CONF"); p != "" {
 		return p
 	}
-	return "/etc/hadron-desktop/extensions.conf"
+	return "/etc/isotope/extensions.conf"
 }
 
 // extDir is where kairos-agent keeps installed extensions; enabled ones are
 // links in its common/ (and active/, passive/, recovery/) subdirectories.
 func extDir() string {
-	if p := os.Getenv("HADRON_UPDATE_EXT_DIR"); p != "" {
+	if p := os.Getenv("ISOTOPE_UPDATE_EXT_DIR"); p != "" {
 		return p
 	}
 	return "/var/lib/kairos/extensions"
@@ -89,7 +89,7 @@ func extDir() string {
 
 // extMergedDir holds a link for every extension systemd-sysext merges now.
 func extMergedDir() string {
-	if p := os.Getenv("HADRON_UPDATE_EXT_RUN_DIR"); p != "" {
+	if p := os.Getenv("ISOTOPE_UPDATE_EXT_RUN_DIR"); p != "" {
 		return p
 	}
 	return "/run/extensions"
@@ -98,10 +98,10 @@ func extMergedDir() string {
 // extStateDir keeps where each extension came from, which Kairos does not
 // record. It is ours; the Kairos directory is not.
 func extStateDir() string {
-	if p := os.Getenv("HADRON_UPDATE_EXT_STATE"); p != "" {
+	if p := os.Getenv("ISOTOPE_UPDATE_EXT_STATE"); p != "" {
 		return p
 	}
-	return "/var/lib/hadron-update/extensions"
+	return "/var/lib/isotope-update/extensions"
 }
 
 // hostRoot is the system the conflict check compares an extension with. A
@@ -123,7 +123,7 @@ func Catalogs() []string {
 	b, err := os.ReadFile(extConfFile())
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
-			fmt.Fprintf(os.Stderr, "hadron-update: cannot read %s: %v; using the default catalog\n", extConfFile(), err)
+			fmt.Fprintf(os.Stderr, "isotope-update: cannot read %s: %v; using the default catalog\n", extConfFile(), err)
 		}
 		return []string{defaultCatalog}
 	}
@@ -137,7 +137,7 @@ func Catalogs() []string {
 		v = strings.TrimSpace(v)
 		u, err := url.Parse(v)
 		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || strings.ContainsAny(v, ", \t") {
-			fmt.Fprintf(os.Stderr, "hadron-update: %s: ignoring catalog=%q, not an http(s) URL\n", extConfFile(), v)
+			fmt.Fprintf(os.Stderr, "isotope-update: %s: ignoring catalog=%q, not an http(s) URL\n", extConfFile(), v)
 			continue
 		}
 		out = append(out, v)
@@ -464,7 +464,7 @@ func unescapeC(s string) string {
 }
 
 // checkRelease refuses an extension built for another machine or another
-// system: ARCHITECTURE must be this machine's, ID `_any` or `hadron`.
+// system: ARCHITECTURE must be this machine's, ID `_any` or `isotope`.
 func checkRelease(rel map[string]string, goarch string) error {
 	if len(rel) == 0 {
 		return errors.New("it has no extension-release file, so it is not a system extension")
@@ -472,7 +472,7 @@ func checkRelease(rel map[string]string, goarch string) error {
 	if want := systemdArch[goarch]; rel["ARCHITECTURE"] != want {
 		return fmt.Errorf("it is built for the architecture %q, not %q", rel["ARCHITECTURE"], want)
 	}
-	if id := rel["ID"]; id != "_any" && id != "hadron" {
+	if id := rel["ID"]; id != "_any" && id != "isotope" {
 		return fmt.Errorf("it is built for the system %q, not for any system (_any) or Hadron", id)
 	}
 	return nil
@@ -565,10 +565,10 @@ type ExtBackend interface {
 	Dissect(path string) (ExtImage, error)
 }
 
-// systemdDissect is the dissect tool; HADRON_UPDATE_DISSECT replaces it for
+// systemdDissect is the dissect tool; ISOTOPE_UPDATE_DISSECT replaces it for
 // tests.
 func systemdDissect() string {
-	if p := os.Getenv("HADRON_UPDATE_DISSECT"); p != "" {
+	if p := os.Getenv("ISOTOPE_UPDATE_DISSECT"); p != "" {
 		return p
 	}
 	return "/usr/bin/systemd-dissect"
@@ -670,7 +670,7 @@ func streamCommand(name string, args []string, progress func(string)) error {
 	// A line over the buffer stops the scanner; say so, and keep draining so
 	// the child never blocks on a full pipe.
 	if err := sc.Err(); err != nil {
-		progress("hadron-update: stopped reading " + filepath.Base(name) + "'s output: " + err.Error())
+		progress("isotope-update: stopped reading " + filepath.Base(name) + "'s output: " + err.Error())
 	}
 	io.Copy(io.Discard, r)
 	return cmd.Wait()
@@ -703,7 +703,7 @@ func (d *Daemon) catalog(ctx context.Context) ([]CatalogEntry, error) {
 	for _, u := range urls {
 		l, err := fetchCatalog(ctx, u)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "hadron-update: skipping an extension catalog:", err)
+			fmt.Fprintln(os.Stderr, "isotope-update: skipping an extension catalog:", err)
 			errs = append(errs, err.Error())
 			continue
 		}
@@ -914,7 +914,7 @@ func (d *Daemon) InstallExtension(ref, version string, force bool) error {
 			return "", err
 		}
 		if err := recordSource(file, source); err != nil {
-			d.progress("hadron-update: could not record where the extension came from: " + err.Error())
+			d.progress("isotope-update: could not record where the extension came from: " + err.Error())
 		}
 		if err := d.ext.EnableExt(file, d.progress); err != nil {
 			return "", fmt.Errorf("%s is installed but could not be enabled: %w", extDisplayName(file), err)

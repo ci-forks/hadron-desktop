@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 # Tests for the agent session launcher (Phase 3, Task 6).
 #
-#   1. `sh -n` syntax-checks start-desktop and hadron-agent-session-ready.
-#   2. Drives hadron-agent-session-ready with a FAKE `systemctl` recorder and a
+#   1. `sh -n` syntax-checks start-desktop and isotope-agent-session-ready.
+#   2. Drives isotope-agent-session-ready with a FAKE `systemctl` recorder and a
 #      controlled environment, asserting that on a correct session it imports
 #      EXACTLY `DISPLAY XAUTHORITY DBUS_SESSION_BUS_ADDRESS` and restarts EXACTLY
-#      `hadron-agent-session.service`, and that it REFUSES (no systemctl calls)
+#      `isotope-agent-session.service`, and that it REFUSES (no systemctl calls)
 #      when a session var is missing or when DBUS points at a foreign bus.
 #   3. Structural assertions on start-desktop: it must NOT call dbus-run-session
-#      and MUST call hadron-agent-session-ready before exec-ing i3.
+#      and MUST call isotope-agent-session-ready before exec-ing i3.
 set -u
 
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 bin="$repo_root/rootfs-agent/usr/bin"
 launcher="$bin/start-desktop"
-ready="$bin/hadron-agent-session-ready"
+ready="$bin/isotope-agent-session-ready"
 
 fail=0
 err() { echo "FAIL: $*" >&2; fail=1; }
@@ -32,7 +32,7 @@ for f in "$launcher" "$ready"; do
 done
 
 # ---------------------------------------------------------------------------
-# 2. hadron-agent-session-ready behavior with a fake systemctl
+# 2. isotope-agent-session-ready behavior with a fake systemctl
 # ---------------------------------------------------------------------------
 workdir="$(mktemp -d)"
 trap 'rm -rf "$workdir"' EXIT
@@ -74,17 +74,17 @@ else
   err "import line was: '$(grep import-environment "$record" || true)'"
 fi
 
-if grep -qx -- '--user restart hadron-agent-session.service' "$record"; then
-  ok "restarts EXACTLY hadron-agent-session.service"
+if grep -qx -- '--user restart isotope-agent-session.service' "$record"; then
+  ok "restarts EXACTLY isotope-agent-session.service"
 else
   err "restart line was: '$(grep restart "$record" || true)'"
 fi
 
 # After the broker restart it also starts the agent's browser on the live display.
-if grep -qx -- '--user start hadron-agent-browser.service' "$record"; then
-  ok "starts EXACTLY hadron-agent-browser.service"
+if grep -qx -- '--user start isotope-agent-browser.service' "$record"; then
+  ok "starts EXACTLY isotope-agent-browser.service"
 else
-  err "browser start line was: '$(grep hadron-agent-browser "$record" || true)'"
+  err "browser start line was: '$(grep isotope-agent-browser "$record" || true)'"
 fi
 
 # Exactly three systemctl calls, nothing else: import-environment, restart, start.
@@ -137,14 +137,14 @@ else
   ok "start-desktop does NOT call dbus-run-session (shares the user-manager bus)"
 fi
 
-if grep -q 'hadron-agent-session-ready' "$code_only"; then
-  ok "start-desktop calls hadron-agent-session-ready"
+if grep -q 'isotope-agent-session-ready' "$code_only"; then
+  ok "start-desktop calls isotope-agent-session-ready"
 else
-  err "start-desktop never calls hadron-agent-session-ready"
+  err "start-desktop never calls isotope-agent-session-ready"
 fi
 
 # session-ready must be invoked BEFORE `exec i3`.
-ready_ln="$(grep -n 'hadron-agent-session-ready' "$code_only" | head -1 | cut -d: -f1)"
+ready_ln="$(grep -n 'isotope-agent-session-ready' "$code_only" | head -1 | cut -d: -f1)"
 exec_ln="$(grep -n 'exec i3' "$code_only" | head -1 | cut -d: -f1)"
 if [ -n "$ready_ln" ] && [ -n "$exec_ln" ] && [ "$ready_ln" -lt "$exec_ln" ]; then
   ok "session-ready runs before exec i3 (code line $ready_ln < $exec_ln)"
@@ -167,7 +167,7 @@ fi
 # ---------------------------------------------------------------------------
 # 4. Unit / drop-in shapes: watchdog install-mode exclusion + Ly agent profile.
 # ---------------------------------------------------------------------------
-wd="$repo_root/rootfs-agent/etc/systemd/system/hadron-agent-display-watchdog.service"
+wd="$repo_root/rootfs-agent/etc/systemd/system/isotope-agent-display-watchdog.service"
 lydrop="$repo_root/rootfs-agent/etc/systemd/system/ly@.service.d/20-agent-profile.conf"
 
 if [ -f "$wd" ]; then
@@ -175,10 +175,10 @@ if [ -f "$wd" ]; then
   grep -q 'ConditionKernelCommandLine=!install-mode' "$wd" \
     && ok "watchdog: ConditionKernelCommandLine=!install-mode" \
     || err "watchdog: missing ConditionKernelCommandLine=!install-mode"
-  grep -Eq 'After=.*hadron-agent-provision\.service.*ly@tty1\.service' "$wd" \
-    && ok "watchdog: After=hadron-agent-provision.service ly@tty1.service" \
+  grep -Eq 'After=.*isotope-agent-provision\.service.*ly@tty1\.service' "$wd" \
+    && ok "watchdog: After=isotope-agent-provision.service ly@tty1.service" \
     || err "watchdog: missing After ordering"
-  grep -q 'ExecStart=/usr/bin/hadron-agent display-watchdog --user agent --grace 30s' "$wd" \
+  grep -q 'ExecStart=/usr/bin/isotope-agent display-watchdog --user agent --grace 30s' "$wd" \
     && ok "watchdog: ExecStart display-watchdog --user agent --grace 30s" \
     || err "watchdog: wrong ExecStart"
   # It must never launch a display itself.

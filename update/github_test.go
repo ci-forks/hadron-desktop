@@ -13,7 +13,7 @@ func TestFetchReleasesSkipsDraftsAndPrereleases(t *testing.T) {
 		{"tag_name":"v0.0.7","draft":true},
 		{"tag_name":"v0.0.4","html_url":"u4"}
 	]`)
-	got, err := FetchReleases(context.Background(), "kairos-community/hadron-desktop")
+	got, err := FetchReleases(context.Background(), "kairos-community/isotope")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func TestFetchReleasesSkipsDraftsAndPrereleases(t *testing.T) {
 
 func TestFetchReleasesSortsNewestFirst(t *testing.T) {
 	fakeGitHubReleases(t, "v0.0.5", `[{"tag_name":"v0.0.4"},{"tag_name":"v0.0.10"},{"tag_name":"v0.0.5"}]`)
-	got, err := FetchReleases(context.Background(), "kairos-community/hadron-desktop")
+	got, err := FetchReleases(context.Background(), "kairos-community/isotope")
 	if err != nil {
 		t.Fatal(err)
 	}

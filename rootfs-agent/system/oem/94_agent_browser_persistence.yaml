@@ -1,9 +1,9 @@
 # Persist Chromium's Flatpak install across reboots.
 #
 # Kairos does not persist /var/lib, so a system Flatpak install (/var/lib/flatpak)
-# would be wiped every boot and hadron-agent-browser-install would re-download
+# would be wiped every boot and isotope-agent-browser-install would re-download
 # ~2 GB each time. This bind-mounts it onto the persistent partition, matching how
-# 92_docker persists /var/lib/docker and 93_agent persists /var/lib/hadron-agent.
+# 92_docker persists /var/lib/docker and 93_agent persists /var/lib/isotope-agent.
 #
 # The append is deliberate and mirrors 93_agent_persistence.yaml: cos-setup's
 # rootfs.after stage consumes CUSTOM_BIND_MOUNTS once, so a plain `environment:`
@@ -13,9 +13,9 @@
 #
 # No `if:` guard, for the same reason 93_ documents: the rootfs stage runs in the
 # initramfs, where the installed /etc is not yet live, so a guard on
-# /etc/hadron-agent/profile silently skips the stage. This file ships only in the
+# /etc/isotope-agent/profile silently skips the stage. This file ships only in the
 # agent overlay, so its presence is the profile check.
-name: "Hadron agent Chromium persistence"
+name: "Isotope agent Chromium persistence"
 stages:
   rootfs:
     - name: "persist /var/lib/flatpak across reboots"

@@ -1,4 +1,4 @@
-// Package control implements the local emergency controller for hadron-agent:
+// Package control implements the local emergency controller for isotope-agent:
 // the in-process object that owns a cancellable "generation" every active MCP
 // call runs under, the paused flag that rejects new calls, and the fan-out
 // that tells both brokers (the unprivileged session broker and the privileged
@@ -30,7 +30,7 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/mudler/hadron-desktop/agent/internal/rpc"
+	"github.com/kairos-community/isotope/agent/internal/rpc"
 )
 
 // Broker is the lifecycle subset of a broker the controller drives on pause

@@ -16,9 +16,9 @@ type InspectInfo struct {
 	Ref, Digest, OS, Arch, Flavor, Version string
 	// GPU is the image line, full or vm, or "" when the image does not say.
 	GPU string
-	// Trusted: a published release; Hadron: trusted, or labelled as a
-	// Hadron Desktop image by its publisher.
-	Trusted, Hadron bool
+	// Trusted: a published release; Isotope: trusted, or labelled as a
+	// Isotope image by its publisher.
+	Trusted, Isotope bool
 	// Refusal is why the daemon will not install the image; Overridable says
 	// an explicit second answer from the user can lift it.
 	Refusal     string
@@ -55,7 +55,7 @@ type daemonClient interface {
 var dialDaemon = func() (daemonClient, error) { return dial() }
 
 // daemonError is a D-Bus error from the service, reduced to the short name
-// after "io.kairos.HadronUpdate1.Error." (Busy, Refused, ...).
+// after "io.kairos.IsotopeUpdate1.Error." (Busy, Refused, ...).
 type daemonError struct{ Name, Msg string }
 
 func (e *daemonError) Error() string { return e.Msg }
@@ -154,7 +154,7 @@ func (c *client) Inspect(ref string, advanced bool) (InspectInfo, error) {
 	}
 	return InspectInfo{
 		Ref: str(m, "ref"), Digest: str(m, "digest"), OS: str(m, "os"), Arch: str(m, "arch"),
-		Flavor: str(m, "flavor"), Version: str(m, "version"), GPU: str(m, "gpu"), Hadron: boolean(m, "hadron"),
+		Flavor: str(m, "flavor"), Version: str(m, "version"), GPU: str(m, "gpu"), Isotope: boolean(m, "isotope"),
 		Trusted: boolean(m, "trusted"), Refusal: str(m, "refusal"), Overridable: boolean(m, "overridable"),
 	}, nil
 }

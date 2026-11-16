@@ -2,10 +2,10 @@
 
 set -u
 
-runtime_dir=/run/user/1000/hadron-cua-compat
-stage_dir=/run/hadron-cua-compat-report
-tar_path=/run/hadron-cua-compat.tar
-artifact_device=/dev/disk/by-id/virtio-hadronagentartifacts
+runtime_dir=/run/user/1000/isotope-cua-compat
+stage_dir=/run/isotope-cua-compat-report
+tar_path=/run/isotope-cua-compat.tar
+artifact_device=/dev/disk/by-id/virtio-isotopeagentartifacts
 
 exec 3>/dev/ttyS0 || exit 1
 exec >/dev/null 2>&1
@@ -63,12 +63,12 @@ else
     record 'collector runtime directory is absent'
 fi
 
-if ! cp /run/user/1000/hadron-cua-gtk-state.json \
+if ! cp /run/user/1000/isotope-cua-gtk-state.json \
     "$stage_dir/gtk-state.json"; then
     stage_ok=0
     record 'failed to stage GTK state'
 fi
-if ! cp /etc/hadron-agent-test/chromium-commit \
+if ! cp /etc/isotope-agent-test/chromium-commit \
     "$stage_dir/chromium.commit"; then
     stage_ok=0
     record 'failed to stage Chromium commit'

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mudler/hadron-desktop/agent/internal/rpc"
+	"github.com/kairos-community/isotope/agent/internal/rpc"
 )
 
 // fakeBroker records pause/resume calls so a test can assert the controller

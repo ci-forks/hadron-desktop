@@ -1,4 +1,4 @@
-# Sway config for Hadron Desktop — Tokyo Night, sane defaults.
+# Sway config for Isotope, in the Isotope palette, sane defaults.
 # A usable out-of-the-box setup: gaps, workspaces, media keys, screenshots.
 
 ### Variables ##############################################################
@@ -10,18 +10,18 @@ set $down  j
 set $up    k
 set $right l
 
-# Hadron palette. Generated from theme/palette.toml by tools/gen-theme.py:
+# Isotope palette. Generated from theme/palette.toml by tools/gen-theme.py:
 # edit the palette, not these values. Inactive titles and workspace labels use
 # $dim, not the darker decoration grey, so they stay readable.
-set $bg      #1a1b26
-set $bg_alt  #24283b
-set $fg      #c0caf5
-set $blue    #7aa2f7
-set $cyan    #7dcfff
-set $magenta #bb9af7
+set $bg      #15141c
+set $bg_alt  #1f1e28
+set $fg      #f2f1f5
+set $blue    #8fd12e
+set $cyan    #c6f36b
+set $magenta #b49cf2
 set $red     #f7768e
-set $dim     #737aa2
-set $border  #414868
+set $dim     #8f8ba3
+set $border  #3c3a49
 
 ### Appearance ############################################################
 font pango:Inter Variable 10
@@ -43,12 +43,12 @@ client.focused_inactive $border  $bg      $dim   $border   $border
 client.unfocused        $border  $bg      $dim   $border   $bg
 client.urgent           $red     $red     $fg    $red      $red
 
-# Wallpaper: the Hadron orbits, scaled to fill each output. The solid line
+# Wallpaper: the Isotope tiles, scaled to fill each output. The solid line
 # first, because sway rejects an `output bg` whose file is missing (and swaybg
 # paints the fallback colour only if a file it found will not load), so either
 # way the desktop stays $bg rather than sway's grey.
 output * bg $bg solid_color
-output * bg /usr/share/backgrounds/hadron/hadron-orbits-night-3840x2160.png fill $bg
+output * bg /usr/share/backgrounds/isotope/isotope-tiles-night-3840x2160.png fill $bg
 
 ### Input #################################################################
 input type:touchpad {
@@ -73,17 +73,17 @@ exec mako
 exec swayidle -w timeout 300 'swaylock -f' timeout 600 'swaymsg "output * dpms off"' resume 'swaymsg "output * dpms on"' before-sleep 'swaylock -f' lock 'swaylock -f'
 exec $term
 # First-login welcome (once per user), and the update icon in waybar's tray,
-# which shows when a new Hadron Desktop is out and installs it. Both use the
+# which shows when a new Isotope is out and installs it. Both use the
 # session bus start-desktop opened.
-exec hadron-welcome
-exec hadron-update tray
+exec isotope-welcome
+exec isotope-update tray
 # First-run app picker (a browser and essentials from Flathub), once per user,
 # after the network is up; it runs in the background.
-exec hadron-first-run-apps --login
+exec isotope-first-run-apps --login
 # Night light (wlsunset), if the user turned it on in an earlier session.
-exec hadron-night-light restore
+exec isotope-night-light restore
 # Clipboard history (Super+Ctrl+V): wl-paste gives each copy to cliphist.
-exec hadron-clipboard daemon
+exec isotope-clipboard daemon
 
 ### Key bindings ##########################################################
 # help-row: Windows | Super + drag | Move a floating window with the mouse
@@ -98,27 +98,27 @@ bindsym $mod+d             exec $menu
 bindsym $mod+Shift+q       kill
 bindsym $mod+Shift+c       reload
 # help: Power menu: log out, suspend, reboot, power off
-bindsym $mod+Shift+e       exec hadron-power-menu
+bindsym $mod+Shift+e       exec isotope-power-menu
 # help-section: System
 # help: Lock the screen
 bindsym $mod+Mod1+l        exec swaylock -f
 # help-section: Basics
 # help: This help
-bindsym $mod+F1            exec foot --app-id=floatterm -T "Keyboard shortcuts" hadron-help
+bindsym $mod+F1            exec foot --app-id=floatterm -T "Keyboard shortcuts" isotope-help
 # help-section: Basics
 # help: Clipboard history: copy an earlier entry again
-bindsym $mod+Ctrl+v        exec hadron-clipboard
-# The Hadron menu: apps, Wi-Fi, Bluetooth, audio, capture, update, help, power.
-# help: Hadron menu: apps, Wi-Fi, Bluetooth, updates, power
-bindsym $mod+Escape        exec hadron-menu
+bindsym $mod+Ctrl+v        exec isotope-clipboard
+# The Isotope menu: apps, Wi-Fi, Bluetooth, audio, capture, update, help, power.
+# help: Isotope menu: apps, Wi-Fi, Bluetooth, updates, power
+bindsym $mod+Escape        exec isotope-menu
 # Night light on and off: a warmer screen from 20:00 to 07:00.
 # help-section: System
 # help: Night light on and off
-bindsym $mod+Mod1+n        exec hadron-night-light toggle
+bindsym $mod+Mod1+n        exec isotope-night-light toggle
 # The emoji picker: copies the chosen emoji to the clipboard.
 # help-section: Basics
 # help: Emoji picker: copies the chosen emoji
-bindsym $mod+semicolon     exec hadron-emoji
+bindsym $mod+semicolon     exec isotope-emoji
 
 # Focus
 # help-section: Windows
@@ -212,46 +212,46 @@ bindsym $mod+Print  exec grim -g "$(slurp)" - | wl-copy
 
 # Hardware keys: volume (wpctl), screen brightness (logind) and playback
 # (MPRIS), with the new level in a mako pop-up. They work on the lock screen.
-bindsym --locked XF86AudioRaiseVolume  exec hadron-media-key volume-up
-bindsym --locked XF86AudioLowerVolume  exec hadron-media-key volume-down
-bindsym --locked XF86AudioMute         exec hadron-media-key mute
-bindsym --locked XF86AudioMicMute      exec hadron-media-key mic-mute
-bindsym --locked XF86MonBrightnessUp   exec hadron-media-key brightness-up
-bindsym --locked XF86MonBrightnessDown exec hadron-media-key brightness-down
-bindsym --locked XF86AudioPlay         exec hadron-media-key play-pause
-bindsym --locked XF86AudioPause        exec hadron-media-key play-pause
-bindsym --locked XF86AudioNext         exec hadron-media-key next
-bindsym --locked XF86AudioPrev         exec hadron-media-key previous
-bindsym --locked XF86AudioStop         exec hadron-media-key stop
+bindsym --locked XF86AudioRaiseVolume  exec isotope-media-key volume-up
+bindsym --locked XF86AudioLowerVolume  exec isotope-media-key volume-down
+bindsym --locked XF86AudioMute         exec isotope-media-key mute
+bindsym --locked XF86AudioMicMute      exec isotope-media-key mic-mute
+bindsym --locked XF86MonBrightnessUp   exec isotope-media-key brightness-up
+bindsym --locked XF86MonBrightnessDown exec isotope-media-key brightness-down
+bindsym --locked XF86AudioPlay         exec isotope-media-key play-pause
+bindsym --locked XF86AudioPause        exec isotope-media-key play-pause
+bindsym --locked XF86AudioNext         exec isotope-media-key next
+bindsym --locked XF86AudioPrev         exec isotope-media-key previous
+bindsym --locked XF86AudioStop         exec isotope-media-key stop
 
 ### System control (no tray needed) #######################################
 # Network: a fuzzel Wi-Fi picker over nmcli. Bluetooth: a fuzzel menu over
 # bluetoothctl. Audio: fuzzel output switcher over wpctl (+ the media keys).
 # help-section: System
 # help: Wi-Fi
-bindsym $mod+n       exec hadron-wifi-menu
+bindsym $mod+n       exec isotope-wifi-menu
 # help: Audio output
-bindsym $mod+Shift+a exec hadron-audio-menu
+bindsym $mod+Shift+a exec isotope-audio-menu
 # help: Bluetooth
-bindsym $mod+Shift+b exec hadron-bluetooth-menu
+bindsym $mod+Shift+b exec isotope-bluetooth-menu
 # Notifications (mako): close the newest, close all, show the last closed,
 # do not disturb on/off.
 # help-section: Notifications
 # help: Close the newest notification
-bindsym $mod+BackSpace       exec hadron-notify-key dismiss
+bindsym $mod+BackSpace       exec isotope-notify-key dismiss
 # help: Close all notifications
-bindsym $mod+Shift+BackSpace exec hadron-notify-key dismiss-all
+bindsym $mod+Shift+BackSpace exec isotope-notify-key dismiss-all
 # help: Show the last closed notification
-bindsym $mod+Ctrl+BackSpace  exec hadron-notify-key restore
+bindsym $mod+Ctrl+BackSpace  exec isotope-notify-key restore
 # help: Do not disturb on/off
-bindsym $mod+Mod1+BackSpace  exec hadron-notify-key dnd
+bindsym $mod+Mod1+BackSpace  exec isotope-notify-key dnd
 # floating "control" terminals (the shortcut sheet etc.), centered and sized
 for_window [app_id="floatterm"] floating enable, resize set 820 520, move position center
 for_window [app_id="floatterm" title="Keyboard shortcuts"] resize set 900 720, move position center
 
 ### Status bar ############################################################
-# waybar (Tokyo Night) — config at /etc/xdg/waybar/{config,style.css}. Modules:
-# workspaces, clock, network (click → hadron-wifi-menu), bluetooth, wireplumber
+# waybar (Isotope palette) — config at /etc/xdg/waybar/{config,style.css}. Modules:
+# workspaces, clock, network (click → isotope-wifi-menu), bluetooth, wireplumber
 # (audio), cpu/memory/battery and an SNI system tray for applet icons.
 bar {
     swaybar_command waybar

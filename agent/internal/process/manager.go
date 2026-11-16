@@ -38,7 +38,7 @@ import (
 	"time"
 
 	"github.com/creack/pty"
-	"github.com/mudler/hadron-desktop/agent/internal/api"
+	"github.com/kairos-community/isotope/agent/internal/api"
 )
 
 // Bounds and defaults fixed by the task brief.

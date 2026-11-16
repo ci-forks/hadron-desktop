@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mudler/hadron-desktop/agent/internal/auth"
+	"github.com/kairos-community/isotope/agent/internal/auth"
 )
 
 // sha256Digest returns the "sha256:<hex>" digest of a complete bearer string,
@@ -127,9 +127,9 @@ func TestMaterializeLiveFirstBoot(t *testing.T) {
 	}
 
 	// The gateway TLS material and config exist with the intended owners/modes.
-	assertPersisted(t, res.Files, "gateway/config.json", 0o440, "root", "hadron-agent-gateway")
-	assertPersisted(t, res.Files, "gateway/tls.crt", 0o440, "root", "hadron-agent-gateway")
-	assertPersisted(t, res.Files, "gateway/tls.key", 0o440, "root", "hadron-agent-gateway")
+	assertPersisted(t, res.Files, "gateway/config.json", 0o440, "root", "isotope-agent-gateway")
+	assertPersisted(t, res.Files, "gateway/tls.crt", 0o440, "root", "isotope-agent-gateway")
+	assertPersisted(t, res.Files, "gateway/tls.key", 0o440, "root", "isotope-agent-gateway")
 	assertPersisted(t, res.Files, "session/config.json", 0o440, "root", "agent")
 
 	// No admin: no root files.

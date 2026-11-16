@@ -1,5 +1,5 @@
 // This file is the READ side of the machine state state.go writes: the public
-// loaders the hadron-agent gateway/session/root-helper services call at startup
+// loaders the isotope-agent gateway/session/root-helper services call at startup
 // to derive their entire configuration (listen address, TLS paths, bearer
 // rotation, and limits) from the config.json the provisioner persisted, instead
 // of re-plumbing every value through flags and environment variables.
@@ -16,7 +16,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/mudler/hadron-desktop/agent/internal/auth"
+	"github.com/kairos-community/isotope/agent/internal/auth"
 )
 
 // LoadGatewayConfig reads and decodes a gateway config.json (the file

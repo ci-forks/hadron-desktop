@@ -21,7 +21,7 @@ check() {
     fi
 }
 
-T=/etc/kairos/branding/hadron-theme/theme.txt
+T=/etc/kairos/branding/isotope-theme/theme.txt
 check "vconsole.conf present"        'test -f /etc/vconsole.conf'
 check "vconsole.conf sets a font"    'grep -q "^FONT=" /etc/vconsole.conf'
 check "theme.txt present"            "test -f $T"
@@ -37,37 +37,37 @@ check "grubmenu.cfg leaves splash/quiet to kairos-init" \
     "! grep -E '^set extra_cmdline=.*(quiet|splash)' $G"
 check "grubmenu.cfg preserves any pre-existing extra_cmdline" \
     "grep -q 'set extra_cmdline=\"\${extra_cmdline}' $G"
-check "grubmenu.cfg sets the console palette (navy, not black)" \
-    "grep -q '^set hadron_vt_palette=\"vt.default_red=0x1a,' $G && grep -q 'extra_cmdline}.*\${hadron_vt_palette}' $G"
+check "grubmenu.cfg sets the console palette (violet ink, not black)" \
+    "grep -q '^set isotope_vt_palette=\"vt.default_red=0x1a,' $G && grep -q 'extra_cmdline}.*\${isotope_vt_palette}' $G"
 
 # The installed EFI GRUB's $prefix is (COS_STATE)/grub2. A command.lst in
 # $prefix/<platform> makes rmmod a real command, and /etc/cos/grub.cfg's
-# `rmmod tpm` then prints "no such module" on every boot. hadron-grub-theme must
+# `rmmod tpm` then prints "no such module" on every boot. isotope-grub-theme must
 # put the theme modules elsewhere, without a command.lst (GRUB also reads it
 # when grubmenu.cfg sets $prefix), and remove the tree older releases left at
 # $prefix, keeping the modules kairos-agent put there.
-S=/tmp/hadron-grub-state
+S=/tmp/isotope-grub-state
 P="\$(cd /usr/lib/grub && ls -d *-efi | head -1)"
-check "hadron-grub-theme keeps its modules out of the EFI \$prefix" \
+check "isotope-grub-theme keeps its modules out of the EFI \$prefix" \
     "p=$P && mkdir -p $S/grub2/\$p && touch $S/grub2/\$p/command.lst $S/grub2/\$p/gfxmenu.mod $S/grub2/\$p/loopback.mod && \
-     ! /usr/libexec/hadron-grub-theme --check $S && /usr/libexec/hadron-grub-theme $S && \
-     /usr/libexec/hadron-grub-theme --check $S && \
+     ! /usr/libexec/isotope-grub-theme --check $S && /usr/libexec/isotope-grub-theme $S && \
+     /usr/libexec/isotope-grub-theme --check $S && \
      test ! -e $S/grub2/\$p/command.lst -a ! -e $S/grub2/\$p/gfxmenu.mod -a -e $S/grub2/\$p/loopback.mod && \
-     test -f $S/hadron/grub2/\$p/tga.mod -a -f $S/hadron/grub2/\$p/moddep.lst -a -f $S/themes/hadron/theme.txt && \
-     test ! -e $S/hadron/grub2/\$p/command.lst && \
+     test -f $S/isotope/grub2/\$p/tga.mod -a -f $S/isotope/grub2/\$p/moddep.lst -a -f $S/themes/isotope/theme.txt && \
+     test ! -e $S/isotope/grub2/\$p/command.lst && \
      [ \"\$(md5sum < $G)\" = \"\$(md5sum < $S/grubmenu)\" ]"
 check "grubmenu.cfg loads the theme modules from \$prefix first" \
     "grep -q 'if \[ -f \"\${prefix}/\${grub_cpu}-\${grub_platform}/tga.mod\" \]' $G && \
-     grep -q 'set prefix=\"(\${menu_blk})/hadron/grub2\"' $G && ! grep -q 'set prefix=(\${menu_blk})/grub2' $G"
+     grep -q 'set prefix=\"(\${menu_blk})/isotope/grub2\"' $G && ! grep -q 'set prefix=(\${menu_blk})/grub2' $G"
 check "grubmenu.cfg leaves the font to loadfont unicode" "! grep -q '^ *loadfont' $G"
 
-# The Hadron wallpapers are drawn at build time; every variant points at these.
-WP=/usr/share/backgrounds/hadron
-for w in hadron-orbits-night-3840x2160 hadron-plain-night-1920x1080; do
+# The Isotope wallpapers are drawn at build time; every variant points at these.
+WP=/usr/share/backgrounds/isotope
+for w in isotope-tiles-night-3840x2160 isotope-plain-night-1920x1080; do
     check "wallpaper $w.png is a PNG" "[ \"\$(head -c 4 $WP/$w.png | tail -c 3)\" = PNG ]"
 done
 case "${EXPECTED%% *}" in niri|cosmic)
-    check "the day wallpaper is a PNG" "[ \"\$(head -c 4 $WP/hadron-orbits-day-3840x2160.png | tail -c 3)\" = PNG ]" ;;
+    check "the day wallpaper is a PNG" "[ \"\$(head -c 4 $WP/isotope-tiles-day-3840x2160.png | tail -c 3)\" = PNG ]" ;;
 esac
 # ly runs on the 16-colour console: no animation, the console's own colours.
 if [ "${EXPECTED%% *}" != cosmic ]; then
@@ -76,14 +76,14 @@ if [ "${EXPECTED%% *}" != cosmic ]; then
     check "no third-party ly animation file ships" "! ls /etc/ly/*.dur 2>/dev/null | grep -q ."
 fi
 
-# Release identity: hadron-update builds the upgrade image reference from it.
-R=/etc/hadron-desktop/release
+# Release identity: isotope-update builds the upgrade image reference from it.
+R=/etc/isotope/release
 FLAVOR="${EXPECTED_FLAVOR:-${EXPECTED%% *}}"
 check "release file names the '$FLAVOR' image line" "grep -qx 'FLAVOR=$FLAVOR' $R"
 check "release file records the Hadron base" "grep -Eq '^HADRON_VERSION=v[0-9]' $R"
 check "release file points at the published image repo" \
-    "grep -qx 'IMAGE_REPO=ghcr.io/kairos-community/hadron-desktop' $R"
-check "hadron-update is installed and runs" "hadron-update help | grep -q upgrade"
+    "grep -qx 'IMAGE_REPO=ghcr.io/kairos-community/isotope' $R"
+check "isotope-update is installed and runs" "isotope-update help | grep -q upgrade"
 # Screen lockers run as the user; pam_unix needs this setuid helper to check
 # the password, or nobody can unlock.
 check "unix_chkpwd is setuid (screen unlock)" "test -u /usr/sbin/unix_chkpwd"
@@ -111,11 +111,11 @@ fi
 if [ "$FLAVOR" = niri ]; then
     # A config error makes niri fall back to an empty default with no shell.
     check "the shipped niri config validates" "niri validate -c /etc/niri/config.kdl"
-    check "niri config starts Noctalia" "grep -qx 'spawn-at-startup \"hadron-noctalia\"' /etc/niri/config.kdl"
+    check "niri config starts Noctalia" "grep -qx 'spawn-at-startup \"isotope-noctalia\"' /etc/niri/config.kdl"
     # Noctalia's polkit agent is off unless configured; without it privileged
     # requests fail instead of asking for the password.
-    check "Hadron's Noctalia defaults turn the polkit agent on" \
-        "grep -qx 'polkit_agent = true' /usr/share/hadron-desktop/noctalia-defaults.toml && test -x /usr/bin/hadron-noctalia"
+    check "Isotope's Noctalia defaults turn the polkit agent on" \
+        "grep -qx 'polkit_agent = true' /usr/share/isotope/noctalia-defaults.toml && test -x /usr/bin/isotope-noctalia"
     check "ly offers the niri session" "grep -q '^Exec=niri-session' /usr/share/wayland-sessions/niri.desktop"
     # The build stages check ldd against their own build root; this checks
     # the image, where a library a stage built but the rootfs never copied
@@ -166,8 +166,8 @@ if [ -n "$desktop" ]; then
         "grep -q 'org.freedesktop.impl.portal.Settings' $P/portals/$settings.portal"
     if [ "$settings" = gtk ]; then
         # xdg-desktop-portal-gtk reads the colour scheme from GSettings.
-        check "Hadron's dark GSettings override is installed" \
-            "grep -qx \"color-scheme='prefer-dark'\" /usr/share/glib-2.0/schemas/90_hadron.gschema.override"
+        check "Isotope's dark GSettings override is installed" \
+            "grep -qx \"color-scheme='prefer-dark'\" /usr/share/glib-2.0/schemas/90_isotope.gschema.override"
         check "the GSettings schemas are compiled" "test -f /usr/share/glib-2.0/schemas/gschemas.compiled"
         check "GSettings reports the dark colour scheme" \
             "[ \"\$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null)\" = \"'prefer-dark'\" ]"

@@ -57,10 +57,10 @@ COPY --from=fixture-runtime /usr/share/pkgconfig/ /usr/share/pkgconfig/
 ENV PKG_CONFIG_PATH=/usr/lib/pkgconfig:/usr/share/pkgconfig
 COPY test/agent/fixtures/gtk3/main.c /src/main.c
 RUN mkdir -p /out && cc -O2 -Wall -Wextra \$(pkg-config --cflags gtk+-3.0) \\
-      /src/main.c -o /out/hadron-cua-gtk \$(pkg-config --libs gtk+-3.0)
+      /src/main.c -o /out/isotope-cua-gtk \$(pkg-config --libs gtk+-3.0)
 
 FROM scratch
-COPY --from=fixture-build /out/hadron-cua-gtk /hadron-cua-gtk
+COPY --from=fixture-build /out/isotope-cua-gtk /isotope-cua-gtk
 DOCKERFILE
 then
   cat "$stage/build.log" >&2
@@ -69,12 +69,12 @@ fi
 
 iid="$(cat "$stage/iid")"
 cid="$(docker create "$iid" /nonexistent)"
-docker cp "$cid:/hadron-cua-gtk" "$stage/bin/hadron-cua-gtk" >/dev/null
+docker cp "$cid:/isotope-cua-gtk" "$stage/bin/isotope-cua-gtk" >/dev/null
 docker rm -f "$cid" >/dev/null 2>&1 || true
 docker rmi -f "$iid" >/dev/null 2>&1 || true
 
-[ -s "$stage/bin/hadron-cua-gtk" ] || die "the fixture build produced an empty binary"
-chmod 755 "$stage/bin/hadron-cua-gtk"
+[ -s "$stage/bin/isotope-cua-gtk" ] || die "the fixture build produced an empty binary"
+chmod 755 "$stage/bin/isotope-cua-gtk"
 cp "$HTML" "$stage/web/index.html"
 cp "$COMMIT" "$stage/web/chromium.commit"
 

@@ -48,10 +48,10 @@ type trayApp struct {
 	// clicks carries menu item IDs from the tray library to run.
 	clicks chan string
 	// notify and launch are seams: a desktop notification, and a terminal
-	// running `hadron-update <args>`.
+	// running `isotope-update <args>`.
 	notify func(summary, body string) error
 	launch func(args ...string) error
-	// openMenu opens an entry of hadron-menu, the same one Super+Escape
+	// openMenu opens an entry of isotope-menu, the same one Super+Escape
 	// shows: "Extensions" is one list on every variant.
 	openMenu func(entry string) error
 	// noIcon makes the notification point at the CLI: there is no menu.
@@ -69,13 +69,13 @@ type trayApp struct {
 func newTrayApp(rel Release, ui trayUI, dial func() (daemonClient, error), logOut io.Writer) *trayApp {
 	a := &trayApp{
 		rel: rel, ui: ui, dial: dial,
-		log:        log.New(logOut, "hadron-update: ", 0),
+		log:        log.New(logOut, "isotope-update: ", 0),
 		clicks:     make(chan string, 8),
 		notify:     Notify,
 		firstCheck: notifyDelay, interval: notifyInterval, retry: trayRetry,
 	}
 	a.launch = func(args ...string) error { return openTerminal(args, logOut) }
-	a.openMenu = openHadronMenu
+	a.openMenu = openIsotopeMenu
 	return a
 }
 
@@ -277,7 +277,7 @@ func (a *trayApp) click(c daemonClient, id string) {
 		if id == "rollback" {
 			msg = describeRollbackError(err, a.st.Pending)
 		}
-		if nerr := a.notify("Hadron Desktop update", msg); nerr != nil {
+		if nerr := a.notify("Isotope update", msg); nerr != nil {
 			a.log.Printf("showing a notification: %v", nerr)
 		}
 	}
@@ -306,9 +306,9 @@ func announce(c daemonClient, rel Release, st Status, noIcon bool, notify func(s
 	}
 	body := fmt.Sprintf("You are on %s. Install it from the update icon's menu in the panel.", orUnknown(st.Installed))
 	if noIcon {
-		body = fmt.Sprintf("You are on %s. Run `hadron-update upgrade` in a terminal to install it.", orUnknown(st.Installed))
+		body = fmt.Sprintf("You are on %s. Run `isotope-update upgrade` in a terminal to install it.", orUnknown(st.Installed))
 	}
-	if err := notify(fmt.Sprintf("Hadron Desktop %s is available", st.Latest), body); err != nil {
+	if err := notify(fmt.Sprintf("Isotope %s is available", st.Latest), body); err != nil {
 		return err
 	}
 	if err := markNotified(st.Latest); err != nil {
@@ -326,10 +326,10 @@ func busyState(s State) bool {
 
 // defaultSessionFile names the variant's session settings, among them
 // TERMINAL_EXEC, the terminal the tray opens the CLI in.
-const defaultSessionFile = "/etc/hadron-desktop/session"
+const defaultSessionFile = "/etc/isotope/session"
 
 func sessionFile() string {
-	if p := os.Getenv("HADRON_UPDATE_SESSION_FILE"); p != "" {
+	if p := os.Getenv("ISOTOPE_UPDATE_SESSION_FILE"); p != "" {
 		return p
 	}
 	return defaultSessionFile
@@ -348,16 +348,16 @@ func terminalArgv(self string, args []string, logOut io.Writer) ([]string, error
 		pre []string
 	}{{"foot", nil}, {"xterm", []string{"-e"}}} {
 		if p, err := exec.LookPath(t.bin); err == nil {
-			fmt.Fprintf(logOut, "hadron-update: %s sets no TERMINAL_EXEC; using %s\n", sessionFile(), p)
+			fmt.Fprintf(logOut, "isotope-update: %s sets no TERMINAL_EXEC; using %s\n", sessionFile(), p)
 			return append(append(append([]string{p}, t.pre...), self), args...), nil
 		}
 	}
 	return nil, fmt.Errorf("no terminal to open: %s sets no TERMINAL_EXEC, and neither foot nor xterm is installed", sessionFile())
 }
 
-// openHadronMenu runs `hadron-menu ENTRY` and does not wait for it.
-func openHadronMenu(entry string) error {
-	cmd := exec.Command("hadron-menu", entry)
+// openIsotopeMenu runs `isotope-menu ENTRY` and does not wait for it.
+func openIsotopeMenu(entry string) error {
+	cmd := exec.Command("isotope-menu", entry)
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -369,7 +369,7 @@ func openHadronMenu(entry string) error {
 func openTerminal(args []string, logOut io.Writer) error {
 	self, err := os.Executable()
 	if err != nil {
-		self = "hadron-update"
+		self = "isotope-update"
 	}
 	argv, err := terminalArgv(self, args, logOut)
 	if err != nil {

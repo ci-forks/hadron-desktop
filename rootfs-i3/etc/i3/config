@@ -1,25 +1,25 @@
-# i3 config for Hadron Desktop — Tokyo Night, matching the Sway variant.
+# i3 config for Isotope, in the Isotope palette, matching the Sway variant.
 
 set $mod   Mod4
 set $term  st
-set $menu  hadron-apps
+set $menu  isotope-apps
 set $left  h
 set $down  j
 set $up    k
 set $right l
 
-# Hadron palette. Generated from theme/palette.toml by tools/gen-theme.py:
+# Isotope palette. Generated from theme/palette.toml by tools/gen-theme.py:
 # edit the palette, not these values. Inactive titles and workspace labels use
 # $dim, not the darker decoration grey, so they stay readable.
-set $bg      #1a1b26
-set $bg_alt  #24283b
-set $fg      #c0caf5
-set $blue    #7aa2f7
-set $cyan    #7dcfff
-set $magenta #bb9af7
+set $bg      #15141c
+set $bg_alt  #1f1e28
+set $fg      #f2f1f5
+set $blue    #8fd12e
+set $cyan    #c6f36b
+set $magenta #b49cf2
 set $red     #f7768e
-set $dim     #737aa2
-set $border  #414868
+set $dim     #8f8ba3
+set $border  #3c3a49
 
 font pango:Inter Variable 10
 default_border pixel 2
@@ -40,22 +40,22 @@ client.background       $bg
 
 # Shared desktop services. User systemd also socket-activates the audio stack;
 # these commands are harmless when it is already running.
-# The Hadron wallpaper, scaled to fill each monitor, on the base colour (which
+# The Isotope wallpaper, scaled to fill each monitor, on the base colour (which
 # also shows if the image is missing). exec_always repaints it when i3 restarts,
 # e.g. after a monitor is plugged in.
-exec_always --no-startup-id hadron-xroot '#1a1b26' /usr/share/backgrounds/hadron/hadron-orbits-night-3840x2160.png
+exec_always --no-startup-id isotope-xroot '#15141c' /usr/share/backgrounds/isotope/isotope-tiles-night-3840x2160.png
 exec --no-startup-id /usr/bin/pipewire
 exec --no-startup-id /usr/bin/wireplumber
 exec --no-startup-id dunst
 exec --no-startup-id $term
 # First-login welcome (once per user). It talks to dunst over the session bus
 # start-desktop opened. The update icon starts from config.d/30-update-tray.conf.
-exec --no-startup-id hadron-welcome
+exec --no-startup-id isotope-welcome
 # First-run app picker (a browser and essentials from Flathub), once per user,
 # after the network is up. The agent image deletes this line.
-exec --no-startup-id hadron-first-run-apps --login
+exec --no-startup-id isotope-first-run-apps --login
 # Night light (xsct), if the user turned it on in an earlier session.
-exec --no-startup-id hadron-night-light restore
+exec --no-startup-id isotope-night-light restore
 
 # help-row: Windows | Super + drag | Move a floating window with the mouse
 floating_modifier $mod
@@ -67,31 +67,31 @@ bindsym $mod+Return        exec --no-startup-id $term
 bindsym $mod+d             exec --no-startup-id $menu
 # The old PATH-only runner, for a command that has no .desktop file.
 # help: Run a command that has no app entry
-bindsym $mod+Shift+d       exec --no-startup-id dmenu_run -i -l 12 -p "Run" -fn "Inter Variable-11" -nb "#1a1b26" -nf "#c0caf5" -sb "#7aa2f7" -sf "#16161e"
+bindsym $mod+Shift+d       exec --no-startup-id dmenu_run -i -l 12 -p "Run" -fn "Inter Variable-11" -nb "#15141c" -nf "#f2f1f5" -sb "#8fd12e" -sf "#15141c"
 # help: Close the focused window
 bindsym $mod+Shift+q       kill
 bindsym $mod+Shift+c       reload
 # help: Power menu: log out, suspend, reboot, power off
-bindsym $mod+Shift+e       exec --no-startup-id hadron-power-menu
+bindsym $mod+Shift+e       exec --no-startup-id isotope-power-menu
 # help-section: Basics
 # help: This help
-bindsym $mod+F1            exec --no-startup-id st -c HadronFloat -t "Keyboard shortcuts" -e hadron-help
-# The Hadron menu: apps, Wi-Fi, Bluetooth, audio, capture, update, help, power.
-# help: Hadron menu: apps, Wi-Fi, Bluetooth, updates, power
-bindsym $mod+Escape        exec --no-startup-id hadron-menu
+bindsym $mod+F1            exec --no-startup-id st -c IsotopeFloat -t "Keyboard shortcuts" -e isotope-help
+# The Isotope menu: apps, Wi-Fi, Bluetooth, audio, capture, update, help, power.
+# help: Isotope menu: apps, Wi-Fi, Bluetooth, updates, power
+bindsym $mod+Escape        exec --no-startup-id isotope-menu
 # Night light on and off: a warmer screen from 20:00 to 07:00.
 # help-section: System
 # help: Night light on and off
-bindsym $mod+Mod1+n        exec --no-startup-id hadron-night-light toggle
+bindsym $mod+Mod1+n        exec --no-startup-id isotope-night-light toggle
 # The emoji picker: copies the chosen emoji to the clipboard.
 # help-section: Basics
 # help: Emoji picker: copies the chosen emoji
-bindsym $mod+semicolon     exec --no-startup-id hadron-emoji
+bindsym $mod+semicolon     exec --no-startup-id isotope-emoji
 
 # Screen lock. i3lock checks the password through /etc/pam.d/i3lock. xss-lock
 # runs the same command on idle and before suspend, from
 # config.d/10-screen-lock.conf (variables set here reach included files).
-set $lock i3lock --nofork --ignore-empty-password --show-failed-attempts --color=1a1b26
+set $lock i3lock --nofork --ignore-empty-password --show-failed-attempts --color=15141c
 # help-section: System
 # help: Lock the screen
 bindsym $mod+Mod1+l        exec --no-startup-id $lock
@@ -100,9 +100,9 @@ bindsym $mod+Mod1+l        exec --no-startup-id $lock
 # ~/Pictures/Screenshots, like niri.
 # help-section: System
 # help: Screenshot to the clipboard and ~/Pictures
-bindsym Print              exec --no-startup-id hadron-screenshot
+bindsym Print              exec --no-startup-id isotope-screenshot
 # help: Screenshot of an area or a window
-bindsym $mod+Print         exec --no-startup-id hadron-screenshot area
+bindsym $mod+Print         exec --no-startup-id isotope-screenshot area
 
 # help-section: Windows
 # help+: Move focus
@@ -193,43 +193,43 @@ bindsym $mod+r mode "resize"
 
 # Hardware keys: volume (wpctl), screen brightness (logind) and playback
 # (MPRIS), with the new level in a dunst pop-up.
-bindsym XF86AudioRaiseVolume  exec --no-startup-id hadron-media-key volume-up
-bindsym XF86AudioLowerVolume  exec --no-startup-id hadron-media-key volume-down
-bindsym XF86AudioMute         exec --no-startup-id hadron-media-key mute
-bindsym XF86AudioMicMute      exec --no-startup-id hadron-media-key mic-mute
-bindsym XF86MonBrightnessUp   exec --no-startup-id hadron-media-key brightness-up
-bindsym XF86MonBrightnessDown exec --no-startup-id hadron-media-key brightness-down
-bindsym XF86AudioPlay         exec --no-startup-id hadron-media-key play-pause
-bindsym XF86AudioPause        exec --no-startup-id hadron-media-key play-pause
-bindsym XF86AudioNext         exec --no-startup-id hadron-media-key next
-bindsym XF86AudioPrev         exec --no-startup-id hadron-media-key previous
-bindsym XF86AudioStop         exec --no-startup-id hadron-media-key stop
+bindsym XF86AudioRaiseVolume  exec --no-startup-id isotope-media-key volume-up
+bindsym XF86AudioLowerVolume  exec --no-startup-id isotope-media-key volume-down
+bindsym XF86AudioMute         exec --no-startup-id isotope-media-key mute
+bindsym XF86AudioMicMute      exec --no-startup-id isotope-media-key mic-mute
+bindsym XF86MonBrightnessUp   exec --no-startup-id isotope-media-key brightness-up
+bindsym XF86MonBrightnessDown exec --no-startup-id isotope-media-key brightness-down
+bindsym XF86AudioPlay         exec --no-startup-id isotope-media-key play-pause
+bindsym XF86AudioPause        exec --no-startup-id isotope-media-key play-pause
+bindsym XF86AudioNext         exec --no-startup-id isotope-media-key next
+bindsym XF86AudioPrev         exec --no-startup-id isotope-media-key previous
+bindsym XF86AudioStop         exec --no-startup-id isotope-media-key stop
 
 # Wi-Fi, audio output and Bluetooth menus (dmenu).
 # help-section: System
 # help: Wi-Fi
-bindsym $mod+n       exec --no-startup-id hadron-wifi-menu
+bindsym $mod+n       exec --no-startup-id isotope-wifi-menu
 # help: Audio output
-bindsym $mod+Shift+a exec --no-startup-id hadron-audio-menu
+bindsym $mod+Shift+a exec --no-startup-id isotope-audio-menu
 # help: Bluetooth
-bindsym $mod+Shift+b exec --no-startup-id hadron-bluetooth-menu
+bindsym $mod+Shift+b exec --no-startup-id isotope-bluetooth-menu
 # Notifications (dunst): close the newest, close all, show the last closed,
 # do not disturb on/off.
 # help-section: Notifications
 # help: Close the newest notification
-bindsym $mod+BackSpace       exec --no-startup-id hadron-notify-key dismiss
+bindsym $mod+BackSpace       exec --no-startup-id isotope-notify-key dismiss
 # help: Close all notifications
-bindsym $mod+Shift+BackSpace exec --no-startup-id hadron-notify-key dismiss-all
+bindsym $mod+Shift+BackSpace exec --no-startup-id isotope-notify-key dismiss-all
 # help: Show the last closed notification
-bindsym $mod+Ctrl+BackSpace  exec --no-startup-id hadron-notify-key restore
+bindsym $mod+Ctrl+BackSpace  exec --no-startup-id isotope-notify-key restore
 # help: Do not disturb on/off
-bindsym $mod+Mod1+BackSpace  exec --no-startup-id hadron-notify-key dnd
-for_window [class="HadronFloat"] floating enable, resize set 820 520, move position center
-for_window [class="HadronFloat" title="Keyboard shortcuts"] resize set 900 720, move position center
+bindsym $mod+Mod1+BackSpace  exec --no-startup-id isotope-notify-key dnd
+for_window [class="IsotopeFloat"] floating enable, resize set 820 520, move position center
+for_window [class="IsotopeFloat" title="Keyboard shortcuts"] resize set 900 720, move position center
 
 bar {
     position top
-    status_command /usr/bin/hadron-status
+    status_command /usr/bin/isotope-status
     tray_output primary
     # 4 px around and between the tray icons (the default is 2): the icons
     # are the bar height less 8 px, close to waybar's 18 px icons, and do not

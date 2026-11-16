@@ -16,13 +16,13 @@ import (
 )
 
 const (
-	ghcrRepo = "ghcr.io/kairos-community/hadron-desktop"
+	ghcrRepo = "ghcr.io/kairos-community/isotope"
 	// thirdParty is served by the same fake registry, but its host makes it a
 	// repository other than the release one, so it is never trusted by name.
-	thirdParty = "quay.io/kairos-community/hadron-desktop:custom"
-	// labelledThirdParty carries the Hadron labels, but it is not in the
+	thirdParty = "quay.io/kairos-community/isotope:custom"
+	// labelledThirdParty carries the Isotope labels, but it is not in the
 	// release repository: a mirror, or someone's own build.
-	labelledThirdParty = "quay.io/kairos-community/hadron-desktop:labelled"
+	labelledThirdParty = "quay.io/kairos-community/isotope:labelled"
 	// daemonReleases is the published list: newest v0.0.6.
 	daemonReleases = `[{"tag_name":"v0.0.5"},{"tag_name":"v0.0.6"},{"tag_name":"v0.0.4"},{"tag_name":"v0.0.7-rc1","prerelease":true}]`
 )
@@ -106,21 +106,21 @@ type daemonDigests map[string]string
 // registry holding the release images plus an unlabelled third-party image.
 func daemonEnv(t *testing.T, installed string) daemonDigests {
 	t.Helper()
-	t.Setenv("HADRON_UPDATE_RELEASE_FILE",
+	t.Setenv("ISOTOPE_UPDATE_RELEASE_FILE",
 		writeRelease(t, strings.Replace(goodRelease, `"v0.1.0"`, installed, 1)))
 	dir := t.TempDir()
-	t.Setenv("HADRON_UPDATE_PIN_FILE", filepath.Join(dir, "pin"))
-	t.Setenv("HADRON_UPDATE_CONF", filepath.Join(dir, "update.conf"))
-	t.Setenv("HADRON_UPDATE_RUN_DIR", filepath.Join(dir, "run"))
+	t.Setenv("ISOTOPE_UPDATE_PIN_FILE", filepath.Join(dir, "pin"))
+	t.Setenv("ISOTOPE_UPDATE_CONF", filepath.Join(dir, "update.conf"))
+	t.Setenv("ISOTOPE_UPDATE_RUN_DIR", filepath.Join(dir, "run"))
 	fakeGitHubReleases(t, "v0.0.6", daemonReleases)
 
 	reg := newFakeRegistry(t, false)
 	d := daemonDigests{}
 	for _, tag := range []string{"sway-v0.0.6", "sway-v0.0.5", "niri-v0.0.6", "agent-v0.0.6"} {
-		d[ghcrRepo+":"+tag] = reg.image(t, "hadron-desktop", tag, "amd64", nil, false)
+		d[ghcrRepo+":"+tag] = reg.image(t, "isotope", tag, "amd64", nil, false)
 	}
-	d[thirdParty] = reg.image(t, "hadron-desktop", "custom", "amd64", map[string]string{"x": "y"}, false)
-	d[labelledThirdParty] = reg.image(t, "hadron-desktop", "labelled", "amd64",
+	d[thirdParty] = reg.image(t, "isotope", "custom", "amd64", map[string]string{"x": "y"}, false)
+	d[labelledThirdParty] = reg.image(t, "isotope", "labelled", "amd64",
 		map[string]string{labelFlavor: "sway", labelVersion: "v0.0.6"}, false)
 	return d
 }
@@ -187,10 +187,10 @@ func TestUnmanagedWhenNoReleaseFile(t *testing.T) {
 		http.NotFound(w, r)
 	}))
 	t.Cleanup(srv.Close)
-	t.Setenv("HADRON_UPDATE_API", srv.URL)
-	t.Setenv("HADRON_UPDATE_REGISTRY", srv.URL)
-	t.Setenv("HADRON_UPDATE_RELEASE_FILE", filepath.Join(t.TempDir(), "missing"))
-	t.Setenv("HADRON_UPDATE_RUN_DIR", t.TempDir())
+	t.Setenv("ISOTOPE_UPDATE_API", srv.URL)
+	t.Setenv("ISOTOPE_UPDATE_REGISTRY", srv.URL)
+	t.Setenv("ISOTOPE_UPDATE_RELEASE_FILE", filepath.Join(t.TempDir(), "missing"))
+	t.Setenv("ISOTOPE_UPDATE_RUN_DIR", t.TempDir())
 
 	b := &fakeBackend{}
 	d := NewDaemon(b)
@@ -220,7 +220,7 @@ func TestApplyUsesTheDigest(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := waitState(t, d, StateRebootPending)
-	want := "oci:ghcr.io/kairos-community/hadron-desktop@" + dg[ref]
+	want := "oci:ghcr.io/kairos-community/isotope@" + dg[ref]
 	if got := b.calls(); len(got) != 1 || got[0] != want {
 		t.Fatalf("sources %q, want [%q]", got, want)
 	}
@@ -372,7 +372,7 @@ func TestApplyPinRules(t *testing.T) {
 	}
 }
 
-func TestAdvancedOverridesOnlyNotHadron(t *testing.T) {
+func TestAdvancedOverridesOnlyNotIsotope(t *testing.T) {
 	agent := ghcrRepo + ":agent-v0.0.6"
 	for _, c := range []struct {
 		name     string
@@ -382,9 +382,9 @@ func TestAdvancedOverridesOnlyNotHadron(t *testing.T) {
 		refusal  error // nil: installed
 	}{
 		{"unlabelled third-party, advanced", thirdParty, true, "", nil},
-		{"unlabelled third-party, not advanced", thirdParty, false, "", ErrNotHadron},
+		{"unlabelled third-party, not advanced", thirdParty, false, "", ErrNotIsotope},
 		{"agent image, advanced", agent, true, "", ErrAgentImage},
-		{"advanced turned off", thirdParty, true, "advanced=false\n", ErrNotHadron},
+		{"advanced turned off", thirdParty, true, "advanced=false\n", ErrNotIsotope},
 		// The spec: images from any other repository are accepted only
 		// through advanced mode, labels or not.
 		{"labelled third-party, not advanced", labelledThirdParty, false, "", ErrNotRelease},
@@ -394,7 +394,7 @@ func TestAdvancedOverridesOnlyNotHadron(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			dg := daemonEnv(t, "v0.0.5")
 			if c.conf != "" {
-				if err := os.WriteFile(os.Getenv("HADRON_UPDATE_CONF"), []byte(c.conf), 0o644); err != nil {
+				if err := os.WriteFile(os.Getenv("ISOTOPE_UPDATE_CONF"), []byte(c.conf), 0o644); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -411,7 +411,7 @@ func TestAdvancedOverridesOnlyNotHadron(t *testing.T) {
 			}
 			if c.refusal == nil {
 				waitState(t, d, StateRebootPending)
-				want := "oci:quay.io/kairos-community/hadron-desktop@" + dg[c.ref]
+				want := "oci:quay.io/kairos-community/isotope@" + dg[c.ref]
 				if got := b.calls(); len(got) != 1 || got[0] != want {
 					t.Fatalf("sources %q, want [%q]", got, want)
 				}
@@ -437,7 +437,7 @@ func TestInspectReturnsTheVerdict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Digest != dg[ref] || v != (Verdict{Flavor: "niri", Version: "v0.0.6", GPU: gpuFull, Trusted: true, Hadron: true}) {
+	if info.Digest != dg[ref] || v != (Verdict{Flavor: "niri", Version: "v0.0.6", GPU: gpuFull, Trusted: true, Isotope: true}) {
 		t.Fatalf("got %+v, %+v", info, v)
 	}
 	if s := d.Status(); s.State != StateIdle {
@@ -472,7 +472,7 @@ func blockingGitHub(t *testing.T) (arrived chan struct{}) {
 		<-r.Context().Done()
 	}))
 	t.Cleanup(srv.Close)
-	t.Setenv("HADRON_UPDATE_API", srv.URL)
+	t.Setenv("ISOTOPE_UPDATE_API", srv.URL)
 	return arrived
 }
 
@@ -572,7 +572,7 @@ func TestBackendFailureKeepsTheMarker(t *testing.T) {
 	if s.Detail != "The update failed; restart before trying again." || s.Pending != pendingFailed {
 		t.Fatalf("status %+v", s)
 	}
-	marker := filepath.Join(os.Getenv("HADRON_UPDATE_RUN_DIR"), "reboot-pending")
+	marker := filepath.Join(os.Getenv("ISOTOPE_UPDATE_RUN_DIR"), "reboot-pending")
 	if got, err := os.ReadFile(marker); err != nil || !strings.HasPrefix(string(got), "failed ") {
 		t.Fatalf("marker %q, %v", got, err)
 	}
@@ -644,7 +644,7 @@ func TestMarkerSaysHowTheInstallEnded(t *testing.T) {
 	if s.Pending != pendingInstalled {
 		t.Fatalf("after success: %+v", s)
 	}
-	marker := filepath.Join(os.Getenv("HADRON_UPDATE_RUN_DIR"), "reboot-pending")
+	marker := filepath.Join(os.Getenv("ISOTOPE_UPDATE_RUN_DIR"), "reboot-pending")
 	if got, _ := os.ReadFile(marker); string(got) != "installed oci:"+ghcrRepo+"@"+dg[ref]+"\n" {
 		t.Fatalf("marker %q", got)
 	}
@@ -731,7 +731,7 @@ func TestKairosBackendMergesOutput(t *testing.T) {
 	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("HADRON_UPDATE_AGENT", agent)
+	t.Setenv("ISOTOPE_UPDATE_AGENT", agent)
 
 	var lines []string
 	err := kairosBackend{}.Upgrade(context.Background(), "oci:x@sha256:"+hex64, func(l string) { lines = append(lines, l) })
@@ -754,7 +754,7 @@ func TestApplyRefusesWithoutAMarker(t *testing.T) {
 	if err := os.Symlink(filepath.Join(t.TempDir(), "gone", "run"), run); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("HADRON_UPDATE_RUN_DIR", run)
+	t.Setenv("ISOTOPE_UPDATE_RUN_DIR", run)
 	b := &fakeBackend{}
 	d := NewDaemon(b)
 	ref := ghcrRepo + ":sway-v0.0.6"
@@ -833,7 +833,7 @@ func TestKairosBackendReportsAnUnreadableLine(t *testing.T) {
 	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("HADRON_UPDATE_AGENT", agent)
+	t.Setenv("ISOTOPE_UPDATE_AGENT", agent)
 	var lines []string
 	err := kairosBackend{}.Upgrade(context.Background(), "oci:x", func(l string) { lines = append(lines, l) })
 	if err != nil || len(lines) != 1 || !strings.Contains(lines[0], "stopped reading") {
@@ -854,7 +854,7 @@ func countingGitHub(t *testing.T) *atomic.Int32 {
 	t.Helper()
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/repos/kairos-community/hadron-desktop/releases" {
+		if r.URL.Path != "/repos/kairos-community/isotope/releases" {
 			http.NotFound(w, r)
 			return
 		}
@@ -862,7 +862,7 @@ func countingGitHub(t *testing.T) *atomic.Int32 {
 		fmt.Fprint(w, daemonReleases)
 	}))
 	t.Cleanup(srv.Close)
-	t.Setenv("HADRON_UPDATE_API", srv.URL)
+	t.Setenv("ISOTOPE_UPDATE_API", srv.URL)
 	return &hits
 }
 
@@ -910,7 +910,7 @@ func TestReleasesErrorIsNotCached(t *testing.T) {
 		fmt.Fprint(w, daemonReleases)
 	}))
 	t.Cleanup(srv.Close)
-	t.Setenv("HADRON_UPDATE_API", srv.URL)
+	t.Setenv("ISOTOPE_UPDATE_API", srv.URL)
 	d := NewDaemon(&fakeBackend{})
 	if _, err := d.Releases(context.Background()); err == nil {
 		t.Fatal("no error from a failing GitHub")
@@ -1113,7 +1113,7 @@ func TestFailedRebootPreviousAllowsInstalls(t *testing.T) {
 	waitState(t, d, StateRebootPending)
 }
 
-// fakeRebootTools puts a kairos-agent (through HADRON_UPDATE_AGENT) and a
+// fakeRebootTools puts a kairos-agent (through ISOTOPE_UPDATE_AGENT) and a
 // systemctl (first on PATH) in place that append their argv to one log, so
 // a test sees both commands and their order. agentCode is kairos-agent's exit
 // status. cosDir is the boot-mode sentinel directory, empty.
@@ -1134,7 +1134,7 @@ func fakeRebootTools(t *testing.T, agentCode int) (logFile, cosDir string) {
 	if err := os.WriteFile(filepath.Join(bin, "systemctl"), []byte(sc), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("HADRON_UPDATE_AGENT", agent)
+	t.Setenv("ISOTOPE_UPDATE_AGENT", agent)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	cosDir = filepath.Join(dir, "cos")
 	if err := os.Mkdir(cosDir, 0o755); err != nil {
@@ -1208,7 +1208,7 @@ func TestLatestSurvivesARestart(t *testing.T) {
 	if s := NewDaemon(&fakeBackend{}).Status(); s.Latest != "v0.0.6" {
 		t.Fatalf("restarted daemon: %+v", s)
 	}
-	got, err := os.ReadFile(filepath.Join(os.Getenv("HADRON_UPDATE_RUN_DIR"), "latest"))
+	got, err := os.ReadFile(filepath.Join(os.Getenv("ISOTOPE_UPDATE_RUN_DIR"), "latest"))
 	if err != nil || string(got) != "v0.0.6\n" {
 		t.Fatalf("latest file %q, %v", got, err)
 	}

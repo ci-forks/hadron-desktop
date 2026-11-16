@@ -323,7 +323,7 @@ func TestAdvertiser_StartRespectsCancelledContext(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRealRegistrar_OpensAndShutsDownRealSocket(t *testing.T) {
-	srv, err := RealRegistrar("hadron-agent-test", ServiceType, ServiceDomain, 17443,
+	srv, err := RealRegistrar("isotope-agent-test", ServiceType, ServiceDomain, 17443,
 		[]string{"path=/mcp", "tls=1", "version=test"}, nil)
 	if err != nil {
 		t.Skipf("mdns registration unavailable in this environment: %v", err)
@@ -335,7 +335,7 @@ func TestAdvertiser_RealStartStop(t *testing.T) {
 	a := New(Config{
 		Enabled:  true,
 		Port:     17444,
-		Hostname: "hadron-agent-test.example.com",
+		Hostname: "isotope-agent-test.example.com",
 		Version:  "v0.0.0-test",
 	})
 

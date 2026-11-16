@@ -33,11 +33,11 @@ func statusLine(st Status) string {
 		return "Checking for updates…"
 	case StateUpToDate:
 		if st.Pin != "" {
-			return "Hadron Desktop " + st.Installed + " (pinned)"
+			return "Isotope " + st.Installed + " (pinned)"
 		}
-		return "Hadron Desktop " + st.Installed + " is up to date"
+		return "Isotope " + st.Installed + " is up to date"
 	case StateUpdateAvailable:
-		return "Hadron Desktop " + st.Latest + " is available"
+		return "Isotope " + st.Latest + " is available"
 	case StateInspecting:
 		return "Checking the image…"
 	case StateApplying:
@@ -57,7 +57,7 @@ func statusLine(st Status) string {
 	case StateError:
 		return "Error: " + shorten(st.Detail, 80)
 	}
-	return "Hadron Desktop " + st.Installed
+	return "Isotope " + st.Installed
 }
 
 func shorten(s string, n int) string {
@@ -140,7 +140,7 @@ func finishMenu(menu []MenuItem, st Status, can bool) []MenuItem {
 	if st.State == StateRebootPending {
 		menu = append(menu, MenuItem{ID: "restart", Label: "Restart now", Enabled: true})
 	}
-	// The Hadron menu's Extensions list. Always clickable: it only reads,
+	// The Isotope menu's Extensions list. Always clickable: it only reads,
 	// and the service refuses a change while a job runs.
 	menu = append(menu, MenuItem{ID: "extensions", Label: "Extensions…", Enabled: true})
 	// The disk recovery key, on a system whose disk is encrypted.
@@ -159,7 +159,7 @@ func finishMenu(menu []MenuItem, st Status, can bool) []MenuItem {
 // encryptionMarkerFile is written by the installer for an encrypted disk
 // (mode=passphrase or mode=tpm-recovery-key). A Trusted Boot disk is always
 // encrypted, with or without the marker.
-var encryptionMarkerFile = "/etc/hadron-desktop/encryption"
+var encryptionMarkerFile = "/etc/isotope/encryption"
 
 // diskEncrypted reports whether the recovery key entry makes sense here.
 // A variable so the tests can choose.

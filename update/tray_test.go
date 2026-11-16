@@ -155,7 +155,7 @@ func startTray(t *testing.T, dial func() (daemonClient, error), first, every tim
 	t.Helper()
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	h := &trayHarness{ui: &recUI{}, log: &syncBuf{}}
-	rel := Release{Flavor: "sway", Version: "v0.1.0", ImageRepo: "ghcr.io/kairos-community/hadron-desktop", GitHubRepo: "kairos-community/hadron-desktop"}
+	rel := Release{Flavor: "sway", Version: "v0.1.0", ImageRepo: "ghcr.io/kairos-community/isotope", GitHubRepo: "kairos-community/isotope"}
 	h.app = newTrayApp(rel, h.ui, dial, h.log)
 	h.app.firstCheck, h.app.interval, h.app.retry = first, every, 5*time.Millisecond
 	h.app.notify = func(summary, body string) error {
@@ -205,13 +205,13 @@ func TestTrayChecksThenNotifiesOncePerTag(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 	notes := h.notified()
-	if len(notes) != 1 || !strings.Contains(notes[0], "Hadron Desktop v0.2.0 is available") || !strings.Contains(notes[0], "menu") {
+	if len(notes) != 1 || !strings.Contains(notes[0], "Isotope v0.2.0 is available") || !strings.Contains(notes[0], "menu") {
 		t.Fatalf("notifications %q, want one pointing at the tray menu", notes)
 	}
 	if strings.Contains(notes[0], "terminal") {
 		t.Fatalf("notification still sends the user to a terminal: %q", notes[0])
 	}
-	if f.count("Inspect ghcr.io/kairos-community/hadron-desktop:sway-v0.2.0") != 1 {
+	if f.count("Inspect ghcr.io/kairos-community/isotope:sway-v0.2.0") != 1 {
 		t.Fatalf("calls %v: the release image must be inspected once before announcing it", f.calls)
 	}
 }
@@ -419,9 +419,9 @@ func TestTrayClicks(t *testing.T) {
 	}
 }
 
-// TestTrayExtensionsOpensTheHadronMenuEntry: "Extensions…" opens the same
-// list as the Hadron menu, even while the service is unreachable.
-func TestTrayExtensionsOpensTheHadronMenuEntry(t *testing.T) {
+// TestTrayExtensionsOpensTheIsotopeMenuEntry: "Extensions…" opens the same
+// list as the Isotope menu, even while the service is unreachable.
+func TestTrayExtensionsOpensTheIsotopeMenuEntry(t *testing.T) {
 	h := startTray(t, func() (daemonClient, error) { return nil, errors.New("down") }, time.Hour, time.Hour)
 	h.ui.waitView(t, "error", func(v trayView) bool { return v.Icon == "error" })
 	h.app.clicks <- "extensions"
@@ -459,14 +459,14 @@ func TestTrayAndNotifyExitAtOnceOnAgent(t *testing.T) {
 func TestTerminalArgv(t *testing.T) {
 	dir := t.TempDir()
 	session := filepath.Join(dir, "session")
-	t.Setenv("HADRON_UPDATE_SESSION_FILE", session)
+	t.Setenv("ISOTOPE_UPDATE_SESSION_FILE", session)
 	bin := t.TempDir()
 	t.Setenv("PATH", bin)
 	var log bytes.Buffer
 
-	os.WriteFile(session, []byte("DESKTOP_NAME=i3\nTERMINAL_EXEC=\"st -c HadronFloat -e\"\n"), 0o644)
-	got, err := terminalArgv("/usr/bin/hadron-update", []string{"switch", "niri"}, &log)
-	if want := []string{"st", "-c", "HadronFloat", "-e", "/usr/bin/hadron-update", "switch", "niri"}; err != nil || !reflect.DeepEqual(got, want) {
+	os.WriteFile(session, []byte("DESKTOP_NAME=i3\nTERMINAL_EXEC=\"st -c IsotopeFloat -e\"\n"), 0o644)
+	got, err := terminalArgv("/usr/bin/isotope-update", []string{"switch", "niri"}, &log)
+	if want := []string{"st", "-c", "IsotopeFloat", "-e", "/usr/bin/isotope-update", "switch", "niri"}; err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("argv %q (%v), want %q", got, err, want)
 	}
 
@@ -492,8 +492,8 @@ func TestTerminalArgv(t *testing.T) {
 
 func TestIcons(t *testing.T) {
 	want := map[string][3]uint8{
-		"idle": {0x7a, 0xa2, 0xf7}, "update": {0x9e, 0xce, 0x6a}, "busy": {0xe0, 0xaf, 0x68},
-		"reboot": {0xbb, 0x9a, 0xf7}, "error": {0xf7, 0x76, 0x8e},
+		"idle": {0x8f, 0xd1, 0x2e}, "update": {0x3f, 0xaf, 0x6e}, "busy": {0xe0, 0xaf, 0x68},
+		"reboot": {0xb4, 0x9c, 0xf2}, "error": {0xf7, 0x76, 0x8e},
 	}
 	for kind, rgb := range want {
 		for _, size := range []int{22, 44} {
@@ -516,7 +516,7 @@ func TestIcons(t *testing.T) {
 			// on_accent colour that stays readable on the light discs.
 			if kind == "busy" {
 				r, g, b, _ := img.At(size/2, size/2).RGBA()
-				if uint8(r>>8) != 0x16 || uint8(g>>8) != 0x16 || uint8(b>>8) != 0x1e {
+				if uint8(r>>8) != 0x15 || uint8(g>>8) != 0x14 || uint8(b>>8) != 0x1c {
 					t.Errorf("busy/%d: glyph colour %02x%02x%02x", size, r>>8, g>>8, b>>8)
 				}
 			}

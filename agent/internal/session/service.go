@@ -46,8 +46,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/mudler/hadron-desktop/agent/internal/api"
-	"github.com/mudler/hadron-desktop/agent/internal/cua"
+	"github.com/kairos-community/isotope/agent/internal/api"
+	"github.com/kairos-community/isotope/agent/internal/cua"
 )
 
 // DefaultOSConcurrency is the number of shell/file calls the broker runs

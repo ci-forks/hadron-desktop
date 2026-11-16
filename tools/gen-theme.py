@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write the Hadron palette into every config that has colours.
+"""Write the Isotope palette into every config that has colours.
 
 theme/palette.toml names each colour by its role (base, text, accent, dim...).
 The configs the programs read (sway, i3, waybar, foot, fuzzel, mako, dunst,
@@ -76,19 +76,19 @@ RULES = {
     "rootfs-sway/etc/sway/config": ("hash", "hash", WM_VARS),
     "rootfs-i3/etc/i3/config": ("hash", "hash", WM_VARS + [
         DMENU,
-        (r"^exec_always --no-startup-id hadron-xroot '#{hex}' /usr/share/backgrounds/hadron/[\w.-]+\.png$", "base"),
+        (r"^exec_always --no-startup-id isotope-xroot '#{hex}' /usr/share/backgrounds/isotope/[\w.-]+\.png$", "base"),
         (r"^set \$lock i3lock .*--color={hex}$", "base"),
     ]),
-    "rootfs-i3/usr/bin/hadron-screenshot": ("hash", "hash", [
+    "rootfs-i3/usr/bin/isotope-screenshot": ("hash", "hash", [
         (r"hacksaw -c '#{hex}'", "accent"),
     ]),
-    # The i3 menus pick through hadron-pick; strict, so no colour comes back.
-    "rootfs-i3/usr/bin/hadron-audio-menu": ("hash", "hash", []),
-    "rootfs-i3/usr/bin/hadron-power-menu": ("hash", "hash", [
+    # The i3 menus pick through isotope-pick; strict, so no colour comes back.
+    "rootfs-i3/usr/bin/isotope-audio-menu": ("hash", "hash", []),
+    "rootfs-i3/usr/bin/isotope-power-menu": ("hash", "hash", [
         (r"^\s+Lock\)\s+i3lock .*--color={hex} ;;$", "base"),
     ]),
-    "rootfs-i3/usr/bin/hadron-wifi-menu": ("hash", "hash", []),
-    "rootfs/usr/bin/hadron-pick": ("hash", "hash", [DMENU]),
+    "rootfs-i3/usr/bin/isotope-wifi-menu": ("hash", "hash", []),
+    "rootfs/usr/bin/isotope-pick": ("hash", "hash", [DMENU]),
     "rootfs-sway/etc/xdg/waybar/style.css": ("hash", "css", [
         (r"^@define-color (?P<role>\w+)\s+#{hex};$", None),  # role = the name
     ]),
@@ -135,7 +135,7 @@ RULES = {
     ]),
     # GRUB menu theme (live and installed). The footer and countdown are text
     # to read, so dim; the subtitle under the wordmark is decoration, so muted.
-    "rootfs/etc/kairos/branding/hadron-theme/theme.txt": ("hash", "hash", [
+    "rootfs/etc/kairos/branding/isotope-theme/theme.txt": ("hash", "hash", [
         (r'^\s+color\s+= "#{hex}"$', ["accent", "muted", "dim"]),  # wordmark, subtitle, footer
         (r'^\s+item_color\s+= "#{hex}"$', "subtext"),
         (r'^\s+selected_item_color\s+= "#{hex}"$', "glow"),
@@ -178,10 +178,10 @@ RULES = {
     ]),
 }
 
-NOCTALIA = "rootfs-niri/usr/share/hadron-desktop/noctalia-palettes/Hadron.json"
+NOCTALIA = "rootfs-niri/usr/share/isotope/noctalia-palettes/Isotope.json"
 
 # The Linux console's 16 colours, set from the kernel command line so the boot
-# messages, ly and the installer sit on the desktop's navy instead of black.
+# messages, ly and the installer sit on the desktop's violet ink instead of black.
 # It is the terminal palette (FOOT above) with two changes for the console:
 # colour 0 is also the console's background, so it is base, not crust; and
 # colour 8 is the installer's and systemd's grey text, so it is dim, not the

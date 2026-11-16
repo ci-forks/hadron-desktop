@@ -1,5 +1,5 @@
 #!/bin/sh
-# Exercise hadron-first-run-apps (the first-run app picker) against fake
+# Exercise isotope-first-run-apps (the first-run app picker) against fake
 # flatpak, nm-online, busctl and terminal programs, in an Alpine container,
 # so busybox sh runs the script the way a minimal POSIX shell would.
 #
@@ -20,7 +20,7 @@ if [ "${1:-}" != --inner ]; then
 fi
 
 src=${SRC:-/src}
-script="$src/rootfs/usr/bin/hadron-first-run-apps"
+script="$src/rootfs/usr/bin/isotope-first-run-apps"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 bin="$work/bin"
@@ -55,10 +55,10 @@ cat > "$bin/fake-term" <<'EOF'
 echo "terminal $*" >> "$FAKE_LOG"
 EOF
 chmod +x "$bin"/*
-cp "$script" "$bin/hadron-first-run-apps"
+cp "$script" "$bin/isotope-first-run-apps"
 
 printf 'DESKTOP_NAME=Sway\nTERMINAL_EXEC="fake-term -e"\n' > "$work/session"
-export FAKE_LOG="$log" PATH="$bin:$PATH" HADRON_SESSION_FILE="$work/session"
+export FAKE_LOG="$log" PATH="$bin:$PATH" ISOTOPE_SESSION_FILE="$work/session"
 
 fail=0
 pass() { echo "PASS: $1"; }
@@ -72,11 +72,11 @@ reset() {
     unset FAKE_INSTALLED FAKE_FAIL FAKE_NM FAKE_REMOTES XDG_STATE_HOME
     export HOME
 }
-stamp() { cat "$HOME/.local/state/hadron/first-run-apps" 2>/dev/null || echo none; }
+stamp() { cat "$HOME/.local/state/isotope/first-run-apps" 2>/dev/null || echo none; }
 installs() { sed -n 's/^flatpak --user install --assumeyes flathub //p' "$log" | tr '\n' ' '; }
 
 # ui INPUT: run the checklist with INPUT on stdin.
-ui() { printf '%b' "$1" | hadron-first-run-apps --ui > "$work/out" 2>&1; }
+ui() { printf '%b' "$1" | isotope-first-run-apps --ui > "$work/out" 2>&1; }
 
 has() { # PATTERN FILE NAME
     if grep -q "$1" "$2"; then pass "$3"; else bad "$3"; fi
@@ -130,27 +130,34 @@ expect "some installs failed: stamp" "$(stamp)" completed
 has '^notify Some apps did not install' "$log" "partial notification"
 
 reset; XDG_STATE_HOME="$work/xdg"; export XDG_STATE_HOME; ui 's\n'
-expect "the stamp follows XDG_STATE_HOME" "$(cat "$work/xdg/hadron/first-run-apps")" skipped
+expect "the stamp follows XDG_STATE_HOME" "$(cat "$work/xdg/isotope/first-run-apps")" skipped
 
 # --- the login hook ---
-reset; hadron-first-run-apps --login
+reset; isotope-first-run-apps --login
 expect "login opens the checklist in the session terminal" "$(grep '^terminal' "$log")" \
-    "terminal -e hadron-first-run-apps --ui"
+    "terminal -e isotope-first-run-apps --ui"
 
-reset; mkdir -p "$HOME/.local/state/hadron"; echo skipped > "$HOME/.local/state/hadron/first-run-apps"
-hadron-first-run-apps --login
+reset; mkdir -p "$HOME/.local/state/isotope"; echo skipped > "$HOME/.local/state/isotope/first-run-apps"
+isotope-first-run-apps --login
 expect "login does nothing after the stamp" "$(cat "$log")" ""
 
-reset; FAKE_NM=1; export FAKE_NM; hadron-first-run-apps --login
+# Isotope was Hadron Desktop: a user who picked apps before the rename is not
+# asked again.
+reset; mkdir -p "$HOME/.local/state/hadron"; echo completed > "$HOME/.local/state/hadron/first-run-apps"
+isotope-first-run-apps --login
+expect "login does nothing after a stamp from before the rename" "$(cat "$log")" ""
+expect "the old stamp is copied" "$(stamp)" completed
+
+reset; FAKE_NM=1; export FAKE_NM; isotope-first-run-apps --login
 expect "offline: no terminal" "$(grep -c '^terminal' "$log" || :)" 0
 expect "offline: no stamp" "$(stamp)" none
 has '^notify No network' "$log" "offline notification"
 
-reset; FAKE_REMOTES="flathub	disabled"; export FAKE_REMOTES; hadron-first-run-apps --login
+reset; FAKE_REMOTES="flathub	disabled"; export FAKE_REMOTES; isotope-first-run-apps --login
 expect "disabled Flathub: no terminal" "$(grep -c '^terminal' "$log" || :)" 0
 has '^notify Flathub is not ready' "$log" "Flathub notification"
 
-reset; FAKE_REMOTES=""; export FAKE_REMOTES; hadron-first-run-apps --login
+reset; FAKE_REMOTES=""; export FAKE_REMOTES; isotope-first-run-apps --login
 expect "no Flathub remote: no terminal" "$(grep -c '^terminal' "$log" || :)" 0
 
 # COSMIC: wait for cosmic-initial-setup while it runs, then go on.
@@ -159,8 +166,8 @@ printf 'DESKTOP_NAME=COSMIC\nTERMINAL_EXEC="fake-term -e"\n' > "$work/cosmic"
 mkdir -p "$work/proc/42"; echo cosmic-initial- > "$work/proc/42/comm"
 ( sleep 3; rm -rf "$work/proc/42" ) &
 start=$(date +%s)
-HADRON_SESSION_FILE="$work/cosmic" HADRON_PROC="$work/proc" HADRON_FIRST_RUN_SETUP_GRACE=0 \
-    hadron-first-run-apps --login
+ISOTOPE_SESSION_FILE="$work/cosmic" ISOTOPE_PROC="$work/proc" ISOTOPE_FIRST_RUN_SETUP_GRACE=0 \
+    isotope-first-run-apps --login
 waited=$(( $(date +%s) - start ))
 if [ "$waited" -ge 2 ]; then
     pass "COSMIC: waits while cosmic-initial-setup runs"
@@ -170,7 +177,7 @@ fi
 expect "COSMIC: then opens the checklist" "$(grep -c '^terminal' "$log")" 1
 
 reset; mkdir -p "$HOME/.config"; : > "$HOME/.config/cosmic-initial-setup-done"
-HADRON_SESSION_FILE="$work/cosmic" hadron-first-run-apps --login
+ISOTOPE_SESSION_FILE="$work/cosmic" isotope-first-run-apps --login
 expect "COSMIC: setup done, no wait" "$(grep -c '^terminal' "$log")" 1
 
 exit "$fail"

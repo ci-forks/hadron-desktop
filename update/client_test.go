@@ -123,10 +123,10 @@ func TestUpgradeThroughTheDaemon(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("code %d, stderr %q", code, errOut)
 	}
-	if f.applied[0] != "ghcr.io/kairos-community/hadron-desktop:sway-v0.2.0" || f.applied[1] != digestA || f.applied[2] != "" {
+	if f.applied[0] != "ghcr.io/kairos-community/isotope:sway-v0.2.0" || f.applied[1] != digestA || f.applied[2] != "" {
 		t.Fatalf("Apply got %v", f.applied)
 	}
-	for _, want := range []string{"ghcr.io/kairos-community/hadron-desktop", digestA, "sway", "v0.2.0", "trusted", "pulling", "Reboot now?"} {
+	for _, want := range []string{"ghcr.io/kairos-community/isotope", digestA, "sway", "v0.2.0", "trusted", "pulling", "Reboot now?"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output lacks %q: %s", want, out)
 		}
@@ -199,17 +199,17 @@ func TestUpgradeImageIsAdvanced(t *testing.T) {
 func TestUnlabelledImageAsksASecondQuestionDefaultingToNo(t *testing.T) {
 	setup(t, "v0.1.0", "v0.2.0")
 	f := okDaemon()
-	f.info = InspectInfo{Digest: digestA, Refusal: "not a Hadron Desktop image", Overridable: true}
+	f.info = InspectInfo{Digest: digestA, Refusal: "not an Isotope image", Overridable: true}
 	useDaemon(t, f)
 	// --yes must not answer the second question; EOF means the default: no.
 	code, out, _ := runCLI("", "upgrade", "--yes", "--image", "ghcr.io/x/y:t")
-	if code != exitOK || f.called("Apply") || !strings.Contains(out, "This is not a Hadron Desktop image. Install it anyway? [y/N]") {
+	if code != exitOK || f.called("Apply") || !strings.Contains(out, "This is not an Isotope image. Install it anyway? [y/N]") {
 		t.Fatalf("code %d, out %q, calls %v", code, out, f.calls)
 	}
 	// An explicit yes goes through, with the override on Apply only: the
 	// inspection asked without it, so the refusal was shown.
 	f = okDaemon()
-	f.info = InspectInfo{Digest: digestA, Refusal: "not a Hadron Desktop image", Overridable: true}
+	f.info = InspectInfo{Digest: digestA, Refusal: "not an Isotope image", Overridable: true}
 	useDaemon(t, f)
 	code, out, _ = runCLI("y\n", "upgrade", "--yes", "--image", "ghcr.io/x/y:t")
 	if code != exitOK || !f.called("Apply") || f.applied[2] != "adv" {
@@ -220,21 +220,21 @@ func TestUnlabelledImageAsksASecondQuestionDefaultingToNo(t *testing.T) {
 			t.Fatalf("Inspect asked with advanced=true: %v", f.inspectAdv)
 		}
 	}
-	if !strings.Contains(out, "Source:   not a Hadron Desktop image") {
+	if !strings.Contains(out, "Source:   not an Isotope image") {
 		t.Fatalf("source line: %q", out)
 	}
 }
 
 // TestSourceLineFollowsTheVerdict: "labelled by its publisher" only for an
-// image that carries the Hadron labels.
+// image that carries the Isotope labels.
 func TestSourceLineFollowsTheVerdict(t *testing.T) {
 	for _, c := range []struct {
 		info InspectInfo
 		want string
 	}{
-		{InspectInfo{Digest: digestA, Trusted: true, Hadron: true}, "Source:   a published Hadron Desktop release (trusted)"},
-		{InspectInfo{Digest: digestA, Hadron: true}, "Source:   labelled by its publisher, not a published release"},
-		{InspectInfo{Digest: digestA}, "Source:   not a Hadron Desktop image"},
+		{InspectInfo{Digest: digestA, Trusted: true, Isotope: true}, "Source:   a published Isotope release (trusted)"},
+		{InspectInfo{Digest: digestA, Isotope: true}, "Source:   labelled by its publisher, not a published release"},
+		{InspectInfo{Digest: digestA}, "Source:   not an Isotope image"},
 	} {
 		setup(t, "v0.1.0", "v0.2.0")
 		f := okDaemon()
@@ -266,8 +266,8 @@ func TestUnlabelledImageThroughTheRealService(t *testing.T) {
 	t.Cleanup(func() { dialDaemon, busyWait = old, oldWait })
 
 	code, out, errOut := runCLI("", "upgrade", "--yes", "--image", thirdParty)
-	if code != exitOK || !strings.Contains(out, "This is not a Hadron Desktop image. Install it anyway? [y/N]") ||
-		!strings.Contains(out, "Source:   not a Hadron Desktop image") ||
+	if code != exitOK || !strings.Contains(out, "This is not an Isotope image. Install it anyway? [y/N]") ||
+		!strings.Contains(out, "Source:   not an Isotope image") ||
 		!strings.Contains(out, "Cancelled.") || len(b.calls()) != 0 {
 		t.Fatalf("--yes alone: code %d, out %q, stderr %q, upgrades %v", code, out, errOut, b.calls())
 	}
@@ -275,7 +275,7 @@ func TestUnlabelledImageThroughTheRealService(t *testing.T) {
 	if code != exitOK || !strings.Contains(out, "is installed") {
 		t.Fatalf("yes: code %d, out %q, stderr %q", code, out, errOut)
 	}
-	want := "oci:quay.io/kairos-community/hadron-desktop@" + dg[thirdParty]
+	want := "oci:quay.io/kairos-community/isotope@" + dg[thirdParty]
 	if got := b.calls(); len(got) != 1 || got[0] != want {
 		t.Fatalf("upgrades %q, want [%q]", got, want)
 	}
@@ -301,7 +301,7 @@ func TestLabelledImageThroughTheRealService(t *testing.T) {
 	code, out, errOut := runCLI("", "upgrade", "--yes", "--image", labelledThirdParty)
 	if code != exitOK || len(b.calls()) != 0 ||
 		!strings.Contains(out, "Source:   labelled by its publisher, not a published release") ||
-		!strings.Contains(out, "This is not a published Hadron Desktop release. Install it anyway? [y/N]") {
+		!strings.Contains(out, "This is not a published Isotope release. Install it anyway? [y/N]") {
 		t.Fatalf("code %d, out %q, stderr %q, upgrades %v", code, out, errOut, b.calls())
 	}
 }
@@ -390,7 +390,7 @@ func TestSwitchWarnsAndAsks(t *testing.T) {
 // onLine rewrites the release file setup wrote to name an image line.
 func onLine(t *testing.T, line string) {
 	t.Helper()
-	p := os.Getenv("HADRON_UPDATE_RELEASE_FILE")
+	p := os.Getenv("ISOTOPE_UPDATE_RELEASE_FILE")
 	b, err := os.ReadFile(p)
 	if err != nil {
 		t.Fatal(err)
@@ -529,12 +529,12 @@ func TestInstallFailureAfterTheWriteAsksForARestart(t *testing.T) {
 func TestMissingDaemonIsNotAFallbackToSudo(t *testing.T) {
 	setup(t, "v0.1.0", "v0.2.0")
 	agent, argv := fakeTool(t, 0)
-	t.Setenv("HADRON_UPDATE_AGENT", agent)
+	t.Setenv("ISOTOPE_UPDATE_AGENT", agent)
 	old := dialDaemon
 	dialDaemon = func() (daemonClient, error) { return nil, errors.New("no bus") }
 	t.Cleanup(func() { dialDaemon = old })
 	code, _, errOut := runCLI("", "upgrade", "--yes")
-	if code != exitError || !strings.Contains(errOut, "The update service is not available (hadron-updated).") {
+	if code != exitError || !strings.Contains(errOut, "The update service is not available (isotope-updated).") {
 		t.Fatalf("code %d, stderr %q", code, errOut)
 	}
 	if _, err := os.Stat(argv); !os.IsNotExist(err) {
@@ -545,7 +545,7 @@ func TestMissingDaemonIsNotAFallbackToSudo(t *testing.T) {
 func TestAgentFlavorNeverDialsTheDaemon(t *testing.T) {
 	setupAgent(t, "v0.1.0", "v0.2.0")
 	agent, _ := fakeTool(t, 0)
-	t.Setenv("HADRON_UPDATE_AGENT", agent)
+	t.Setenv("ISOTOPE_UPDATE_AGENT", agent)
 	old := dialDaemon
 	dialDaemon = func() (daemonClient, error) { t.Fatal("dialled the daemon"); return nil, nil }
 	t.Cleanup(func() { dialDaemon = old })

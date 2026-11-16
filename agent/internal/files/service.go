@@ -36,7 +36,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/mudler/hadron-desktop/agent/internal/api"
+	"github.com/kairos-community/isotope/agent/internal/api"
 )
 
 // Bounds. See the package doc comment for how default vs. max are applied
@@ -75,11 +75,11 @@ const (
 )
 
 // backupSuffix pattern used for patch's same-directory rollback backups.
-const backupPattern = ".hadron-patch-bak-%d-%d"
+const backupPattern = ".isotope-patch-bak-%d-%d"
 
 // tempPattern is the same-directory temp file pattern used by the atomic
 // write path.
-const tempPattern = ".hadron-write-*.tmp"
+const tempPattern = ".isotope-write-*.tmp"
 
 // Service executes the bounded filesystem tools. It holds no state and no
 // path allowlist: the identity of the OS process it runs in is the access

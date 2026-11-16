@@ -1,6 +1,6 @@
 #cloud-config
 #
-# Example Kairos cloud-config for either Hadron desktop image.
+# Example Kairos cloud-config for either Isotope image.
 #
 # The desktop image bakes in NO user — the desktop user is created here, at
 # install/first-boot, on the persistent /home partition. Pass this file to the
@@ -25,13 +25,13 @@ install:
 # user on the live ISO only (password "kairos"). Membership in the listed groups
 # gives access to GPU/input/audio/bluetooth devices and sudo.
 users:
-  - name: hadron
+  - name: isotope
     # The name graphical login screens (COSMIC's greeter) show. Not in Kairos'
     # users schema, but yip reads it; without it the name is "Created by
     # entities".
-    gecos: Hadron
+    gecos: Isotope
     # Plaintext for the example; prefer a hashed value from `openssl passwd -6`.
-    passwd: hadron
+    passwd: isotope
     groups:
       - admin            # sudo
       - audio
@@ -55,10 +55,10 @@ stages:
         - path: /etc/ly/save.ini
           permissions: 0644
           content: |
-            user = hadron
+            user = isotope
             session_index = 2
   boot:
     # The display name again, for a kairos-agent that drops gecos.
     - name: "Display name"
       commands:
-        - usermod -c Hadron hadron
+        - usermod -c Isotope isotope

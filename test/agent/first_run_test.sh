@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests for hadron-agent-first-run (Phase 3, Task 7).
+# Tests for isotope-agent-first-run (Phase 3, Task 7).
 #
 #   1. `sh -n` syntax-checks the script.
 #   2. Missing token -> the panel does NOT open (exits cleanly, `st` never
@@ -13,7 +13,7 @@
 #      the deliberately-displayed stdout of case 3), and this script never
 #      shells out to `logger`/journald.
 #
-# `st` and `hadron-agent` are faked via a PATH-shadowing bin dir; Enter is fed
+# `st` and `isotope-agent` are faked via a PATH-shadowing bin dir; Enter is fed
 # via stdin. The fake `st` strips flags up to `-e` and execs the remaining
 # command directly (mirrors how a real terminal emulator attaches the child's
 # stdio to its own pty -- the parent script's own stdin is never read except
@@ -23,7 +23,7 @@ set -u
 
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 bin="$repo_root/rootfs-agent/usr/bin"
-script="$bin/hadron-agent-first-run"
+script="$bin/isotope-agent-first-run"
 
 fail=0
 err() { echo "FAIL: $*" >&2; fail=1; }
@@ -64,15 +64,15 @@ exec "\$@"
 EOF
 chmod +x "$fakebin/st"
 
-# Fake hadron-agent: prints a not-ready status line by default (used by the
+# Fake isotope-agent: prints a not-ready status line by default (used by the
 # timeout case's CLI-fallback path, and to assert it stays not-ready).
-cat >"$fakebin/hadron-agent" <<'EOF'
+cat >"$fakebin/isotope-agent" <<'EOF'
 #!/bin/sh
 echo "version: 0.0.0-test"
 echo "ready:   false"
 echo "paused:  false"
 EOF
-chmod +x "$fakebin/hadron-agent"
+chmod +x "$fakebin/isotope-agent"
 
 token_secret="hdn_u_TOPSECRET1234567890"
 
@@ -96,7 +96,7 @@ run_first_run() {
 # ---------------------------------------------------------------------------
 missing_token="$workdir/no-such-token"
 rm -f "$missing_token"
-run_first_run HADRON_AGENT_FIRST_RUN_TOKEN="$missing_token"
+run_first_run ISOTOPE_AGENT_FIRST_RUN_TOKEN="$missing_token"
 if [ "$code" -ne 0 ]; then
   err "missing token: expected exit 0, got $code"
 else
@@ -139,8 +139,8 @@ token_file="$workdir/first-run-token"
 printf '%s' "$token_secret" >"$token_file"
 
 run_first_run \
-  HADRON_AGENT_FIRST_RUN_TOKEN="$token_file" \
-  HADRON_AGENT_STATUS_JSON="$status_json"
+  ISOTOPE_AGENT_FIRST_RUN_TOKEN="$token_file" \
+  ISOTOPE_AGENT_STATUS_JSON="$status_json"
 
 if [ "$code" -ne 0 ]; then
   err "ready case: expected exit 0, got $code"
@@ -190,10 +190,10 @@ printf '%s' "$token_secret" >"$timeout_token"
 missing_status="$workdir/status/nope.json"
 
 run_first_run \
-  HADRON_AGENT_FIRST_RUN_TOKEN="$timeout_token" \
-  HADRON_AGENT_STATUS_JSON="$missing_status" \
-  HADRON_AGENT_FIRST_RUN_TIMEOUT=2 \
-  HADRON_AGENT_FIRST_RUN_POLL=0
+  ISOTOPE_AGENT_FIRST_RUN_TOKEN="$timeout_token" \
+  ISOTOPE_AGENT_STATUS_JSON="$missing_status" \
+  ISOTOPE_AGENT_FIRST_RUN_TIMEOUT=2 \
+  ISOTOPE_AGENT_FIRST_RUN_POLL=0
 
 if [ "$code" -ne 0 ]; then
   err "timeout case: expected exit 0, got $code"

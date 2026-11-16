@@ -12,10 +12,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const defaultHostname = "hadron"
+const defaultHostname = "isotope"
 
 func oemDir() string {
-	if d := os.Getenv("HADRON_OEM_DIR"); d != "" {
+	if d := os.Getenv("ISOTOPE_OEM_DIR"); d != "" {
 		return d
 	}
 	return "/oem"
@@ -24,14 +24,14 @@ func oemDir() string {
 // configOut is the file the wizard writes. It is normally in oemDir, but a
 // Trusted Boot (UKI) install medium boots with a read-only root: there /oem is
 // a read-only directory and only /etc, /var, /srv and /home are writable.
-// 90_desktop_installer.yaml sets HADRON_CONFIG_OUT to a file in /etc/kairos,
+// 90_desktop_installer.yaml sets ISOTOPE_CONFIG_OUT to a file in /etc/kairos,
 // which kairos-agent also reads its config from (agent GetUserConfigDirs).
 // oemDir is still the directory scanned for a seeded config.
 func configOut() string {
-	if p := os.Getenv("HADRON_CONFIG_OUT"); p != "" {
+	if p := os.Getenv("ISOTOPE_CONFIG_OUT"); p != "" {
 		return p
 	}
-	return oemDir() + "/99_hadron-user.yaml"
+	return oemDir() + "/99_isotope-user.yaml"
 }
 
 // posixUsername is the conservative intersection of what useradd accepts and
@@ -92,35 +92,35 @@ func validateGithub(v string) error {
 // reports whether non-interactive mode is active at all. These variable names are
 // a stable contract with existing tests and automation.
 func choiceFromEnv() (Choice, bool, error) {
-	if os.Getenv("HADRON_INSTALL_NONINTERACTIVE") != "1" {
+	if os.Getenv("ISOTOPE_INSTALL_NONINTERACTIVE") != "1" {
 		return Choice{}, false, nil
 	}
 	c := Choice{
-		Hostname: os.Getenv("HADRON_HOSTNAME"),
-		Username: os.Getenv("HADRON_USER"),
-		Password: os.Getenv("HADRON_PASS"),
-		Github:   os.Getenv("HADRON_GITHUB"),
-		Disk:     os.Getenv("HADRON_DISK"),
+		Hostname: os.Getenv("ISOTOPE_HOSTNAME"),
+		Username: os.Getenv("ISOTOPE_USER"),
+		Password: os.Getenv("ISOTOPE_PASS"),
+		Github:   os.Getenv("ISOTOPE_GITHUB"),
+		Disk:     os.Getenv("ISOTOPE_DISK"),
 
-		KeyboardLayout:  orDefault(os.Getenv("HADRON_KEYBOARD_LAYOUT"), defaultLayout),
-		KeyboardVariant: os.Getenv("HADRON_KEYBOARD_VARIANT"),
-		Timezone:        orDefault(os.Getenv("HADRON_TIMEZONE"), defaultTimezone),
+		KeyboardLayout:  orDefault(os.Getenv("ISOTOPE_KEYBOARD_LAYOUT"), defaultLayout),
+		KeyboardVariant: os.Getenv("ISOTOPE_KEYBOARD_VARIANT"),
+		Timezone:        orDefault(os.Getenv("ISOTOPE_TIMEZONE"), defaultTimezone),
 
-		Encrypt:    os.Getenv("HADRON_ENCRYPT") == "1",
-		Passphrase: os.Getenv("HADRON_DISK_PASSPHRASE"),
+		Encrypt:    os.Getenv("ISOTOPE_ENCRYPT") == "1",
+		Passphrase: os.Getenv("ISOTOPE_DISK_PASSPHRASE"),
 	}
 	if c.Hostname == "" {
 		c.Hostname = defaultHostname
 	}
 	var missing []string
 	if c.Username == "" {
-		missing = append(missing, "HADRON_USER")
+		missing = append(missing, "ISOTOPE_USER")
 	}
 	if c.Password == "" {
-		missing = append(missing, "HADRON_PASS")
+		missing = append(missing, "ISOTOPE_PASS")
 	}
 	if c.Disk == "" {
-		missing = append(missing, "HADRON_DISK")
+		missing = append(missing, "ISOTOPE_DISK")
 	}
 	if len(missing) > 0 {
 		return c, true, fmt.Errorf("non-interactive mode requires %s", strings.Join(missing, ", "))
@@ -128,26 +128,26 @@ func choiceFromEnv() (Choice, bool, error) {
 	// The interactive path validates at the input step; the env is the other way
 	// a username can reach RenderCloudConfig, so it is checked here too.
 	if err := validateUsername(c.Username); err != nil {
-		return c, true, fmt.Errorf("HADRON_USER: %w", err)
+		return c, true, fmt.Errorf("ISOTOPE_USER: %w", err)
 	}
 	// Same reasoning for the GitHub handle, which reaches an unquoted scalar.
-	// Empty stays valid here: HADRON_GITHUB is genuinely optional.
+	// Empty stays valid here: ISOTOPE_GITHUB is genuinely optional.
 	if err := validateGithub(c.Github); err != nil {
-		return c, true, fmt.Errorf("HADRON_GITHUB: %w", err)
+		return c, true, fmt.Errorf("ISOTOPE_GITHUB: %w", err)
 	}
 	// Optional, defaulting to US English and UTC. The renderer would replace
 	// a bad value with the default, but a typo here should fail the install,
 	// not install a machine with a keyboard the operator did not ask for.
 	if err := validateKeyboard(c.KeyboardLayout, c.KeyboardVariant); err != nil {
-		return c, true, fmt.Errorf("HADRON_KEYBOARD_LAYOUT/HADRON_KEYBOARD_VARIANT: %w", err)
+		return c, true, fmt.Errorf("ISOTOPE_KEYBOARD_LAYOUT/ISOTOPE_KEYBOARD_VARIANT: %w", err)
 	}
 	if err := validateTimezone(c.Timezone); err != nil {
-		return c, true, fmt.Errorf("HADRON_TIMEZONE: %w", err)
+		return c, true, fmt.Errorf("ISOTOPE_TIMEZONE: %w", err)
 	}
 	// Encryption has no default passphrase.
 	if c.Encrypt {
 		if err := validatePassphrase(c.Passphrase); err != nil {
-			return c, true, fmt.Errorf("HADRON_DISK_PASSPHRASE: %w", err)
+			return c, true, fmt.Errorf("ISOTOPE_DISK_PASSPHRASE: %w", err)
 		}
 	} else {
 		c.Passphrase = ""
@@ -681,7 +681,7 @@ func (m wizardModel) updateReview(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m wizardModel) View() string {
 	var b strings.Builder
-	b.WriteString("\n  " + tnHot.Render("HADRON") +
+	b.WriteString("\n  " + tnHot.Render("ISOTOPE") +
 		tnDim.Render(" // desktop install · "+stepName[m.step]) + "\n\n")
 
 	switch m.step {
@@ -774,7 +774,7 @@ func (m wizardModel) View() string {
 		b.WriteString("\n  " + tnDim.Render("enter when you have saved it · esc back") + "\n")
 
 	case stepReview:
-		b.WriteString("  " + haltRed.Render("this ERASES "+m.choice.Disk+" and installs hadron-desktop") + "\n\n")
+		b.WriteString("  " + haltRed.Render("this ERASES "+m.choice.Disk+" and installs isotope") + "\n\n")
 		b.WriteString("    keyboard   " + tnHot.Render(keyboardLabel(m.choice)) + "\n")
 		b.WriteString("    timezone   " + tnHot.Render(m.choice.Timezone) + "\n")
 		b.WriteString("    hostname   " + tnHot.Render(m.choice.Hostname) + "\n")
@@ -887,12 +887,12 @@ func runWizard() (*Choice, error) {
 
 	if nonInteractive {
 		if err := zoneExists(zoneinfoDir, c.Timezone); err != nil {
-			return nil, fmt.Errorf("HADRON_TIMEZONE: %w", err)
+			return nil, fmt.Errorf("ISOTOPE_TIMEZONE: %w", err)
 		}
 		if c.Encrypt && trustedBoot {
-			return nil, errors.New("HADRON_ENCRYPT: a Trusted Boot install encrypts with its TPM-sealed key; the passphrase method is for the normal edition")
+			return nil, errors.New("ISOTOPE_ENCRYPT: a Trusted Boot install encrypts with its TPM-sealed key; the passphrase method is for the normal edition")
 		}
-		if os.Getenv("HADRON_RECOVERY_KEY") == "1" {
+		if os.Getenv("ISOTOPE_RECOVERY_KEY") == "1" {
 			return nil, errRecoveryKeyNonInteractive
 		}
 		c.ConsoleKeymap = consoleKeymap(keymapsDir, c.KeyboardLayout, c.KeyboardVariant)

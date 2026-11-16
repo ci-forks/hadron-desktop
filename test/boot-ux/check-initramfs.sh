@@ -41,17 +41,17 @@ check "initramfs unit NOT wired as a hard initrd.target.requires dependency" \
     "! lsinitrd /boot/initrd 2>/dev/null | grep -q 'initrd.target.requires/kairos-splash.service'"
 check "immucore quiet drop-in baked into the initramfs" \
     "lsinitrd /boot/initrd 2>/dev/null | grep -q 'immucore.service.d/10-quiet.conf'"
-check "no leftover hadron-splash in the initramfs" \
-    "! lsinitrd /boot/initrd 2>/dev/null | grep -q 'hadron-splash'"
-# The splash answers disk passphrase questions (51hadron-askpass). The console
+check "no leftover isotope-splash in the initramfs" \
+    "! lsinitrd /boot/initrd 2>/dev/null | grep -q 'isotope-splash'"
+# The splash answers disk passphrase questions (51isotope-askpass). The console
 # agent must wait for it, and the keymaps must be there for the passphrase.
 check "splash unit is Type=notify (agent decision before the console agent)" \
-    "lsinitrd /boot/initrd 2>/dev/null | grep -q 'kairos-splash.service.d/20-hadron-agent.conf'"
+    "lsinitrd /boot/initrd 2>/dev/null | grep -q 'kairos-splash.service.d/20-isotope-agent.conf'"
 check "console password agent gated on the splash" \
-    "lsinitrd /boot/initrd 2>/dev/null | grep -q 'systemd-ask-password-console.service.d/20-hadron-ask-gate.conf' && \
-     lsinitrd /boot/initrd 2>/dev/null | grep -q 'usr/libexec/hadron-ask-gate'"
+    "lsinitrd /boot/initrd 2>/dev/null | grep -q 'systemd-ask-password-console.service.d/20-isotope-ask-gate.conf' && \
+     lsinitrd /boot/initrd 2>/dev/null | grep -q 'usr/libexec/isotope-ask-gate'"
 check "no drop-in that stops the splash when the console agent starts" \
-    "! lsinitrd /boot/initrd 2>/dev/null | grep -q 'systemd-ask-password-console.service.d/10-hadron-splash.conf'"
+    "! lsinitrd /boot/initrd 2>/dev/null | grep -q 'systemd-ask-password-console.service.d/10-isotope-splash.conf'"
 check "console keymaps and loadkeys in the initramfs (rd.vconsole.keymap=)" \
     "lsinitrd /boot/initrd 2>/dev/null | grep -q 'keymaps/i386/qwertz/de-latin1' && \
      lsinitrd /boot/initrd 2>/dev/null | grep -q 'usr/bin/loadkeys'"
@@ -65,6 +65,6 @@ check "initramfs splash is the image's build (not a stale cached one)" \
 # Exec it inside the unpacked initramfs: proves the binary and its musl loader
 # resolve there, and that it reads the version file there.
 check "splash execs inside the unpacked initramfs" \
-    "mkdir -p /tmp/ird && cd /tmp/ird && lsinitrd --unpack /boot/initrd && chroot . /usr/bin/kairos-splash 2>/dev/null | grep -q 'HADRON v'"
+    "mkdir -p /tmp/ird && cd /tmp/ird && lsinitrd --unpack /boot/initrd && chroot . /usr/bin/kairos-splash 2>/dev/null | grep -q 'ISOTOPE v'"
 
 exit "$fail"

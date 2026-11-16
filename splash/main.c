@@ -1,7 +1,7 @@
-/* hadron-splash — animated hadron-desktop boot splash, installed as
+/* isotope-splash — animated isotope boot splash, installed as
  * /usr/bin/kairos-splash so Kairos runs it in both halves of the boot.
  *
- * Aesthetic: neon-noir cyberpunk in a Tokyo Night blue/cyan ramp. The machine
+ * Aesthetic: neon-noir in the Isotope lime ramp. The machine
  * wakes: the logo glitches in, a CRT scanline sweeps it, and terse boot lines
  * type out beneath.
  *
@@ -53,11 +53,10 @@
 #define MIN_ROWS     12
 #define GLITCH_SEC   1.10   /* logo resolves out of glitch over this window */
 
-/* Tokyo Night ramp, dim -> hot. The kernel VT/framebuffer is a 16-color VGA
-   console: the truecolor Tokyo Night values (#7aa2f7, #7dcfff, #565f89) have no
-   256-color equivalent that survives the round-trip, so we use the colors the
-   VGA palette actually has — 4 = blue, 8 = dark grey (the #565f89 comment hue),
-   12 = bright blue (#7aa2f7), 14 = bright cyan (#7dcfff), 15 = white-hot. */
+/* The Isotope ramp, dim -> hot. The kernel VT/framebuffer is a 16-color VGA
+   console, so we use its palette indices, which the kernel command line sets
+   from theme/palette.toml (tools/gen-theme.py, VT_ROLES): 4 and 12 = accent
+   (lime), 8 = dim, 14 = glow (light lime), 15 = text, white-hot. */
 static const uint8_t TOKYO[8] = {4, 4, 8, 12, 12, 12, 14, 15};
 #define A_CHROME 1   /* faint HUD brackets / leaders */
 #define A_DIM    2   /* tagline, version */
@@ -67,7 +66,7 @@ static const uint8_t TOKYO[8] = {4, 4, 8, 12, 12, 12, 14, 15};
 
 static char g_ver[64] = "";
 
-/* The hadron-desktop release, written by the Dockerfile into the branding
+/* The isotope release, written by the Dockerfile into the branding
    directory kairos-init's dracut module copies into the initramfs, so both
    halves of the boot show the same string. os-release (the Hadron base) is
    the fallback for an image built without it. */
@@ -127,16 +126,16 @@ static int utf8_cols(const char *s) {
 }
 
 #define ART_ROWS 6
-#define ART_COLS 51
+#define ART_COLS 54
 static const char *ART[ART_ROWS] = {
-"██╗  ██╗ █████╗ ██████╗ ██████╗  ██████╗ ███╗   ██╗",
-"██║  ██║██╔══██╗██╔══██╗██╔══██╗██╔═══██╗████╗  ██║",
-"███████║███████║██║  ██║██████╔╝██║   ██║██╔██╗ ██║",
-"██╔══██║██╔══██║██║  ██║██╔══██╗██║   ██║██║╚██╗██║",
-"██║  ██║██║  ██║██████╔╝██║  ██║╚██████╔╝██║ ╚████║",
-"╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝",
+"██╗███████╗ ██████╗ ████████╗ ██████╗ ██████╗ ███████╗",
+"██║██╔════╝██╔═══██╗╚══██╔══╝██╔═══██╗██╔══██╗██╔════╝",
+"██║███████╗██║   ██║   ██║   ██║   ██║██████╔╝█████╗  ",
+"██║╚════██║██║   ██║   ██║   ██║   ██║██╔═══╝ ██╔══╝  ",
+"██║███████║╚██████╔╝   ██║   ╚██████╔╝██║     ███████╗",
+"╚═╝╚══════╝ ╚═════╝    ╚═╝    ╚═════╝ ╚═╝     ╚══════╝",
 };
-static const char *TAG = "the immutable desktop \u00b7 built from source on Kairos";
+static const char *TAG = "immutable Linux \u00b7 built on Hadron, by Kairos";
 /* In-progress, honest boot phrases — true during early boot, never claiming a
    service is "ready" before it is. */
 static const char *BOOT[3] = {
@@ -148,7 +147,7 @@ static const char *BOOT[3] = {
 static uint32_t xs(uint32_t *s) { uint32_t x = *s; x ^= x<<13; x ^= x>>17; x ^= x<<5; *s = x?x:0xdeadbeef; return *s; }
 static double   xu(uint32_t *s) { return (xs(s) & 0xFFFFFF) / (double)0x1000000; }
 
-/* paint_logo: the HADRON wordmark with a downward CRT scanline (crest = white-
+/* paint_logo: the ISOTOPE wordmark with a downward CRT scanline (crest = white-
    hot, shoulders bright cyan) over a steady blue body, plus a glitch-in dissolve
    while gl>0 (random glyph corruption + 1-col jitter that thins out as gl->0). */
 static const char GLITCH_POOL[] = "#%&/\\|=+<>*!?";
@@ -202,7 +201,7 @@ static double now_sec(void) {
    it started in /run, which survives switch-root, and the booted half picks up
    the same timeline instead of replaying the glitch-in. CLOCK_MONOTONIC counts
    from boot, so the two processes agree on it. */
-#define TIMELINE "/run/hadron-splash.start"
+#define TIMELINE "/run/isotope-splash.start"
 static double timeline_start(void) {
     double now = now_sec(), t0 = 0;
     FILE *f = fopen(TIMELINE, "r");
@@ -316,20 +315,20 @@ static int text_run(double duration) {
 /* Graphics: draw into a framebuffer.                                        */
 /* ======================================================================== */
 
-/* Tokyo Night in truecolor, which the framebuffer can show. */
-#define C_BG_TOP   0x1a1b26
-#define C_BG_BOT   0x16161e
-#define C_GLOW     0x7aa2f7
-#define C_BODY     0x7aa2f7
-#define C_CYAN     0x7dcfff
-#define C_HOT      0xc0caf5
-#define C_SHADOW   0x414868
-#define C_DIM      0x565f89
-#define C_TEXT     0xa9b1d6
+/* The Isotope palette in truecolor, which the framebuffer can show. */
+#define C_BG_TOP   0x15141c
+#define C_BG_BOT   0x0e0d13
+#define C_GLOW     0x8fd12e
+#define C_BODY     0x8fd12e
+#define C_CYAN     0xc6f36b
+#define C_HOT      0xf2f1f5
+#define C_SHADOW   0x3c3a49
+#define C_DIM      0x5c596a
+#define C_TEXT     0xcbc8d6
 /* The passphrase panel. */
-#define C_PANEL    0x24283b
-#define C_FIELD    0x292e42
-#define C_LABEL    0x737aa2
+#define C_PANEL    0x1f1e28
+#define C_FIELD    0x2a2935
+#define C_LABEL    0x8f8ba3
 #define C_ERROR    0xf7768e
 
 /* A draw target: the mmapped framebuffer, or a heap buffer for --render.
@@ -526,8 +525,8 @@ typedef struct {
 /* While the initramfs splash answers systemd's password questions it says so
    in this file (its PID), and the console agent's gate waits for that PID
    instead of asking on the console too. See
-   rootfs/usr/lib/dracut/modules.d/51hadron-askpass/. */
-#define AGENT_PIDDIR  "/run/hadron-ask"
+   rootfs/usr/lib/dracut/modules.d/51isotope-askpass/. */
+#define AGENT_PIDDIR  "/run/isotope-ask"
 #define AGENT_PIDFILE AGENT_PIDDIR "/splash-agent"
 
 #define CHECKING_SEC 4.0   /* "Checking..." after Enter, until a retry comes */
@@ -563,7 +562,7 @@ static void agent_unregister(void) {
     g_pr.on = 0;
 }
 
-/* 1 = always (--agent), 0 = never (--no-agent, hadron.splash.agent=0),
+/* 1 = always (--agent), 0 = never (--no-agent, isotope.splash.agent=0),
    -1 = only in the initramfs. */
 static int g_agent_mode = -1;
 
@@ -573,7 +572,9 @@ static int g_agent_mode = -1;
    console agent asks, so the 3-second splash there stays out of it unless
    --agent says otherwise. */
 static void agent_register(void) {
-    if (g_agent_mode == 0 || cmdline_has("hadron.splash.agent=0")) return;
+    /* hadron.splash.agent=0 is the name from before the rename to Isotope. */
+    if (g_agent_mode == 0 || cmdline_has("isotope.splash.agent=0") ||
+        cmdline_has("hadron.splash.agent=0")) return;
     if (g_agent_mode < 0 && access("/etc/initrd-release", F_OK)) return;
     if (!isatty(STDIN_FILENO) || tcgetattr(STDIN_FILENO, &g_pr.saved)) return;
     if (!ask_can_reply()) return;
@@ -989,7 +990,7 @@ int main(int argc, char **argv) {
 
     if (!isatty(STDOUT_FILENO)) {
         notify_ready();
-        if (g_ver[0]) printf("HADRON %s\n", g_ver); else puts("HADRON");
+        if (g_ver[0]) printf("ISOTOPE %s\n", g_ver); else puts("ISOTOPE");
         return 0;
     }
 

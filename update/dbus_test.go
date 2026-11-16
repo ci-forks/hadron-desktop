@@ -174,11 +174,11 @@ func TestBusRefusesUnauthorized(t *testing.T) {
 
 	ref := ghcrRepo + ":sway-v0.0.6"
 	err := f.call("Apply", ref, dg[ref], false).Err
-	if got := errName(err); got != "io.kairos.HadronUpdate1.Error.NotAuthorized" {
+	if got := errName(err); got != "io.kairos.IsotopeUpdate1.Error.NotAuthorized" {
 		t.Fatalf("Apply error %q (%v), want NotAuthorized", got, err)
 	}
 	for _, m := range []string{"Cancel", "Reboot", "RebootPrevious"} {
-		if got := errName(f.call(m).Err); got != "io.kairos.HadronUpdate1.Error.NotAuthorized" {
+		if got := errName(f.call(m).Err); got != "io.kairos.IsotopeUpdate1.Error.NotAuthorized" {
 			t.Fatalf("%s error %q, want NotAuthorized", m, got)
 		}
 	}
@@ -212,7 +212,7 @@ func TestBusAuthorizerErrorIsARefusal(t *testing.T) {
 	// A broken authorizer that also says "yes" must still be a no.
 	f := startService(t, NewDaemon(b), &fakeAuth{allow: true, err: errors.New("polkit is down")})
 	ref := ghcrRepo + ":sway-v0.0.6"
-	if got := errName(f.call("Apply", ref, dg[ref], false).Err); got != "io.kairos.HadronUpdate1.Error.NotAuthorized" {
+	if got := errName(f.call("Apply", ref, dg[ref], false).Err); got != "io.kairos.IsotopeUpdate1.Error.NotAuthorized" {
 		t.Fatalf("Apply error %q, want NotAuthorized", got)
 	}
 	if len(b.calls()) != 0 {
@@ -279,21 +279,21 @@ func TestBusErrorNames(t *testing.T) {
 		t.Fatal(err)
 	}
 	<-started
-	if got := errName(f.call("Apply", ref, dg[ref], false).Err); got != "io.kairos.HadronUpdate1.Error.Busy" {
+	if got := errName(f.call("Apply", ref, dg[ref], false).Err); got != "io.kairos.IsotopeUpdate1.Error.Busy" {
 		t.Fatalf("second Apply: %q, want Busy", got)
 	}
-	if got := errName(f.call("Cancel").Err); got != "io.kairos.HadronUpdate1.Error.NotCancellable" {
+	if got := errName(f.call("Cancel").Err); got != "io.kairos.IsotopeUpdate1.Error.NotCancellable" {
 		t.Fatalf("Cancel while applying: %q, want NotCancellable", got)
 	}
-	if got := errName(f.call("Check").Err); got != "io.kairos.HadronUpdate1.Error.Busy" {
+	if got := errName(f.call("Check").Err); got != "io.kairos.IsotopeUpdate1.Error.Busy" {
 		t.Fatalf("Check while applying: %q, want Busy", got)
 	}
 	close(block)
 	f.waitBusState(t, StateRebootPending)
-	if got := errName(f.call("Apply", ref, dg[ref], false).Err); got != "io.kairos.HadronUpdate1.Error.RebootPending" {
+	if got := errName(f.call("Apply", ref, dg[ref], false).Err); got != "io.kairos.IsotopeUpdate1.Error.RebootPending" {
 		t.Fatalf("Apply while reboot-pending: %q, want RebootPending", got)
 	}
-	if got := errName(f.call("Apply", "not a ref", dg[ref], false).Err); got != "io.kairos.HadronUpdate1.Error.Failed" {
+	if got := errName(f.call("Apply", "not a ref", dg[ref], false).Err); got != "io.kairos.IsotopeUpdate1.Error.Failed" {
 		t.Fatalf("Apply of a bad ref: %q, want Failed", got)
 	}
 }
@@ -308,7 +308,7 @@ func TestBusErrorMapping(t *testing.T) {
 		{ErrNotCancellable, "NotCancellable"},
 		{fmt.Errorf("x: %w", ErrRebooting), "Rebooting"},
 		{ErrAgentImage, "Refused"},
-		{ErrNotHadron, "Refused"},
+		{ErrNotIsotope, "Refused"},
 		{ErrNotRelease, "Refused"},
 		{errUnfinishedPending, "RebootPending"},
 		{ErrNeedsCredentials, "Refused"},
@@ -370,7 +370,7 @@ func TestBusInspect(t *testing.T) {
 	info := inspect(t, f, release, false)
 	for k, want := range map[string]any{
 		"ref": release, "digest": dg[release], "os": "linux", "arch": "amd64",
-		"flavor": "sway", "version": "v0.0.6", "gpu": "full", "trusted": true, "hadron": true,
+		"flavor": "sway", "version": "v0.0.6", "gpu": "full", "trusted": true, "isotope": true,
 		"refusal": "", "overridable": false,
 	} {
 		if info[k].Value() != want {
@@ -382,11 +382,11 @@ func TestBusInspect(t *testing.T) {
 	// install it; the client asks again with advanced=true.
 	info = inspect(t, f, thirdParty, false)
 	if info["refusal"].Value() == "" || info["overridable"].Value() != true ||
-		info["hadron"].Value() != false || info["trusted"].Value() != false || info["digest"].Value() != dg[thirdParty] {
+		info["isotope"].Value() != false || info["trusted"].Value() != false || info["digest"].Value() != dg[thirdParty] {
 		t.Fatalf("third party %v", info)
 	}
 	info = inspect(t, f, thirdParty, true)
-	if info["refusal"].Value() != "" || info["hadron"].Value() != false {
+	if info["refusal"].Value() != "" || info["isotope"].Value() != false {
 		t.Fatalf("third party, advanced %v", info)
 	}
 
@@ -394,10 +394,10 @@ func TestBusInspect(t *testing.T) {
 	// it is not a published release: advanced mode only.
 	info = inspect(t, f, labelledThirdParty, false)
 	if info["refusal"].Value() != ErrNotRelease.Error() || info["overridable"].Value() != true ||
-		info["hadron"].Value() != true || info["trusted"].Value() != false || info["flavor"].Value() != "sway" {
+		info["isotope"].Value() != true || info["trusted"].Value() != false || info["flavor"].Value() != "sway" {
 		t.Fatalf("labelled third party %v", info)
 	}
-	if info = inspect(t, f, labelledThirdParty, true); info["refusal"].Value() != "" || info["hadron"].Value() != true {
+	if info = inspect(t, f, labelledThirdParty, true); info["refusal"].Value() != "" || info["isotope"].Value() != true {
 		t.Fatalf("labelled third party, advanced %v", info)
 	}
 
@@ -409,7 +409,7 @@ func TestBusInspect(t *testing.T) {
 	}
 
 	// With advanced mode off, nothing is overridable.
-	if err := os.WriteFile(os.Getenv("HADRON_UPDATE_CONF"), []byte("advanced=false\n"), 0o644); err != nil {
+	if err := os.WriteFile(os.Getenv("ISOTOPE_UPDATE_CONF"), []byte("advanced=false\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	for _, adv := range []bool{false, true} {
@@ -420,7 +420,7 @@ func TestBusInspect(t *testing.T) {
 	}
 
 	// A reference that does not parse is an error, not a refusal.
-	if got := errName(f.call("Inspect", "not a ref", false).Err); got != "io.kairos.HadronUpdate1.Error.Failed" {
+	if got := errName(f.call("Inspect", "not a ref", false).Err); got != "io.kairos.IsotopeUpdate1.Error.Failed" {
 		t.Fatalf("bad ref: %q", got)
 	}
 	if n := len(auth.questions()); n != 0 {
@@ -662,7 +662,7 @@ func TestBusAdmitsOneNetworkCallAtATime(t *testing.T) {
 			close(unblock)
 		}
 	})
-	t.Setenv("HADRON_UPDATE_REGISTRY", srv.URL)
+	t.Setenv("ISOTOPE_UPDATE_REGISTRY", srv.URL)
 	f := startService(t, NewDaemon(&fakeBackend{}), &fakeAuth{})
 
 	first := make(chan error, 1)
@@ -677,7 +677,7 @@ func TestBusAdmitsOneNetworkCallAtATime(t *testing.T) {
 		{"Releases", nil},
 		{"Check", nil},
 	} {
-		if got := errName(f.call(c.method, c.args...).Err); got != "io.kairos.HadronUpdate1.Error.Busy" {
+		if got := errName(f.call(c.method, c.args...).Err); got != "io.kairos.IsotopeUpdate1.Error.Busy" {
 			t.Fatalf("concurrent %s: %q, want Busy", c.method, got)
 		}
 	}
@@ -717,16 +717,16 @@ func TestBusRejectsALongRef(t *testing.T) {
 		http.NotFound(w, r)
 	}))
 	t.Cleanup(srv.Close)
-	t.Setenv("HADRON_UPDATE_REGISTRY", srv.URL)
-	t.Setenv("HADRON_UPDATE_API", srv.URL)
+	t.Setenv("ISOTOPE_UPDATE_REGISTRY", srv.URL)
+	t.Setenv("ISOTOPE_UPDATE_API", srv.URL)
 	b := &fakeBackend{}
 	f := startService(t, NewDaemon(b), &fakeAuth{allow: true})
 
-	long := "ghcr.io/kairos-community/hadron-desktop:" + strings.Repeat("a", 512)
-	if got := errName(f.call("Inspect", long, false).Err); got != "io.kairos.HadronUpdate1.Error.Failed" {
+	long := "ghcr.io/kairos-community/isotope:" + strings.Repeat("a", 512)
+	if got := errName(f.call("Inspect", long, false).Err); got != "io.kairos.IsotopeUpdate1.Error.Failed" {
 		t.Fatalf("Inspect of a long ref: %q", got)
 	}
-	if got := errName(f.call("Apply", long, dg[ghcrRepo+":sway-v0.0.6"], false).Err); got != "io.kairos.HadronUpdate1.Error.Failed" {
+	if got := errName(f.call("Apply", long, dg[ghcrRepo+":sway-v0.0.6"], false).Err); got != "io.kairos.IsotopeUpdate1.Error.Failed" {
 		t.Fatalf("Apply of a long ref: %q", got)
 	}
 	if n := hits.Load(); n != 0 {
@@ -744,7 +744,7 @@ func TestExitingErrorName(t *testing.T) {
 		t.Fatal("did not close")
 	}
 	_, err := s.enter()
-	if err == nil || err.Name != "io.kairos.HadronUpdate1.Error.Exiting" {
+	if err == nil || err.Name != "io.kairos.IsotopeUpdate1.Error.Exiting" {
 		t.Fatalf("enter on a closing service: %v", err)
 	}
 }
@@ -787,7 +787,7 @@ func TestLogindInhibitor(t *testing.T) {
 	fake.mu.Lock()
 	got := strings.Join(fake.args, "|")
 	fake.mu.Unlock()
-	if want := "shutdown:sleep|Hadron Desktop update|An update is being written to disk|block"; got != want {
+	if want := "shutdown:sleep|Isotope update|An update is being written to disk|block"; got != want {
 		t.Fatalf("Inhibit(%s), want (%s)", got, want)
 	}
 	release()
@@ -813,7 +813,7 @@ func TestBusRebootPrevious(t *testing.T) {
 	if got := auth.questions(); len(got) != 1 || got[0] != me+" "+actionReboot {
 		t.Fatalf("asked %q, want %s", got, actionReboot)
 	}
-	if got := errName(f.call("RebootPrevious").Err); got != "io.kairos.HadronUpdate1.Error.Rebooting" {
+	if got := errName(f.call("RebootPrevious").Err); got != "io.kairos.IsotopeUpdate1.Error.Rebooting" {
 		t.Fatalf("second RebootPrevious: %q, want Rebooting", got)
 	}
 
@@ -826,7 +826,7 @@ func TestBusRebootPrevious(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitState(t, d2, StateRebootPending)
-	if got := errName(f2.call("RebootPrevious").Err); got != "io.kairos.HadronUpdate1.Error.RebootPending" {
+	if got := errName(f2.call("RebootPrevious").Err); got != "io.kairos.IsotopeUpdate1.Error.RebootPending" {
 		t.Fatalf("RebootPrevious while reboot-pending: %q, want RebootPending", got)
 	}
 	if b2.previousCount() != 0 {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end test harness for the Hadron sway-desktop example.
+# End-to-end test harness for the Isotope sway-desktop example.
 #
 #   build example image -> wrap with Kairos init -> inject test instrumentation
 #   -> build bootable ISO with AuroraBoot -> boot headless in QEMU -> parse

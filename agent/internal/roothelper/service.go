@@ -45,8 +45,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/mudler/hadron-desktop/agent/internal/api"
-	"github.com/mudler/hadron-desktop/agent/internal/auth"
+	"github.com/kairos-community/isotope/agent/internal/api"
+	"github.com/kairos-community/isotope/agent/internal/auth"
 )
 
 // DefaultOSConcurrency is the number of OS calls the helper runs concurrently

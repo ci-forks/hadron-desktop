@@ -7,7 +7,7 @@
 
 #include <glib/gstdio.h>
 
-#define STATE_PATH "/run/user/1000/hadron-cua-gtk-state.json"
+#define STATE_PATH "/run/user/1000/isotope-cua-gtk-state.json"
 
 typedef struct {
     guint clicks;
@@ -255,7 +255,7 @@ static void on_drag_data_get(GtkWidget *widget,
     (void)info;
     (void)time;
     (void)user_data;
-    gtk_selection_data_set_text(selection_data, "hadron-cua-fixture", -1);
+    gtk_selection_data_set_text(selection_data, "isotope-cua-fixture", -1);
 }
 
 static void on_drag_data_received(GtkWidget *widget,
@@ -270,7 +270,7 @@ static void on_drag_data_received(GtkWidget *widget,
     Fixture *fixture = user_data;
     guchar *payload = gtk_selection_data_get_text(selection_data);
     gboolean accepted = payload != NULL &&
-        strcmp((const gchar *)payload, "hadron-cua-fixture") == 0;
+        strcmp((const gchar *)payload, "isotope-cua-fixture") == 0;
 
     (void)widget;
     (void)x;
@@ -347,12 +347,12 @@ int main(int argc, char **argv)
      * application name. Without it the fixture ran happily with a mapped
      * window that list_applications never showed -- the gate then reported
      * "the fixture is not running" about a process that was perfectly alive. */
-    g_set_prgname("hadron-cua-gtk");
+    g_set_prgname("isotope-cua-gtk");
 
     gtk_init(&argc, &argv);
 
     window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(window), "Hadron Cua GTK Fixture");
+    gtk_window_set_title(GTK_WINDOW(window), "Isotope Cua GTK Fixture");
     gtk_window_set_default_size(GTK_WINDOW(window), 900, 640);
     gtk_window_set_resizable(GTK_WINDOW(window), FALSE);
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);

@@ -6,11 +6,11 @@
 # against that exported content:
 #
 #   1. The ordinary Sway AND i3 images contain NONE of the agent-only paths
-#      (hadron-agent binary, cua-driver, /etc/hadron-agent, the
-#      hadron-agent-*.service units, the agent Ly drop-in) and have no
+#      (isotope-agent binary, cua-driver, /etc/isotope-agent, the
+#      isotope-agent-*.service units, the agent Ly drop-in) and have no
 #      agent-only accounts in /etc/passwd.
 #   2. The agent image DOES contain every one of those paths, its base
-#      session marker says i3/XLibre, and it has the hadron-agent-gateway
+#      session marker says i3/XLibre, and it has the isotope-agent-gateway
 #      system account but NOT the human `agent` account (that one is created
 #      at boot, not baked into the image -- see Dockerfile.agent).
 #   3. The agent image's file CONTENTS (not just names) carry no live
@@ -122,7 +122,7 @@ scan_bearer() {
 
 # scan_digest <dir> -> stdout: any configured (non-placeholder) bearer
 # digest. The only digest the generic image may legitimately contain is
-# auth's all-zero "unusable" placeholder (cmd/hadron-agent/main.go); any
+# auth's all-zero "unusable" placeholder (cmd/isotope-agent/main.go); any
 # OTHER sha256:<64 hex> is a real configured credential.
 scan_digest() {
   grep -rIoE 'sha256:[0-9a-f]{64}' "$1" 2>/dev/null | grep -vE ':sha256:0{64}$' || true
@@ -148,31 +148,31 @@ export_image "$AGENT_IMAGE" AGENT
 # copied straight into /etc/systemd/system OR symlinked into a *.wants/ dir,
 # so match on basename via a list-wide grep rather than the full path.
 AGENT_UNIT_BASENAMES=(
-  hadron-agent-autoinstall.service
-  hadron-agent-display-watchdog.service
-  hadron-agent-gateway.service
-  hadron-agent-provision.service
-  hadron-agent-root-helper.service
+  isotope-agent-autoinstall.service
+  isotope-agent-display-watchdog.service
+  isotope-agent-gateway.service
+  isotope-agent-provision.service
+  isotope-agent-root-helper.service
 )
 AGENT_USER_UNIT_BASENAMES=(
-  hadron-agent-session.service
+  isotope-agent-session.service
 )
 
 # Additional agent-exclusive paths introduced by rootfs-agent/ that exist in
 # NO other rootfs overlay (rootfs, rootfs-sway, rootfs-i3). Matched via
 # in_list on the exact exported-tar path (as COPY rootfs-agent/ / in
 # Dockerfile.agent places them 1:1 at the filesystem root). NOTE:
-# usr/bin/hadron-status is deliberately NOT included here: rootfs-agent's
+# usr/bin/isotope-status is deliberately NOT included here: rootfs-agent's
 # copy is a CONTENT OVERRIDE of a path that already exists in rootfs-i3, not
 # a novel path, so it would be a false positive in an absence check.
 AGENT_ONLY_PATHS=(
   system/oem/90_agent_profile.yaml
   system/oem/91_agent_installer.yaml
-  etc/i3/config.d/90-hadron-agent.conf
-  etc/tmpfiles.d/hadron-agent.conf
-  usr/bin/hadron-agent-first-run
-  usr/bin/hadron-agent-session-ready
-  usr/local/bin/hadron-agent-install
+  etc/i3/config.d/90-isotope-agent.conf
+  etc/tmpfiles.d/isotope-agent.conf
+  usr/bin/isotope-agent-first-run
+  usr/bin/isotope-agent-session-ready
+  usr/local/bin/isotope-agent-install
 )
 
 # ---------------------------------------------------------------------------
@@ -181,10 +181,10 @@ AGENT_ONLY_PATHS=(
 assert_ordinary_lacks_agent() {
   local label="$1" listfile="$2" tarfile="$3"
 
-  if in_list "$listfile" 'usr/bin/hadron-agent'; then
-    err "$label: unexpectedly contains usr/bin/hadron-agent"
+  if in_list "$listfile" 'usr/bin/isotope-agent'; then
+    err "$label: unexpectedly contains usr/bin/isotope-agent"
   else
-    ok "$label: no usr/bin/hadron-agent"
+    ok "$label: no usr/bin/isotope-agent"
   fi
 
   if in_list "$listfile" 'usr/bin/cua-driver'; then
@@ -193,10 +193,10 @@ assert_ordinary_lacks_agent() {
     ok "$label: no usr/bin/cua-driver"
   fi
 
-  if in_list "$listfile" 'etc/hadron-agent' 'etc/hadron-agent/defaults.json' 'etc/hadron-agent/profile'; then
-    err "$label: unexpectedly contains /etc/hadron-agent"
+  if in_list "$listfile" 'etc/isotope-agent' 'etc/isotope-agent/defaults.json' 'etc/isotope-agent/profile'; then
+    err "$label: unexpectedly contains /etc/isotope-agent"
   else
-    ok "$label: no /etc/hadron-agent"
+    ok "$label: no /etc/isotope-agent"
   fi
 
   local u hit=0
@@ -206,7 +206,7 @@ assert_ordinary_lacks_agent() {
       hit=1
     fi
   done
-  [ "$hit" -eq 0 ] && ok "$label: no hadron-agent-*.service units"
+  [ "$hit" -eq 0 ] && ok "$label: no isotope-agent-*.service units"
 
   local p hit2=0
   for p in "${AGENT_ONLY_PATHS[@]}"; do
@@ -234,10 +234,10 @@ assert_ordinary_lacks_agent() {
   # No agent accounts baked into /etc/passwd either.
   local passwd
   passwd="$(extract_one "$tarfile" etc/passwd)"
-  if printf '%s\n' "$passwd" | grep -qE '^(agent|hadron-agent-gateway):'; then
-    err "$label: /etc/passwd unexpectedly has an agent/hadron-agent-gateway account"
+  if printf '%s\n' "$passwd" | grep -qE '^(agent|isotope-agent-gateway):'; then
+    err "$label: /etc/passwd unexpectedly has an agent/isotope-agent-gateway account"
   else
-    ok "$label: /etc/passwd has no agent/hadron-agent-gateway account"
+    ok "$label: /etc/passwd has no agent/isotope-agent-gateway account"
   fi
 }
 
@@ -252,10 +252,10 @@ assert_ordinary_lacks_agent i3 "$I3_LIST" "$I3_TAR"
 # ---------------------------------------------------------------------------
 log "Asserting agent image contains all expected agent paths"
 
-if in_list "$AGENT_LIST" 'usr/bin/hadron-agent'; then
-  ok "agent: has usr/bin/hadron-agent"
+if in_list "$AGENT_LIST" 'usr/bin/isotope-agent'; then
+  ok "agent: has usr/bin/isotope-agent"
 else
-  err "agent: missing usr/bin/hadron-agent"
+  err "agent: missing usr/bin/isotope-agent"
 fi
 
 if in_list "$AGENT_LIST" 'usr/bin/cua-driver'; then
@@ -264,33 +264,33 @@ else
   err "agent: missing usr/bin/cua-driver"
 fi
 
-if in_list "$AGENT_LIST" 'etc/hadron-agent/defaults.json'; then
-  ok "agent: has /etc/hadron-agent/defaults.json"
+if in_list "$AGENT_LIST" 'etc/isotope-agent/defaults.json'; then
+  ok "agent: has /etc/isotope-agent/defaults.json"
 else
-  err "agent: missing /etc/hadron-agent/defaults.json"
+  err "agent: missing /etc/isotope-agent/defaults.json"
 fi
 
-if in_list "$AGENT_LIST" 'etc/hadron-agent/profile'; then
-  ok "agent: has /etc/hadron-agent/profile"
+if in_list "$AGENT_LIST" 'etc/isotope-agent/profile'; then
+  ok "agent: has /etc/isotope-agent/profile"
 else
-  err "agent: missing /etc/hadron-agent/profile"
+  err "agent: missing /etc/isotope-agent/profile"
 fi
 
-# Content, not just presence: rootfs-agent/etc/hadron-agent/profile ships
+# Content, not just presence: rootfs-agent/etc/isotope-agent/profile ships
 # `PROFILE=agent` (plus ENABLED=true) -- assert the exported file actually
 # carries that marker, not merely that a path with this name exists.
-profile_content="$(extract_one "$AGENT_TAR" etc/hadron-agent/profile)"
+profile_content="$(extract_one "$AGENT_TAR" etc/isotope-agent/profile)"
 if printf '%s\n' "$profile_content" | grep -q '^PROFILE=agent$'; then
-  ok "agent: /etc/hadron-agent/profile content says PROFILE=agent"
+  ok "agent: /etc/isotope-agent/profile content says PROFILE=agent"
 else
-  err "agent: /etc/hadron-agent/profile content does not say PROFILE=agent (got: $profile_content)"
+  err "agent: /etc/isotope-agent/profile content does not say PROFILE=agent (got: $profile_content)"
 fi
 
 miss=0
 for u in "${AGENT_UNIT_BASENAMES[@]}" "${AGENT_USER_UNIT_BASENAMES[@]}"; do
   grep -q "$u\$" "$AGENT_LIST" || { err "agent: missing rootfs-agent unit $u"; miss=1; }
 done
-[ "$miss" -eq 0 ] && ok "agent: has all hadron-agent-*.service units"
+[ "$miss" -eq 0 ] && ok "agent: has all isotope-agent-*.service units"
 
 miss2=0
 for p in "${AGENT_ONLY_PATHS[@]}"; do
@@ -304,23 +304,23 @@ else
   err "agent: missing the agent Ly override (ly@.service.d/20-agent-profile.conf)"
 fi
 
-session="$(extract_one "$AGENT_TAR" etc/hadron-desktop/session)"
+session="$(extract_one "$AGENT_TAR" etc/isotope/session)"
 if printf '%s\n' "$session" | grep -q 'DESKTOP_NAME=i3' \
   && printf '%s\n' "$session" | grep -q 'DISPLAY_NAME=XLibre'; then
   ok "agent: base session marker says i3/XLibre"
 else
-  err "agent: /etc/hadron-desktop/session does not say i3/XLibre (got: $session)"
+  err "agent: /etc/isotope/session does not say i3/XLibre (got: $session)"
 fi
 
-# Accounts: hadron-agent-gateway (system, locked) baked in; the human `agent`
+# Accounts: isotope-agent-gateway (system, locked) baked in; the human `agent`
 # account is intentionally NOT -- it is created by the OEM/install path at
 # boot (Task 5), never baked into the image. Use /etc/passwd directly: the
 # base image ships no `getent` binary (Task 4 carry-forward).
 agent_passwd="$(extract_one "$AGENT_TAR" etc/passwd)"
-if printf '%s\n' "$agent_passwd" | grep -qE '^hadron-agent-gateway:'; then
-  ok "agent: /etc/passwd has hadron-agent-gateway"
+if printf '%s\n' "$agent_passwd" | grep -qE '^isotope-agent-gateway:'; then
+  ok "agent: /etc/passwd has isotope-agent-gateway"
 else
-  err "agent: /etc/passwd missing hadron-agent-gateway"
+  err "agent: /etc/passwd missing isotope-agent-gateway"
 fi
 if printf '%s\n' "$agent_passwd" | grep -qE '^agent:'; then
   err "agent: /etc/passwd unexpectedly has the human 'agent' account baked in (must be created at boot)"
@@ -342,7 +342,7 @@ tar -xf "$AGENT_TAR" -C "$secrets_dir" --exclude='dev/*' --exclude='proc/*' --ex
 # Sanity guard: a botched/partial extraction would make every scan below
 # vacuously pass (nothing to grep). Confirm a known agent file actually
 # landed on disk before trusting a clean scan result.
-if [ ! -f "$secrets_dir/etc/hadron-agent/defaults.json" ]; then
+if [ ! -f "$secrets_dir/etc/isotope-agent/defaults.json" ]; then
   err "secret scan: extraction of $AGENT_TAR into $secrets_dir looks incomplete (defaults.json absent); aborting scan"
 fi
 
@@ -350,9 +350,9 @@ fi
 # every credential this build could leak (a bearer, a configured digest, a
 # TLS key) only ever gets INTO the image as text -- JSON/YAML/ini config or
 # an OEM cloud-config fragment -- never as a Go string constant compiled
-# into hadron-agent/cua-driver. Scanning binaries verbatim only produces
+# into isotope-agent/cua-driver. Scanning binaries verbatim only produces
 # noise (dockerd embeds unrelated OCI empty-layer sha256 constants; the
-# hadron-agent binary embeds its own all-zero "unusable" placeholder digest
+# isotope-agent binary embeds its own all-zero "unusable" placeholder digest
 # as source code). -I keeps the scan focused on the surface a real leak
 # would actually appear on.
 
@@ -398,7 +398,7 @@ selftest_dir="$work/secretscan-selftest"
 
 # 1. A real-shaped bearer must be CAUGHT by scan_bearer.
 mkdir -p "$selftest_dir/bearer_pos"
-printf 'HADRON_BEARER=hdn_u_GlWBixHL8fvQwK0m0_sCeLFMxeJRWp7DwCS3Dd7rhcQ\n' \
+printf 'ISOTOPE_BEARER=hdn_u_GlWBixHL8fvQwK0m0_sCeLFMxeJRWp7DwCS3Dd7rhcQ\n' \
   > "$selftest_dir/bearer_pos/fixture.env"
 if [ -n "$(scan_bearer "$selftest_dir/bearer_pos")" ]; then
   ok "self-test: scan_bearer catches a real-shaped hdn_u_<43-char> bearer"

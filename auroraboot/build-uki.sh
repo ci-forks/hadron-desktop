@@ -62,7 +62,7 @@ docker run --rm \
   --sb-cert /keys/db.pem \
   --secure-boot-enroll "$SECURE_BOOT_ENROLL" \
   --sdboot-in-source \
-  --boot-branding "Hadron Desktop" \
+  --boot-branding "Isotope" \
   "docker:$IMAGE"
 
 ls -l "$OUT_ABS"/*-uki.iso

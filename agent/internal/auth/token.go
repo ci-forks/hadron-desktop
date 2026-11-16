@@ -1,10 +1,10 @@
 // Package auth generates, verifies, and rotates the bearer credentials that
-// authenticate every hadron-agent MCP request. It defines the two bearer
+// authenticate every isotope-agent MCP request. It defines the two bearer
 // classes (user and admin), the digest format credentials are stored in at
 // rest, and a Verifier that accepts a bounded rotation window between a
 // current and previous digest.
 //
-// This package is the security boundary for hadron-agent: the gateway (a
+// This package is the security boundary for isotope-agent: the gateway (a
 // later Phase-2 task) calls Verifier.Verify on every /mcp request, and the
 // root-helper independently re-verifies the raw admin bearer before
 // forwarding a privileged call. Bearer values must never be logged; see
@@ -24,7 +24,7 @@ import (
 
 	sdkauth "github.com/modelcontextprotocol/go-sdk/auth"
 
-	"github.com/mudler/hadron-desktop/agent/internal/api"
+	"github.com/kairos-community/isotope/agent/internal/api"
 )
 
 // ---------------------------------------------------------------------------
@@ -38,10 +38,10 @@ type Class string
 
 const (
 	// ClassUser is the bearer class presented by ordinary MCP clients
-	// (the Cua agent loop) and carries the "hadron:user" scope.
+	// (the Cua agent loop) and carries the "isotope:user" scope.
 	ClassUser Class = "user"
 	// ClassAdmin is the bearer class presented by the root-helper's
-	// privileged callers and carries the "hadron:admin" scope.
+	// privileged callers and carries the "isotope:admin" scope.
 	ClassAdmin Class = "admin"
 )
 
@@ -56,9 +56,9 @@ var prefixByClass = map[Class]string{
 // of class grants.
 func scopeForClass(class Class) string {
 	if class == ClassAdmin {
-		return "hadron:admin"
+		return "isotope:admin"
 	}
-	return "hadron:user"
+	return "isotope:user"
 }
 
 // ---------------------------------------------------------------------------

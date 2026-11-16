@@ -124,13 +124,13 @@ func TestWizardListStepsFitTheConsole(t *testing.T) {
 }
 
 func TestChoiceFromEnvLocaleDefaultsAndValidation(t *testing.T) {
-	t.Setenv("HADRON_INSTALL_NONINTERACTIVE", "1")
-	t.Setenv("HADRON_USER", "ada")
-	t.Setenv("HADRON_PASS", "hunter2")
-	t.Setenv("HADRON_DISK", "/dev/vda")
-	t.Setenv("HADRON_KEYBOARD_LAYOUT", "")
-	t.Setenv("HADRON_KEYBOARD_VARIANT", "")
-	t.Setenv("HADRON_TIMEZONE", "")
+	t.Setenv("ISOTOPE_INSTALL_NONINTERACTIVE", "1")
+	t.Setenv("ISOTOPE_USER", "ada")
+	t.Setenv("ISOTOPE_PASS", "hunter2")
+	t.Setenv("ISOTOPE_DISK", "/dev/vda")
+	t.Setenv("ISOTOPE_KEYBOARD_LAYOUT", "")
+	t.Setenv("ISOTOPE_KEYBOARD_VARIANT", "")
+	t.Setenv("ISOTOPE_TIMEZONE", "")
 	c, _, err := choiceFromEnv()
 	if err != nil {
 		t.Fatal(err)
@@ -139,9 +139,9 @@ func TestChoiceFromEnvLocaleDefaultsAndValidation(t *testing.T) {
 		t.Errorf("defaults = %q/%q/%q, want us, no variant, UTC", c.KeyboardLayout, c.KeyboardVariant, c.Timezone)
 	}
 
-	t.Setenv("HADRON_KEYBOARD_LAYOUT", "de")
-	t.Setenv("HADRON_KEYBOARD_VARIANT", "nodeadkeys")
-	t.Setenv("HADRON_TIMEZONE", "Europe/Berlin")
+	t.Setenv("ISOTOPE_KEYBOARD_LAYOUT", "de")
+	t.Setenv("ISOTOPE_KEYBOARD_VARIANT", "nodeadkeys")
+	t.Setenv("ISOTOPE_TIMEZONE", "Europe/Berlin")
 	c, _, err = choiceFromEnv()
 	if err != nil {
 		t.Fatal(err)
@@ -151,9 +151,9 @@ func TestChoiceFromEnvLocaleDefaultsAndValidation(t *testing.T) {
 	}
 
 	for _, tc := range []struct{ env, value string }{
-		{"HADRON_KEYBOARD_LAYOUT", "de\nstages:"},
-		{"HADRON_KEYBOARD_VARIANT", "a b"},
-		{"HADRON_TIMEZONE", "../../etc/shadow"},
+		{"ISOTOPE_KEYBOARD_LAYOUT", "de\nstages:"},
+		{"ISOTOPE_KEYBOARD_VARIANT", "a b"},
+		{"ISOTOPE_TIMEZONE", "../../etc/shadow"},
 	} {
 		t.Run(tc.env, func(t *testing.T) {
 			t.Setenv(tc.env, tc.value)
@@ -171,7 +171,7 @@ func TestRenderCloudConfigWritesKeyboardAndTimezone(t *testing.T) {
 		KeyboardLayout: "de", KeyboardVariant: "nodeadkeys", ConsoleKeymap: "de-latin1-nodeadkeys", Timezone: "Europe/Rome"}
 	out := RenderCloudConfig(c, "x")
 	for _, want := range []string{
-		"        - path: /etc/hadron-desktop/keyboard\n",
+		"        - path: /etc/isotope/keyboard\n",
 		"            XKB_LAYOUT=de\n            XKB_VARIANT=nodeadkeys\n",
 		"        - path: /etc/X11/xorg.conf.d/00-keyboard.conf\n",
 		"                Option \"XkbLayout\" \"de\"\n",
@@ -188,7 +188,7 @@ func TestRenderCloudConfigWritesKeyboardAndTimezone(t *testing.T) {
 	}
 	// In the initramfs stage, like save.ini, so /etc has it before
 	// systemd-vconsole-setup and the display manager start.
-	kb, boot := strings.Index(out, "/etc/hadron-desktop/keyboard"), strings.Index(out, "\n  boot:")
+	kb, boot := strings.Index(out, "/etc/isotope/keyboard"), strings.Index(out, "\n  boot:")
 	if kb < 0 || boot < kb {
 		t.Errorf("keyboard file must be written in the initramfs stage:\n%s", out)
 	}

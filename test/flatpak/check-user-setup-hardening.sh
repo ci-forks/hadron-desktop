@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE="${IMAGE:?set IMAGE to the Hadron image under test}"
+IMAGE="${IMAGE:?set IMAGE to the Isotope image under test}"
 CASE="${CASE:-all}"
 result=0
 
@@ -39,7 +39,7 @@ fi
 exec /usr/bin/flatpak.real "$@"
 WRAPPER
 chmod +x /usr/bin/flatpak
-if /usr/bin/hadron-user-setup; then
+if /usr/bin/isotope-user-setup; then
     echo "query failure unexpectedly succeeded" >&2
     exit 1
 fi
@@ -65,7 +65,7 @@ fi
 exec /usr/bin/flatpak.real "$@"
 WRAPPER
 chmod +x /usr/bin/flatpak
-if /usr/bin/hadron-user-setup; then
+if /usr/bin/isotope-user-setup; then
     echo "first disable failure unexpectedly succeeded" >&2
     exit 1
 fi
@@ -83,7 +83,7 @@ mkdir /fault-bin
 cat > /fault-bin/chmod <<'WRAPPER'
 #!/bin/sh
 case "$1:$2" in
-    700:/run/hadron-user-setup-gpg.*)
+    700:/run/isotope-user-setup-gpg.*)
         details=$(su - fixture -c "flatpak --user remotes --show-disabled --columns=name,options")
         printf "%s\n" "$details" | awk -F "\t" '
           $1 == "flathub" && $2 ~ /disabled/ { found=1 }
@@ -96,7 +96,7 @@ esac
 exec /usr/bin/chmod "$@"
 WRAPPER
 chmod +x /fault-bin/chmod
-if PATH=/fault-bin:/usr/bin:/bin /usr/bin/hadron-user-setup; then
+if PATH=/fault-bin:/usr/bin:/bin /usr/bin/isotope-user-setup; then
     echo "chmod failure unexpectedly succeeded" >&2
     exit 1
 fi
@@ -111,12 +111,12 @@ CHMOD_FAILURE
 run_case clean_extra_descriptor <<'CLEAN_EXTRA_DESCRIPTOR'
 useradd -m -u 1000 -s /bin/sh fixture
 install -d -m700 /tmp/extra-home
-GNUPGHOME=/tmp/extra-home gpg --batch --pinentry-mode loopback --passphrase '' --quick-generate-key 'Hadron migration extra key <extra@example.invalid>' ed25519 sign 0
+GNUPGHOME=/tmp/extra-home gpg --batch --pinentry-mode loopback --passphrase '' --quick-generate-key 'Isotope migration extra key <extra@example.invalid>' ed25519 sign 0
 GNUPGHOME=/tmp/extra-home gpg --batch --export > /tmp/extra.gpg
-cat /usr/share/hadron/flathub.gpg /tmp/extra.gpg > /tmp/combined.gpg
+cat /usr/share/isotope/flathub.gpg /tmp/extra.gpg > /tmp/combined.gpg
 encoded=$(base64 /tmp/combined.gpg | tr -d '\n')
-sed -i "s|^GPGKey=.*|GPGKey=$encoded|" /usr/share/hadron/flathub.flatpakrepo
-if /usr/bin/hadron-user-setup; then
+sed -i "s|^GPGKey=.*|GPGKey=$encoded|" /usr/share/isotope/flathub.flatpakrepo
+if /usr/bin/isotope-user-setup; then
     echo "extra descriptor key unexpectedly succeeded" >&2
     exit 1
 fi
@@ -131,10 +131,10 @@ run_case repair_extra_key <<'REPAIR_EXTRA_KEY'
 useradd -m -u 1000 -s /bin/sh fixture
 su - fixture -c "flatpak --user remote-add --no-gpg-verify flathub https://dl.flathub.org/repo/"
 install -d -m700 /tmp/extra-home
-GNUPGHOME=/tmp/extra-home gpg --batch --pinentry-mode loopback --passphrase '' --quick-generate-key 'Hadron migration extra key <extra@example.invalid>' ed25519 sign 0
+GNUPGHOME=/tmp/extra-home gpg --batch --pinentry-mode loopback --passphrase '' --quick-generate-key 'Isotope migration extra key <extra@example.invalid>' ed25519 sign 0
 GNUPGHOME=/tmp/extra-home gpg --batch --export > /tmp/extra.gpg
-cat /tmp/extra.gpg >> /usr/share/hadron/flathub.gpg
-if /usr/bin/hadron-user-setup; then
+cat /tmp/extra.gpg >> /usr/share/isotope/flathub.gpg
+if /usr/bin/isotope-user-setup; then
     echo "extra bootstrap key unexpectedly succeeded" >&2
     exit 1
 fi
@@ -147,9 +147,9 @@ REPAIR_EXTRA_KEY
 
 run_case repair_trust_replacement <<'REPAIR_TRUST_REPLACEMENT'
 useradd -m -u 1000 -s /bin/sh fixture
-su - fixture -c "flatpak --user remote-add flathub /usr/share/hadron/flathub.flatpakrepo"
+su - fixture -c "flatpak --user remote-add flathub /usr/share/isotope/flathub.flatpakrepo"
 install -d -m700 /tmp/extra-home
-GNUPGHOME=/tmp/extra-home gpg --batch --pinentry-mode loopback --passphrase '' --quick-generate-key 'Hadron migration extra key <extra@example.invalid>' ed25519 sign 0
+GNUPGHOME=/tmp/extra-home gpg --batch --pinentry-mode loopback --passphrase '' --quick-generate-key 'Isotope migration extra key <extra@example.invalid>' ed25519 sign 0
 GNUPGHOME=/tmp/extra-home gpg --batch --export > /tmp/extra.gpg
 su - fixture -c "flatpak --user remote-modify --gpg-import=/tmp/extra.gpg flathub"
 repo=/home/fixture/.local/share/flatpak/repo
@@ -162,7 +162,7 @@ metadata_before=$(su - fixture -c \
 install -d -o fixture -g fixture /home/fixture/.local/share/flatpak/app/org.example.Preserved/current/test
 printf "flathub\n" > /home/fixture/.local/share/flatpak/app/org.example.Preserved/current/test/origin
 chown fixture:fixture /home/fixture/.local/share/flatpak/app/org.example.Preserved/current/test/origin
-/usr/bin/hadron-user-setup
+/usr/bin/isotope-user-setup
 metadata_after=$(su - fixture -c \
   "flatpak --user remotes --columns=name,title:full,comment:full,description:full,homepage:full,icon:full")
 test "$metadata_after" = "$metadata_before"
@@ -183,8 +183,8 @@ REPAIR_TRUST_REPLACEMENT
 run_case repair_tampered_descriptor <<'REPAIR_TAMPERED_DESCRIPTOR'
 useradd -m -u 1000 -s /bin/sh fixture
 su - fixture -c "flatpak --user remote-add --no-gpg-verify flathub https://dl.flathub.org/repo/"
-printf "\n# valid but tampered descriptor\n" >> /usr/share/hadron/flathub.flatpakrepo
-if /usr/bin/hadron-user-setup; then
+printf "\n# valid but tampered descriptor\n" >> /usr/share/isotope/flathub.flatpakrepo
+if /usr/bin/isotope-user-setup; then
     echo "tampered descriptor repair unexpectedly succeeded" >&2
     exit 1
 fi
@@ -216,7 +216,7 @@ fi
 exec /usr/bin/mktemp "$@"
 WRAPPER
 chmod +x /fault-bin/mktemp
-if PATH=/fault-bin:/usr/bin:/bin /usr/bin/hadron-user-setup; then
+if PATH=/fault-bin:/usr/bin:/bin /usr/bin/isotope-user-setup; then
     echo "two-user mktemp failure unexpectedly succeeded" >&2
     exit 1
 fi

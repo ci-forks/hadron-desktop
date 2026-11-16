@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/mudler/hadron-desktop/test/agent/fixture.schema.json",
-  "title": "Hadron Cua agent VM fixture descriptor",
+  "$id": "https://github.com/kairos-community/isotope/test/agent/fixture.schema.json",
+  "title": "Isotope Cua agent VM fixture descriptor",
   "description": "Frozen contract emitted by test/agent/run.sh fixture (Phase 4, Task 3) and consumed by the Go smoke client (Task 4) and downstream CI gates. Exactly these eight string fields, nothing else.",
   "type": "object",
   "additionalProperties": false,

@@ -28,7 +28,7 @@
         "format-linked": "  {ifname}",
         "format-disconnected": "  off",
         "tooltip-format": "{ifname} via {gwaddr}",
-        "on-click": "hadron-wifi-menu"
+        "on-click": "isotope-wifi-menu"
     },
     "bluetooth": {
         "format": "  {status}",
@@ -36,12 +36,12 @@
         "format-disabled": "",
         "tooltip-format": "{controller_alias}\t{status}",
         "tooltip-format-connected": "{controller_alias}\t{status}\n{device_enumerate}",
-        "on-click": "hadron-bluetooth-menu"
+        "on-click": "isotope-bluetooth-menu"
     },
     "wireplumber": {
         "format": "  {volume}%",
         "format-muted": "  muted",
-        "on-click": "hadron-audio-menu",
+        "on-click": "isotope-audio-menu",
         "on-click-right": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
         "on-scroll-up": "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+",
         "on-scroll-down": "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-",
@@ -70,6 +70,6 @@
     "custom/power": {
         "format": "󰐥",
         "tooltip-format": "Power menu (Super+Shift+E)",
-        "on-click": "hadron-power-menu"
+        "on-click": "isotope-power-menu"
     }
 }

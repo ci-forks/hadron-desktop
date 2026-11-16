@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Unit-shape tests for the Hadron agent service lifecycle (Phase 3, Task 5).
+# Unit-shape tests for the Isotope agent service lifecycle (Phase 3, Task 5).
 #
 # Two layers:
 #   1. Structural grep assertions: every unit file exists, has valid INI section
@@ -9,7 +9,7 @@
 #      socket-dir owners/modes and the OEM account/linger stage.
 #   2. If `systemd-analyze` is available, run `systemd-analyze verify` on each
 #      system unit in an isolated unit dir. verify emits warnings for the missing
-#      ExecStart binary and for unknown ordering deps (hadron-agent-autoinstall,
+#      ExecStart binary and for unknown ordering deps (isotope-agent-autoinstall,
 #      ly@tty1) -- those are TOLERATED. A directive-syntax error is FATAL.
 set -euo pipefail
 
@@ -17,7 +17,7 @@ repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 agent_root="$repo_root/rootfs-agent"
 sys="$agent_root/etc/systemd/system"
 usr="$agent_root/usr/lib/systemd/user"
-tmpfiles="$agent_root/etc/tmpfiles.d/hadron-agent.conf"
+tmpfiles="$agent_root/etc/tmpfiles.d/isotope-agent.conf"
 oem="$agent_root/system/oem/90_agent_profile.yaml"
 
 fail=0
@@ -92,10 +92,10 @@ validate_ini() {
 }
 
 # --- 1. files exist -------------------------------------------------------
-provision="$sys/hadron-agent-provision.service"
-gateway="$sys/hadron-agent-gateway.service"
-roothelper="$sys/hadron-agent-root-helper.service"
-session="$usr/hadron-agent-session.service"
+provision="$sys/isotope-agent-provision.service"
+gateway="$sys/isotope-agent-gateway.service"
+roothelper="$sys/isotope-agent-root-helper.service"
+session="$usr/isotope-agent-session.service"
 
 for f in "$provision" "$gateway" "$roothelper" "$session" "$tmpfiles" "$oem"; do
   assert_file "$f" || true
@@ -108,18 +108,18 @@ done
 # --- 2. provision --------------------------------------------------------
 need    "$provision" "Type=oneshot"
 need    "$provision" "RemainAfterExit=yes"
-need    "$provision" "ConditionPathExists=/etc/hadron-agent/profile"
-need_re "$provision" '^Before=.*hadron-agent-gateway\.service'
+need    "$provision" "ConditionPathExists=/etc/isotope-agent/profile"
+need_re "$provision" '^Before=.*isotope-agent-gateway\.service'
 need_re "$provision" '^Before=.*ly@tty1\.service'
 need_re "$provision" '^After=.*network-online\.target'
-need_re "$provision" '^After=.*hadron-agent-autoinstall\.service'
+need_re "$provision" '^After=.*isotope-agent-autoinstall\.service'
 need_re "$provision" '^Wants=.*network-online\.target'
-need    "$provision" "hadron-agent provision --oem-dir /oem --state-dir /var/lib/hadron-agent --runtime-dir /run/hadron-agent"
+need    "$provision" "isotope-agent provision --oem-dir /oem --state-dir /var/lib/isotope-agent --runtime-dir /run/isotope-agent"
 deny_directive "$provision" "User="   # runs as root
 
 # --- 3. gateway (the hardened, internet-facing unit) ---------------------
-need    "$gateway" "User=hadron-agent-gateway"
-need    "$gateway" "Group=hadron-agent-gateway"
+need    "$gateway" "User=isotope-agent-gateway"
+need    "$gateway" "Group=isotope-agent-gateway"
 need    "$gateway" "NoNewPrivileges=yes"
 need    "$gateway" "ProtectSystem=strict"
 need    "$gateway" "ProtectHome=yes"
@@ -128,22 +128,22 @@ need    "$gateway" "PrivateDevices=yes"
 need_re "$gateway" '^CapabilityBoundingSet=[[:space:]]*$'   # empty = drop all
 need_re "$gateway" '^AmbientCapabilities=[[:space:]]*$'
 need_re "$gateway" '^SupplementaryGroups=[[:space:]]*$'     # no extra groups
-need    "$gateway" "ReadWritePaths=/run/hadron-agent/status /run/hadron-agent/control"
+need    "$gateway" "ReadWritePaths=/run/isotope-agent/status /run/isotope-agent/control"
 need    "$gateway" "Restart=on-failure"
 need    "$gateway" "RestartSec=2s"
 need    "$gateway" "RestartSteps=5"
 need    "$gateway" "RestartMaxDelaySec=30s"
 need    "$gateway" "ExecReload=/bin/kill -HUP \$MAINPID"
-need_re "$gateway" '^ExecStart=/usr/bin/hadron-agent gateway'
-need_re "$gateway" '^After=.*hadron-agent-provision\.service'
+need_re "$gateway" '^ExecStart=/usr/bin/isotope-agent gateway'
+need_re "$gateway" '^After=.*isotope-agent-provision\.service'
 # Never grant the gateway a privileged group.
 deny_word "$gateway" "admin"
 deny_word "$gateway" "docker"
 
 # --- 4. root helper (root-equivalent; deliberately NOT sandboxed) --------
-need    "$roothelper" "ConditionPathExists=/var/lib/hadron-agent/root/enabled"
+need    "$roothelper" "ConditionPathExists=/var/lib/isotope-agent/root/enabled"
 need    "$roothelper" "Delegate=yes"
-need_re "$roothelper" '^ExecStart=/usr/bin/hadron-agent root-helper'
+need_re "$roothelper" '^ExecStart=/usr/bin/isotope-agent root-helper'
 need    "$roothelper" "ExecReload=/bin/kill -HUP \$MAINPID"
 need    "$roothelper" "Restart=on-failure"
 # It must NOT be sandboxed like the gateway.
@@ -156,7 +156,7 @@ deny_directive "$roothelper" "User="   # runs as root
 # --- 5. session user unit ------------------------------------------------
 need    "$session" "ConditionUser=agent"
 need    "$session" "Delegate=yes"
-need_re "$session" '^ExecStart=/usr/bin/hadron-agent session'
+need_re "$session" '^ExecStart=/usr/bin/isotope-agent session'
 need    "$session" "Restart=on-failure"
 need    "$session" "RestartSec=2s"
 need    "$session" "RestartMaxDelaySec=30s"
@@ -164,13 +164,13 @@ need    "$session" "RestartMaxDelaySec=30s"
 deny_directive "$session" "ExecStartPre"
 
 # --- 6. tmpfiles socket dir owners/modes ---------------------------------
-need_re "$tmpfiles" '^d[[:space:]]+/run/hadron-agent/session[[:space:]]+0750[[:space:]]+agent[[:space:]]+hadron-agent-gateway'
-need_re "$tmpfiles" '^d[[:space:]]+/run/hadron-agent/root[[:space:]]+0750[[:space:]]+root[[:space:]]+hadron-agent-gateway'
-need_re "$tmpfiles" '^d[[:space:]]+/run/hadron-agent/control[[:space:]]+0750[[:space:]]+hadron-agent-gateway[[:space:]]+hadron-agent-control'
-need_re "$tmpfiles" '^d[[:space:]]+/run/hadron-agent/status[[:space:]]+0750[[:space:]]+hadron-agent-gateway[[:space:]]+agent'
+need_re "$tmpfiles" '^d[[:space:]]+/run/isotope-agent/session[[:space:]]+0750[[:space:]]+agent[[:space:]]+isotope-agent-gateway'
+need_re "$tmpfiles" '^d[[:space:]]+/run/isotope-agent/root[[:space:]]+0750[[:space:]]+root[[:space:]]+isotope-agent-gateway'
+need_re "$tmpfiles" '^d[[:space:]]+/run/isotope-agent/control[[:space:]]+0750[[:space:]]+isotope-agent-gateway[[:space:]]+isotope-agent-control'
+need_re "$tmpfiles" '^d[[:space:]]+/run/isotope-agent/status[[:space:]]+0750[[:space:]]+isotope-agent-gateway[[:space:]]+agent'
 # Crucial: the root socket dir is root-owned, so `agent` cannot unlink/replace
 # the root socket. Assert agent is neither owner nor owning-group of /root.
-if grep -E '^d[[:space:]]+/run/hadron-agent/root' "$tmpfiles" | grep -Eq '(^|[[:space:]])agent([[:space:]]|$)'; then
+if grep -E '^d[[:space:]]+/run/isotope-agent/root' "$tmpfiles" | grep -Eq '(^|[[:space:]])agent([[:space:]]|$)'; then
   err "tmpfiles: agent must NOT own or group the root socket dir"
 else
   ok "tmpfiles: agent is excluded from the root socket dir"
@@ -182,9 +182,9 @@ need    "$oem" "useradd"
 need    "$oem" "--uid 1000"
 need    "$oem" "UID 1000 already used"          # abort-on-conflict guard
 need    "$oem" "install-mode"                   # skip during installer
-need    "$oem" "/etc/hadron-agent/profile"      # profile-marker guard
-need    "$oem" "audio video render input bluetooth seat hadron-agent-control"
-need    "$oem" "systemd-tmpfiles --create /etc/tmpfiles.d/hadron-agent.conf"
+need    "$oem" "/etc/isotope-agent/profile"      # profile-marker guard
+need    "$oem" "audio video render input bluetooth seat isotope-agent-control"
+need    "$oem" "systemd-tmpfiles --create /etc/tmpfiles.d/isotope-agent.conf"
 # Never grant the human agent a privileged group (on any executable line).
 deny_word "$oem" "admin"
 deny_word "$oem" "sudo"
@@ -199,13 +199,13 @@ if have systemd-analyze; then
   verify_out="$workdir/verify.log"
   # verify each unit; capture stderr. Missing binaries / unknown ordering units
   # are expected warnings, not failures.
-  for u in hadron-agent-provision.service hadron-agent-gateway.service \
-           hadron-agent-root-helper.service hadron-agent-session.service; do
+  for u in isotope-agent-provision.service isotope-agent-gateway.service \
+           isotope-agent-root-helper.service isotope-agent-session.service; do
     systemd-analyze verify "$workdir/$u" >"$verify_out" 2>&1 || true
     # Keep only findings about THIS unit (drop host-unit scan noise like
     # mnt-*.mount permission errors), then drop the tolerated classes: the
     # ExecStart binary is absent in this test env, and ordering deps
-    # (hadron-agent-autoinstall, ly@tty1) are not present either.
+    # (isotope-agent-autoinstall, ly@tty1) are not present either.
     residual="$(grep -E "^${u}:" "$verify_out" \
       | grep -Ev 'is not executable|No such file|not found|does not exist|Unknown ordering|Cannot add dependency' || true)"
     # A real directive/syntax error looks like these:
