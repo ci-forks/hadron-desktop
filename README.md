@@ -75,7 +75,11 @@ installed machine to another desktop and keeps your files.
 - **For developers too.** Docker and [Distrobox](https://distrobox.it/) are
   included. Distrobox gives you a normal, changeable Linux inside a container.
 - **A coherent look.** The boot menu, the boot animation, the login, the
-  installer and the desktop all use the same Isotope colors.
+  installer and the desktop all use the same Isotope mark and colors.
+
+<p align="center">
+  <img src="docs/assets/boot-splash.gif" alt="The Isotope boot animation: six triangles close into a hexagon, one is pushed out, and the ISOTOPE wordmark resolves under it" width="80%">
+</p>
 
 ## Install
 

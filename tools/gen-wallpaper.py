@@ -130,8 +130,8 @@ def tri_coverage(x, y, pts):
 
 def draw(P, mode, W, H, plain, layout="desktop", night_palette=None):
     """Rows of RGB bytes. layout "desktop" is the wallpaper; "grub" keeps the
-    tiles to the right edge and leaves the mark out, so the centred boot menu
-    and its title stay readable. night_palette gives the lime tones of the
+    tiles to the right edge and puts a small mark at the top centre, above
+    the theme's title, so the centred boot menu stays readable. night_palette gives the lime tones of the
     tiles and the mark; it defaults to P."""
     night = mode == "night"
     top, bot = rgb(P["base"]), rgb(P["crust"])
@@ -152,8 +152,9 @@ def draw(P, mode, W, H, plain, layout="desktop", night_palette=None):
     if layout == "grub":
         def bias(u, v):
             return max(0.0, 0.85 - math.hypot((u - 1.02) * W / H, v - 0.55) * 1.55)
-        mark = []
-        mcx = mcy = mR = 0.0
+        # A small mark centred above the theme's title (theme.txt).
+        mcx, mcy, mR = W * 0.5, H * 0.115, 60.0 * s
+        mark = mark_triangles(mcx, mcy, mR)
     else:
         def bias(u, v):
             return max(0.0, 0.92 - math.hypot((u - 0.86) * W / H, v - 0.52) * 1.05)
