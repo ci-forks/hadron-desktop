@@ -6,8 +6,8 @@ Emits an uncompressed 24-bit TGA — GRUB's most reliably decoded image format.
 cascades to gfxmenu discarding the whole theme; tga.mod decodes cleanly.) The
 picture is the night wallpaper of tools/gen-wallpaper.py in its "grub" layout:
 the base -> crust gradient with a faint accent glow up top, and the lime tiles
-only along the right edge, with no mark, so the centred title and boot menu
-sit on the plain background. Colours from theme/palette.toml. Stdlib only, so
+only along the right edge, and a small Isotope mark at the top centre, above
+the title that theme.txt draws. The boot menu sits on the plain background. Colours from theme/palette.toml. Stdlib only, so
 no Pillow/ImageMagick in the build. Regenerate after a palette edit with:
 
     python3 tools/gen-grub-bg.py rootfs/etc/kairos/branding/isotope-theme/background.tga

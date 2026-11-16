@@ -2,8 +2,10 @@
  * /usr/bin/kairos-splash so Kairos runs it in both halves of the boot.
  *
  * Aesthetic: neon-noir in the Isotope lime ramp. The machine
- * wakes: the logo glitches in, a CRT scanline sweeps it, and terse boot lines
- * type out beneath.
+ * wakes: the six triangles of the Isotope mark close into a hexagon and one is
+ * pushed out, the wordmark glitches in under it, a CRT scanline sweeps it, and
+ * terse boot lines type out beneath. The mark is drawn only in graphics; the
+ * VGA-16 console has no shapes but its cells.
  *
  * Two renderers share that design:
  *   - graphics (gfx_run): pixels straight into /dev/fb0, the framebuffer every
@@ -325,6 +327,11 @@ static int text_run(double duration) {
 #define C_SHADOW   0x3c3a49
 #define C_DIM      0x5c596a
 #define C_TEXT     0xcbc8d6
+/* The Isotope mark's three tones (isotope-light, -lime, -deep in
+   @kairos-io/design). */
+#define C_MARK_L   0xc6f36b
+#define C_MARK_M   0x8fd12e
+#define C_MARK_D   0x4e9a06
 /* The passphrase panel. */
 #define C_PANEL    0x1f1e28
 #define C_FIELD    0x2a2935
@@ -506,6 +513,7 @@ static void draw_text(canvas_t *c, const char *s, int x, int y, int scale, uint3
 }
 
 typedef struct {
+    int mx, my, mr;      /* the mark: centre and hexagon radius */
     int cw, ch;          /* art cell size */
     int ax, ay;          /* art origin */
     int ts;              /* text scale */
@@ -694,6 +702,93 @@ static void fill_disc(canvas_t *c, int cx, int cy, int r, uint32_t col) {
     }
 }
 
+/* ------------------------------------------------------------------------ */
+/* The Isotope mark: a pointy-top hexagon cut into six triangles, the one at
+   the top right pushed out. tools/gen-wallpaper.py draws the same geometry.
+
+   The animation: the six triangles fly in from outside one after another
+   and close into a whole hexagon, then the first one is pushed out with a
+   flash (an isotope decaying), and it breathes there while the boot runs. */
+#define MARK_IN     0.10   /* the first triangle starts */
+#define MARK_STEP   0.08   /* each next one starts this much later */
+#define MARK_FLY    0.45   /* one triangle's flight */
+#define MARK_PUSH   1.05   /* the push-out starts */
+#define MARK_PUSH_S 0.30
+
+static double ease_out(double p) { p = 1 - p; return 1 - p * p * p; }
+/* Overshoots a little past 1, then settles. */
+static double ease_back(double p) { double k = 1.9; p -= 1; return 1 + p * p * ((k + 1) * p + k); }
+
+/* Fill a triangle, blending col over the back buffer with alpha a and an
+   anti-aliased edge: the coverage of a pixel is its distance inside the
+   nearest edge, as a one-pixel ramp. */
+static void fill_tri(canvas_t *c, const double *px, const double *py, uint32_t col, double a) {
+    if (a <= 0) return;
+    double area = (px[1] - px[0]) * (py[2] - py[0]) - (py[1] - py[0]) * (px[2] - px[0]);
+    if (area == 0) return;
+    double sg = area > 0 ? 1 : -1, ex[3], ey[3], el[3];
+    for (int i = 0; i < 3; i++) {
+        ex[i] = px[(i + 1) % 3] - px[i]; ey[i] = py[(i + 1) % 3] - py[i];
+        el[i] = sqrt(ex[i] * ex[i] + ey[i] * ey[i]);
+    }
+    int x0 = (int)floor(fmin(px[0], fmin(px[1], px[2]))) - 1, x1 = (int)ceil(fmax(px[0], fmax(px[1], px[2]))) + 1;
+    int y0 = (int)floor(fmin(py[0], fmin(py[1], py[2]))) - 1, y1 = (int)ceil(fmax(py[0], fmax(py[1], py[2]))) + 1;
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > c->w) x1 = c->w;
+    if (y1 > c->h) y1 = c->h;
+    for (int y = y0; y < y1; y++) {
+        uint32_t *row = c->back + (size_t)y * c->w;
+        for (int x = x0; x < x1; x++) {
+            double d = 1e9, fx = x + .5, fy = y + .5;
+            for (int i = 0; i < 3; i++) {
+                double dd = sg * (ex[i] * (fy - py[i]) - ey[i] * (fx - px[i])) / el[i];
+                if (dd < d) d = dd;
+            }
+            double cov = d + .5;
+            if (cov <= 0) continue;
+            if (cov > 1) cov = 1;
+            row[x] = mix(row[x], col, cov * a);
+        }
+    }
+}
+
+static void draw_mark(canvas_t *c, const layout_t *l, double t, double fade) {
+    static const uint32_t tone[3] = { C_MARK_L, C_MARK_M, C_MARK_D };
+    double cx = l->mx, cy = l->my, R = l->mr, vx[6], vy[6];
+    for (int i = 0; i < 6; i++) {
+        double an = (-90 + 60 * i) * M_PI / 180;
+        vx[i] = cx + R * cos(an); vy[i] = cy + R * sin(an);
+    }
+    for (int i = 0; i < 6; i++) {
+        double p = (t - MARK_IN - i * MARK_STEP) / MARK_FLY;
+        if (p <= 0) continue;
+        if (p > 1) p = 1;
+        double e = ease_out(p);
+        /* Outward unit normal: from the centre through the outer edge's middle. */
+        double mx = (vx[i] + vx[(i + 1) % 6]) / 2 - cx, my = (vy[i] + vy[(i + 1) % 6]) / 2 - cy;
+        double m = sqrt(mx * mx + my * my); mx /= m; my /= m;
+        double off = (1 - e) * 1.1 * R, flash = 0;
+        if (i == 0 && t > MARK_PUSH) {
+            double q = (t - MARK_PUSH) / MARK_PUSH_S;
+            double push = q >= 1 ? 1 : ease_back(q);
+            if (q > 1) push += .06 * sin((t - MARK_PUSH - MARK_PUSH_S) * 2 * M_PI / 2.4);
+            off += .2 * R * push;
+            flash = exp(-(t - MARK_PUSH) * 5);
+        }
+        double tx[3] = { cx, vx[i], vx[(i + 1) % 6] }, ty[3] = { cy, vy[i], vy[(i + 1) % 6] };
+        double gx = (tx[0] + tx[1] + tx[2]) / 3, gy = (ty[0] + ty[1] + ty[2]) / 3;
+        /* Shrunk toward its own centre so a gap shows between the triangles,
+           and smaller still while it flies in. */
+        double k = .94 * (.6 + .4 * e);
+        for (int j = 0; j < 3; j++) {
+            tx[j] = gx + (tx[j] - gx) * k + mx * off;
+            ty[j] = gy + (ty[j] - gy) * k + my * off;
+        }
+        fill_tri(c, tx, ty, mix(tone[i % 3], C_HOT, flash * .8), e * fade);
+    }
+}
+
 static void draw_center(canvas_t *c, const char *s, int y, int scale, uint32_t col) {
     draw_text(c, s, (c->w - text_width(s, scale)) / 2, y, scale, col);
 }
@@ -765,13 +860,21 @@ static layout_t layout(const canvas_t *c) {
     l.ts = c->h >= 1400 ? 3 : c->h >= 900 ? 2 : 1;
     int art_w = ART_COLS * l.cw, art_h = ART_ROWS * l.ch;
     int line = FONT_H * l.ts;
-    int block = art_h + line * 4;
+    /* The mark above the wordmark: its hexagon a little taller than the
+       letters, plus room for the pushed-out triangle and a gap. */
+    l.mr = art_h * 11 / 20;
+    if (l.mr < 8) l.mr = 8;
+    int mark_h = l.mr * 2 + l.mr / 4, gap = art_h / 3;
+    int block = mark_h + gap + art_h + line * 4;
     l.ax = (c->w - art_w) / 2;
-    l.ay = (c->h - block) / 2 - c->h / 20;          /* a touch above centre */
+    l.ay = (c->h - block) / 2 - c->h / 20 + mark_h + gap;   /* a touch above centre */
+    l.mx = c->w / 2;
+    l.my = l.ay - gap - l.mr;
     l.tag_y = l.ay + art_h + line;
     l.ver_y = l.tag_y + line + line / 3;
     l.sts_y = l.ver_y + line + line / 2;
-    l.top = l.ay - l.ch;
+    l.top = l.my - l.mr - l.mr / 2;
+    if (l.top < 0) l.top = 0;
     l.bottom = l.sts_y + line + 4 * l.ts;
 
     /* Panel text: at least 16x32 from 700 rows up, so the question reads at
@@ -837,6 +940,8 @@ static void gfx_frame(canvas_t *c, const layout_t *l, double t, double fade, int
         }
     }
     rng = rng * 1664525u + 1013904223u;
+
+    draw_mark(c, l, t, fade);
 
     if (g_pr.st != P_NONE) { draw_prompt(c, l, t); return; }
 

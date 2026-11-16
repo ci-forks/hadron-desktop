@@ -14,6 +14,16 @@ both halves of the boot:
 
 `kairos.splash=0` on the kernel command line turns it off for one boot.
 
+## The animation
+
+The six triangles of the Isotope mark fly in one after another and close into
+a hexagon. At about one second the top-right one is pushed out with a flash,
+as in the logo, and then moves a little while the boot runs. Under the mark
+the ISOTOPE wordmark resolves out of a glitch, a scanline sweeps it, and the
+boot lines type out. `--render=FILE.ppm --at=SECONDS [--size=WxH]` draws one
+frame without a framebuffer; `make test` checks that a settled frame shows the
+mark. `docs/assets/boot-splash.gif` in the README is made from these frames.
+
 ## Renderers
 
 - **Framebuffer** (the normal case): draws into `/dev/fb0`, which every DRM
@@ -23,7 +33,8 @@ both halves of the boot:
   background is `tools/gen-grub-bg.py`'s gradient, so GRUB, the splash and the
   login screen read as one. When a native driver replaces simpledrm mid-boot,
   the splash notices the new geometry and reopens the framebuffer.
-- **Text**: the VGA-16 console animation, for a VT with no framebuffer.
+- **Text**: the VGA-16 console animation, for a VT with no framebuffer. It
+  shows the wordmark only: the console cannot draw the mark's triangles.
 - **No terminal**: prints `ISOTOPE <version>` and exits.
 
 The version comes from `/etc/kairos/branding/splash/version`, which the

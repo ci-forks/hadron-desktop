@@ -15,8 +15,13 @@ isotope-splash: main.c agent.c agent.h font.h
 test_agent: test_agent.c agent.c agent.h
 	@gcc -O1 -g $(CFLAGS_COMMON) -o $@ test_agent.c agent.c
 
-test: test_agent
+test: test_agent isotope-splash
 	@./test_agent
+	@# A settled frame shows the mark: its deep tone, isotope-deep #4e9a06.
+	@./isotope-splash --render=test-frame.ppm --at=3 && \
+		LC_ALL=C grep -q "$$(printf '\116\232\006')" test-frame.ppm && \
+		echo "splash frame has the mark" || { echo "splash frame has no mark"; exit 1; }
+	@rm -f test-frame.ppm
 
 clean:
-	@rm -f isotope-splash test_agent *.o
+	@rm -f isotope-splash test_agent test-frame.ppm *.o
