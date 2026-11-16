@@ -48,7 +48,7 @@ type trayApp struct {
 	// clicks carries menu item IDs from the tray library to run.
 	clicks chan string
 	// notify and launch are seams: a desktop notification, and a terminal
-	// running `isotope-update <args>`.
+	// running `isotope <args>`.
 	notify func(summary, body string) error
 	launch func(args ...string) error
 	// openMenu opens an entry of isotope-menu, the same one Super+Escape
@@ -69,7 +69,7 @@ type trayApp struct {
 func newTrayApp(rel Release, ui trayUI, dial func() (daemonClient, error), logOut io.Writer) *trayApp {
 	a := &trayApp{
 		rel: rel, ui: ui, dial: dial,
-		log:        log.New(logOut, "isotope-update: ", 0),
+		log:        log.New(logOut, "isotope: ", 0),
 		clicks:     make(chan string, 8),
 		notify:     Notify,
 		firstCheck: notifyDelay, interval: notifyInterval, retry: trayRetry,
@@ -306,7 +306,7 @@ func announce(c daemonClient, rel Release, st Status, noIcon bool, notify func(s
 	}
 	body := fmt.Sprintf("You are on %s. Install it from the update icon's menu in the panel.", orUnknown(st.Installed))
 	if noIcon {
-		body = fmt.Sprintf("You are on %s. Run `isotope-update upgrade` in a terminal to install it.", orUnknown(st.Installed))
+		body = fmt.Sprintf("You are on %s. Run `isotope upgrade` in a terminal to install it.", orUnknown(st.Installed))
 	}
 	if err := notify(fmt.Sprintf("Isotope %s is available", st.Latest), body); err != nil {
 		return err
@@ -348,7 +348,7 @@ func terminalArgv(self string, args []string, logOut io.Writer) ([]string, error
 		pre []string
 	}{{"foot", nil}, {"xterm", []string{"-e"}}} {
 		if p, err := exec.LookPath(t.bin); err == nil {
-			fmt.Fprintf(logOut, "isotope-update: %s sets no TERMINAL_EXEC; using %s\n", sessionFile(), p)
+			fmt.Fprintf(logOut, "isotope: %s sets no TERMINAL_EXEC; using %s\n", sessionFile(), p)
 			return append(append(append([]string{p}, t.pre...), self), args...), nil
 		}
 	}
@@ -369,7 +369,7 @@ func openIsotopeMenu(entry string) error {
 func openTerminal(args []string, logOut io.Writer) error {
 	self, err := os.Executable()
 	if err != nil {
-		self = "isotope-update"
+		self = "isotope"
 	}
 	argv, err := terminalArgv(self, args, logOut)
 	if err != nil {

@@ -152,7 +152,9 @@ expect "isotope-menu hides Clipboard without isotope-clipboard (agent)" "$(cut -
 expect "isotope-menu keeps the other entries" "$(cut -f1 "$T/pick.in" | tr '\n' ' ')" "Apps Wi-Fi Bluetooth Audio Capture Emoji Night light Update Help Power "
 fake isotope-ext 'exit 0'; "$repo/rootfs/usr/bin/isotope-menu"
 expect "isotope-menu offers Extensions after Update when isotope-ext is there" "$(cut -f1 "$T/pick.in" | tr '\n' ' ')" "Apps Wi-Fi Bluetooth Audio Capture Emoji Night light Update Extensions Help Power "
-rm "$B/isotope-ext"
+fake restic 'exit 0'; "$repo/rootfs/usr/bin/isotope-menu"
+expect "isotope-menu offers Backup after Extensions when restic is there" "$(cut -f1 "$T/pick.in" | tr '\n' ' ')" "Apps Wi-Fi Bluetooth Audio Capture Emoji Night light Update Extensions Backup Help Power "
+rm "$B/isotope-ext" "$B/restic"
 
 # --- 4. wiring --------------------------------------------------------------
 count() { grep -v '^[[:space:]]*\(#\|//\)' "$2" | grep -ci -- "$1"; }

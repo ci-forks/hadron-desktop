@@ -123,7 +123,7 @@ func Catalogs() []string {
 	b, err := os.ReadFile(extConfFile())
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
-			fmt.Fprintf(os.Stderr, "isotope-update: cannot read %s: %v; using the default catalog\n", extConfFile(), err)
+			fmt.Fprintf(os.Stderr, "isotope: cannot read %s: %v; using the default catalog\n", extConfFile(), err)
 		}
 		return []string{defaultCatalog}
 	}
@@ -137,7 +137,7 @@ func Catalogs() []string {
 		v = strings.TrimSpace(v)
 		u, err := url.Parse(v)
 		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || strings.ContainsAny(v, ", \t") {
-			fmt.Fprintf(os.Stderr, "isotope-update: %s: ignoring catalog=%q, not an http(s) URL\n", extConfFile(), v)
+			fmt.Fprintf(os.Stderr, "isotope: %s: ignoring catalog=%q, not an http(s) URL\n", extConfFile(), v)
 			continue
 		}
 		out = append(out, v)
@@ -670,7 +670,7 @@ func streamCommand(name string, args []string, progress func(string)) error {
 	// A line over the buffer stops the scanner; say so, and keep draining so
 	// the child never blocks on a full pipe.
 	if err := sc.Err(); err != nil {
-		progress("isotope-update: stopped reading " + filepath.Base(name) + "'s output: " + err.Error())
+		progress("isotope: stopped reading " + filepath.Base(name) + "'s output: " + err.Error())
 	}
 	io.Copy(io.Discard, r)
 	return cmd.Wait()
@@ -703,7 +703,7 @@ func (d *Daemon) catalog(ctx context.Context) ([]CatalogEntry, error) {
 	for _, u := range urls {
 		l, err := fetchCatalog(ctx, u)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "isotope-update: skipping an extension catalog:", err)
+			fmt.Fprintln(os.Stderr, "isotope: skipping an extension catalog:", err)
 			errs = append(errs, err.Error())
 			continue
 		}
@@ -914,7 +914,7 @@ func (d *Daemon) InstallExtension(ref, version string, force bool) error {
 			return "", err
 		}
 		if err := recordSource(file, source); err != nil {
-			d.progress("isotope-update: could not record where the extension came from: " + err.Error())
+			d.progress("isotope: could not record where the extension came from: " + err.Error())
 		}
 		if err := d.ext.EnableExt(file, d.progress); err != nil {
 			return "", fmt.Errorf("%s is installed but could not be enabled: %w", extDisplayName(file), err)

@@ -1,0 +1,14 @@
+[Unit]
+Description=Isotope scheduled backup
+Documentation=https://github.com/kairos-community/isotope
+# Started by isotope-backup.timer. `isotope backup --scheduled` does nothing
+# unless `isotope backup schedule daily|weekly` turned it on, and skips a USB
+# disk that is not plugged in.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/isotope backup --scheduled
+Nice=10
+IOSchedulingClass=idle

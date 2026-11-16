@@ -1,6 +1,8 @@
-// isotope-update keeps an Isotope install current.
+// isotope is the command of an Isotope system: updates, system extensions,
+// the disk's recovery key, and backups. isotope-update, isotope-ext and
+// isotope-recovery are links to it.
 //
-// It looks up the newest isotope release on GitHub, compares it with
+// For updates it looks up the newest isotope release on GitHub, compares it with
 // /etc/isotope/release, and upgrades by handing the matching OCI image to
 // `kairos-agent upgrade`. The image is A/B: the running system is untouched
 // until the reboot, and the previous one stays selectable in the boot menu.
@@ -28,12 +30,13 @@ const (
 	exitUpdate = 100
 )
 
-const usage = `Usage: isotope-update [command] [flags]
+const usage = `Usage: isotope [command] [flags]
 
 Commands:
   status            show the installed and the latest release (default)
   check             like status; exits 100 when an update is available
-  upgrade           install the latest release, then offer to reboot
+  upgrade           install the latest release, then offer to reboot; also
+                    "isotope update"
       --version vX.Y.Z   install this release instead of the latest
       --image REF        install any OCI image (advanced mode only); with
                          REF "-", ask for the reference
@@ -48,17 +51,26 @@ Commands:
   reboot            restart the system into an installed update
   rollback          restart into the previous system, for the next boot only
       --yes              do not ask for confirmation
-  tray              run in a desktop session: the update icon in the panel;
-                    checks every few hours through the update service and
-                    shows a notification when a new release is out
+  ext [command]     system extensions: list, browse, info, install, enable,
+                    disable, remove; see "isotope ext help"
+  recovery [command]
+                    the recovery key of the encrypted disk; see
+                    "isotope recovery help"
+  backup [command]  back up this machine to a USB disk or a server; see
+                    "isotope backup help"
+  restore           restore a backup; see "isotope restore help"
+  help              this text
+
+Started by the desktop session and by systemd, not by hand:
+  tray              the update icon in the panel, with notifications
       --no-icon          the same, without the icon
   notify            the same as tray --no-icon
       --once             check once and exit
-  ext [command]     system extensions: list, browse, info, install, enable,
-                    disable, remove; see "isotope-update ext help". Also
-                    installed as isotope-ext
-  daemon            run the root update service on the system bus; started
-                    by D-Bus activation, not by hand
+  daemon            the root update service on the system bus
+
+isotope-update, isotope-ext and isotope-recovery are the same command:
+"isotope-ext X" is "isotope ext X", "isotope-recovery X" is
+"isotope recovery X", and "isotope-update X" is "isotope X".
 `
 
 // kairosAgent is the upgrade backend. ISOTOPE_UPDATE_AGENT replaces it, so a
@@ -97,7 +109,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return cmdReboot(args, stdout, stderr)
 	case "rollback":
 		return cmdRollback(args, stdin, stdout, stderr)
-	case "upgrade":
+	case "upgrade", "update":
 		return cmdUpgrade(args, stdin, stdout, stderr)
 	case "tray":
 		return cmdTray(args, stderr)
@@ -107,19 +119,23 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return cmdExt(args, stdin, stdout, stderr)
 	case "recovery":
 		return cmdRecovery(args, stdout, stderr)
+	case "backup":
+		return cmdBackup(args, stdin, stdout, stderr)
+	case "restore":
+		return cmdRestore(args, stdin, stdout, stderr)
 	case "daemon":
 		return cmdDaemon(args, stderr)
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, usage)
 		return exitOK
 	default:
-		fmt.Fprintf(stderr, "isotope-update: unknown command %q\n\n%s", cmd, usage)
+		fmt.Fprintf(stderr, "isotope: unknown command %q\n\n%s", cmd, usage)
 		return exitUsage
 	}
 }
 
 func newFlags(name string, stderr io.Writer) *flag.FlagSet {
-	fs := flag.NewFlagSet("isotope-update "+name, flag.ContinueOnError)
+	fs := flag.NewFlagSet("isotope "+name, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() { fmt.Fprint(stderr, usage) }
 	return fs
@@ -132,12 +148,17 @@ func cmdStatus(name string, args []string, stdout, stderr io.Writer) int {
 	}
 	rel, err := LoadRelease(releaseFile())
 	if err != nil {
-		fmt.Fprintln(stderr, "isotope-update:", err)
+		fmt.Fprintln(stderr, "isotope:", err)
 		return exitError
 	}
 
 	fmt.Fprintf(stdout, "Installed:  Isotope %s (%s, Hadron %s)\n",
 		rel.Version, rel.Flavor, orUnknown(rel.HadronVersion))
+	if c, err := loadBackupConfig(defaultBackupPaths()); err == nil {
+		if w := backupWarning(c); w != "" {
+			fmt.Fprintln(stdout, w)
+		}
+	}
 	switch rel.Flavor {
 	case flavorAgent:
 	case flavorServer:
@@ -152,7 +173,7 @@ func cmdStatus(name string, args []string, stdout, stderr io.Writer) int {
 
 	latest, err := FetchLatest(context.Background(), rel.GitHubRepo)
 	if err != nil {
-		fmt.Fprintln(stderr, "isotope-update: could not check for updates:", err)
+		fmt.Fprintln(stderr, "isotope: could not check for updates:", err)
 		return exitError
 	}
 	if !Newer(latest.Tag, rel.Version) {
@@ -161,7 +182,7 @@ func cmdStatus(name string, args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "Latest:     %s is available.\n", latest.Tag)
 	fmt.Fprintf(stdout, "            What's new: %s\n", latest.URL)
-	fmt.Fprintln(stdout, "            Run `isotope-update upgrade` to install it.")
+	fmt.Fprintln(stdout, "            Run `isotope upgrade` to install it.")
 	if name == "check" {
 		return exitUpdate
 	}
@@ -200,17 +221,17 @@ func cmdUpgrade(args []string, stdin io.Reader, stdout, stderr io.Writer) (code 
 
 	rel, err := LoadRelease(releaseFile())
 	if err != nil {
-		fmt.Fprintln(stderr, "isotope-update:", err)
+		fmt.Fprintln(stderr, "isotope:", err)
 		return exitError
 	}
 
 	if *version != "" && *imageFlag != "" {
-		fmt.Fprintln(stderr, "isotope-update: --version and --image cannot be combined")
+		fmt.Fprintln(stderr, "isotope: --version and --image cannot be combined")
 		return exitUsage
 	}
 	if *version != "" {
 		if _, ok := parseSemver(*version); !ok {
-			fmt.Fprintf(stderr, "isotope-update: %q is not a release tag like v1.2.3\n", *version)
+			fmt.Fprintf(stderr, "isotope: %q is not a release tag like v1.2.3\n", *version)
 			return exitUsage
 		}
 	}
@@ -218,7 +239,7 @@ func cmdUpgrade(args []string, stdin io.Reader, stdout, stderr io.Writer) (code 
 		return upgradeViaDaemon(rel, *version, *imageFlag, *yes, *reboot, in, stdout, stderr)
 	}
 	if *imageFlag != "" {
-		fmt.Fprintln(stderr, "isotope-update: --image is not available on the agent flavor")
+		fmt.Fprintln(stderr, "isotope: --image is not available on the agent flavor")
 		return exitUsage
 	}
 
@@ -226,7 +247,7 @@ func cmdUpgrade(args []string, stdin io.Reader, stdout, stderr io.Writer) (code 
 	if tag == "" {
 		latest, err := FetchLatest(context.Background(), rel.GitHubRepo)
 		if err != nil {
-			fmt.Fprintln(stderr, "isotope-update: could not check for updates:", err)
+			fmt.Fprintln(stderr, "isotope: could not check for updates:", err)
 			return exitError
 		}
 		if !Newer(latest.Tag, rel.Version) {
@@ -235,7 +256,7 @@ func cmdUpgrade(args []string, stdin io.Reader, stdout, stderr io.Writer) (code 
 		}
 		tag = latest.Tag
 	} else if _, ok := parseSemver(tag); !ok {
-		fmt.Fprintf(stderr, "isotope-update: %q is not a release tag like v1.2.3\n", tag)
+		fmt.Fprintf(stderr, "isotope: %q is not a release tag like v1.2.3\n", tag)
 		return exitUsage
 	}
 
@@ -251,7 +272,7 @@ func cmdUpgrade(args []string, stdin io.Reader, stdout, stderr io.Writer) (code 
 		}
 
 		if err := ImagePullable(context.Background(), image); err != nil {
-			fmt.Fprintf(stderr, "isotope-update: cannot pull the %s image: %v\n", tag, err)
+			fmt.Fprintf(stderr, "isotope: cannot pull the %s image: %v\n", tag, err)
 			fmt.Fprintln(stderr, "Releases before upgrade images were published have none; otherwise try again later.")
 			return exitError
 		}
@@ -270,7 +291,7 @@ func cmdUpgrade(args []string, stdin io.Reader, stdout, stderr io.Writer) (code 
 		agent := exec.Command(kairosAgent(), "upgrade", "--source", "oci:"+image)
 		agent.Stdout, agent.Stderr = stdout, stderr
 		if err := agent.Run(); err != nil {
-			fmt.Fprintln(stderr, "isotope-update: the upgrade failed:", err)
+			fmt.Fprintln(stderr, "isotope: the upgrade failed:", err)
 			fmt.Fprintln(stderr, "Nothing changed on the running system; you can retry safely.")
 			return exitError
 		}
@@ -279,7 +300,7 @@ func cmdUpgrade(args []string, stdin io.Reader, stdout, stderr io.Writer) (code 
 
 	if *reboot || (!*yes && confirm(in, stdout, "Reboot now?", false)) {
 		if err := rebootCommand().Run(); err != nil {
-			fmt.Fprintln(stderr, "isotope-update: reboot failed:", err)
+			fmt.Fprintln(stderr, "isotope: reboot failed:", err)
 			return exitError
 		}
 	}
@@ -294,7 +315,7 @@ var needRoot = func() bool { return os.Geteuid() != 0 }
 func asRoot(args ...string) *exec.Cmd {
 	self, err := os.Executable()
 	if err != nil {
-		self = "/usr/bin/isotope-update"
+		self = "/usr/bin/isotope"
 	}
 	c := exec.Command("sudo", append([]string{self}, args...)...)
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
@@ -350,7 +371,7 @@ func cmdNotify(args []string, stderr io.Writer) int {
 		return runTray(true, stderr)
 	}
 	if err := notifyOnce(); err != nil {
-		fmt.Fprintln(stderr, "isotope-update:", err)
+		fmt.Fprintln(stderr, "isotope:", err)
 		return exitError
 	}
 	return exitOK
@@ -454,7 +475,7 @@ func retryBusy(f func() error) error {
 
 // daemonFail prints what went wrong with a daemon call and returns the exit code.
 func daemonFail(stderr io.Writer, what string, err error) int {
-	fmt.Fprintf(stderr, "isotope-update: %s%s\n", what, describeDaemonError(err))
+	fmt.Fprintf(stderr, "isotope: %s%s\n", what, describeDaemonError(err))
 	return exitError
 }
 
@@ -462,7 +483,7 @@ func daemonFail(stderr io.Writer, what string, err error) int {
 // the retries means another check or inspection holds the service's network slot.
 func netFail(stderr io.Writer, what string, err error) int {
 	if daemonErrName(err) == "Busy" {
-		fmt.Fprintln(stderr, "isotope-update: the update service is busy with another check; try again in a moment.")
+		fmt.Fprintln(stderr, "isotope: the update service is busy with another check; try again in a moment.")
 		return exitError
 	}
 	return daemonFail(stderr, what, err)
@@ -471,7 +492,7 @@ func netFail(stderr io.Writer, what string, err error) int {
 func dialOrExplain(stderr io.Writer) (daemonClient, bool) {
 	c, err := dialDaemon()
 	if err != nil {
-		fmt.Fprintln(stderr, "isotope-update: The update service is not available (isotope-updated).")
+		fmt.Fprintln(stderr, "isotope: The update service is not available (isotope-updated).")
 		return nil, false
 	}
 	return c, true
@@ -490,7 +511,7 @@ func upgradeViaDaemon(rel Release, version, image string, yes, reboot bool, in *
 	}
 	if image != "" {
 		if !st.Advanced {
-			fmt.Fprintln(stderr, "isotope-update: advanced mode is off; installing an arbitrary image is not allowed on this system.")
+			fmt.Fprintln(stderr, "isotope: advanced mode is off; installing an arbitrary image is not allowed on this system.")
 			return exitUsage
 		}
 		if image == "-" {
@@ -518,7 +539,7 @@ func upgradeViaDaemon(rel Release, version, image string, yes, reboot bool, in *
 	}
 	ref, err := ReleaseRef(rel, rel.Flavor, tag)
 	if err != nil {
-		fmt.Fprintln(stderr, "isotope-update:", err)
+		fmt.Fprintln(stderr, "isotope:", err)
 		return exitError
 	}
 	return installFlow(c, rel, ref.String(), false, yes, reboot, in, stdout, stderr)
@@ -538,7 +559,7 @@ func newestRelease(c daemonClient, stderr io.Writer) (string, int) {
 		}
 	}
 	if newest == "" {
-		fmt.Fprintln(stderr, "isotope-update: no releases found.")
+		fmt.Fprintln(stderr, "isotope: no releases found.")
 		return "", exitError
 	}
 	return newest, exitOK
@@ -568,12 +589,12 @@ func cmdSwitch(args []string, stdin io.Reader, stdout, stderr io.Writer) (code i
 		return exitUsage
 	}
 	if *gpu != "" && *gpu != gpuFull && *gpu != gpuVM {
-		fmt.Fprintf(stderr, "isotope-update: --gpu is %q; choose %s or %s.\n", *gpu, gpuFull, gpuVM)
+		fmt.Fprintf(stderr, "isotope: --gpu is %q; choose %s or %s.\n", *gpu, gpuFull, gpuVM)
 		return exitUsage
 	}
 	rel, err := LoadRelease(releaseFile())
 	if err != nil {
-		fmt.Fprintln(stderr, "isotope-update:", err)
+		fmt.Fprintln(stderr, "isotope:", err)
 		return exitError
 	}
 	if flavor == "" {
@@ -584,7 +605,7 @@ func cmdSwitch(args []string, stdin io.Reader, stdout, stderr io.Writer) (code i
 		line = rel.Line()
 	}
 	if rel.Flavor == flavorServer {
-		fmt.Fprintln(stderr, "isotope-update: the server edition has no desktop to switch; it upgrades only to server images.")
+		fmt.Fprintln(stderr, "isotope: the server edition has no desktop to switch; it upgrades only to server images.")
 		return exitUsage
 	}
 	known := false
@@ -592,18 +613,18 @@ func cmdSwitch(args []string, stdin io.Reader, stdout, stderr io.Writer) (code i
 		known = known || f == flavor
 	}
 	if !known {
-		fmt.Fprintf(stderr, "isotope-update: %q is not a desktop flavor; choose one of %s.\n", flavor, strings.Join(switchable, ", "))
+		fmt.Fprintf(stderr, "isotope: %q is not a desktop flavor; choose one of %s.\n", flavor, strings.Join(switchable, ", "))
 		return exitUsage
 	}
 	if rel.Flavor == flavorAgent {
-		fmt.Fprintln(stderr, "isotope-update: the agent flavor has no desktop to switch.")
+		fmt.Fprintln(stderr, "isotope: the agent flavor has no desktop to switch.")
 		return exitUsage
 	}
 	if flavor == rel.Flavor && line == rel.Line() {
 		if *gpu != "" {
-			fmt.Fprintf(stderr, "isotope-update: this system already runs the %s image.\n", lineLabels[line])
+			fmt.Fprintf(stderr, "isotope: this system already runs the %s image.\n", lineLabels[line])
 		} else {
-			fmt.Fprintf(stderr, "isotope-update: this system already runs the %s flavor.\n", flavor)
+			fmt.Fprintf(stderr, "isotope: this system already runs the %s flavor.\n", flavor)
 		}
 		return exitUsage
 	}
@@ -619,7 +640,7 @@ func cmdSwitch(args []string, stdin io.Reader, stdout, stderr io.Writer) (code i
 	}
 	ref, err := LineRef(rel, flavor, line, newest)
 	if err != nil {
-		fmt.Fprintln(stderr, "isotope-update:", err)
+		fmt.Fprintln(stderr, "isotope:", err)
 		return exitError
 	}
 	if line != rel.Line() {
@@ -643,7 +664,7 @@ func cmdReboot(args []string, stdout, stderr io.Writer) int {
 	}
 	if rel, err := LoadRelease(releaseFile()); err == nil && rel.Flavor == flavorAgent {
 		if err := rebootCommand().Run(); err != nil {
-			fmt.Fprintln(stderr, "isotope-update: reboot failed:", err)
+			fmt.Fprintln(stderr, "isotope: reboot failed:", err)
 			return exitError
 		}
 		return exitOK
@@ -670,11 +691,11 @@ func cmdRollback(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 	if fs.NArg() > 0 {
-		fmt.Fprintf(stderr, "isotope-update rollback: unexpected argument %q\n", fs.Arg(0))
+		fmt.Fprintf(stderr, "isotope rollback: unexpected argument %q\n", fs.Arg(0))
 		return exitUsage
 	}
 	if rel, err := LoadRelease(releaseFile()); err == nil && rel.Flavor == flavorAgent {
-		fmt.Fprintf(stderr, "isotope-update: rollback is not available on the agent flavor; run `sudo kairos-agent bootentry --select %s` and then `sudo systemctl reboot`.\n", previousEntry)
+		fmt.Fprintf(stderr, "isotope: rollback is not available on the agent flavor; run `sudo kairos-agent bootentry --select %s` and then `sudo systemctl reboot`.\n", previousEntry)
 		return exitUsage
 	}
 	if !*yes && !confirm(bufio.NewReader(stdin), stdout, "Restart into the previous system? It is used for the next boot only.", false) {
@@ -693,7 +714,7 @@ func cmdRollback(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 				pending = st.Pending
 			}
 		}
-		fmt.Fprintln(stderr, "isotope-update:", describeRollbackError(err, pending))
+		fmt.Fprintln(stderr, "isotope:", describeRollbackError(err, pending))
 		return exitError
 	}
 	fmt.Fprintln(stdout, "Restarting into the previous system.")
@@ -735,7 +756,7 @@ func installFlow(c daemonClient, rel Release, ref string, advanced, yes, reboot 
 	override := false
 	if info.Refusal != "" {
 		if !info.Overridable || !advanced {
-			fmt.Fprintln(stderr, "isotope-update:", info.Refusal)
+			fmt.Fprintln(stderr, "isotope:", info.Refusal)
 			return exitError
 		}
 		fmt.Fprintln(stdout, info.Refusal)
@@ -764,7 +785,7 @@ func installFlow(c daemonClient, rel Release, ref string, advanced, yes, reboot 
 
 	events, stop, err := c.Watch()
 	if err != nil {
-		fmt.Fprintln(stderr, "isotope-update:", err)
+		fmt.Fprintln(stderr, "isotope:", err)
 		return exitError
 	}
 	defer stop()
@@ -793,13 +814,13 @@ func installFlow(c daemonClient, rel Release, ref string, advanced, yes, reboot 
 		case StateIdle, StateUpToDate, StateUpdateAvailable:
 			// No job passes through these: it was cancelled elsewhere (the
 			// tray) or the daemon restarted and forgot it.
-			fmt.Fprintln(stderr, "isotope-update: lost the update job: it was cancelled or the update service restarted.")
+			fmt.Fprintln(stderr, "isotope: lost the update job: it was cancelled or the update service restarted.")
 			return exitError
 		case StateRebootPending:
 			if p := ev.Status.Pending; p == pendingFailed || p == pendingStarted {
 				// kairos-agent may have swapped the slots before it failed;
 				// the service refuses another install until a restart.
-				fmt.Fprintln(stderr, "isotope-update: the update failed after it started writing.")
+				fmt.Fprintln(stderr, "isotope: the update failed after it started writing.")
 				fmt.Fprintln(stderr, pendingDetail(p))
 				return exitError
 			}
@@ -807,12 +828,12 @@ func installFlow(c daemonClient, rel Release, ref string, advanced, yes, reboot 
 			return offerReboot(c, reboot, in, stdout, stderr)
 		case StateError:
 			// Only a failure before kairos-agent started ends here.
-			fmt.Fprintln(stderr, "isotope-update: the update failed:", ev.Status.Detail)
+			fmt.Fprintln(stderr, "isotope: the update failed:", ev.Status.Detail)
 			fmt.Fprintln(stderr, "Nothing changed on the running system; you can retry safely.")
 			return exitError
 		}
 	}
-	fmt.Fprintln(stderr, "isotope-update: lost the connection to the update service before the update finished.")
+	fmt.Fprintln(stderr, "isotope: lost the connection to the update service before the update finished.")
 	return exitError
 }
 

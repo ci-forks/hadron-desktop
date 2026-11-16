@@ -10,8 +10,8 @@ import (
 	"github.com/godbus/dbus/v5"
 )
 
-const extUsage = `Usage: isotope-ext [command] [NAME] [flags]
-       isotope-update ext [command] [NAME] [flags]
+const extUsage = `Usage: isotope ext [command] [NAME] [flags]
+       isotope-ext [command] [NAME] [flags]
 
 System extensions add software to /usr that must run on the host: a VPN
 daemon, firmware tools, a kernel module. They run as root.
@@ -128,11 +128,11 @@ func describeExtError(err error) string {
 }
 
 func extFail(stderr io.Writer, what string, err error) int {
-	fmt.Fprintf(stderr, "isotope-ext: %s%s\n", what, describeExtError(err))
+	fmt.Fprintf(stderr, "isotope ext: %s%s\n", what, describeExtError(err))
 	return exitError
 }
 
-// cmdExt is `isotope-update ext` and `isotope-ext`.
+// cmdExt is `isotope ext` and `isotope ext`.
 func cmdExt(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	sub := "list"
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
@@ -142,7 +142,7 @@ func cmdExt(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprint(stdout, extUsage)
 		return exitOK
 	}
-	fs := flag.NewFlagSet("isotope-ext "+sub, flag.ContinueOnError)
+	fs := flag.NewFlagSet("isotope ext "+sub, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() { fmt.Fprint(stderr, extUsage) }
 	force := fs.Bool("force", false, "")
@@ -153,7 +153,7 @@ func cmdExt(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 	usageErr := func(msg string) int {
-		fmt.Fprintf(stderr, "isotope-ext: %s\n\n%s", msg, extUsage)
+		fmt.Fprintf(stderr, "isotope ext: %s\n\n%s", msg, extUsage)
 		return exitUsage
 	}
 	wantArgs := map[string][2]int{"list": {0, 0}, "browse": {0, 1}, "info": {1, 1}, "install": {1, 1},
@@ -170,12 +170,12 @@ func cmdExt(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return usageErr("--menu is only for browse")
 	}
 	if rel, err := LoadRelease(releaseFile()); err == nil && rel.Flavor == flavorAgent {
-		fmt.Fprintln(stderr, "isotope-ext: system extensions are not available on the agent flavor.")
+		fmt.Fprintln(stderr, "isotope ext: system extensions are not available on the agent flavor.")
 		return exitUsage
 	}
 	c, err := dialExt()
 	if err != nil {
-		fmt.Fprintln(stderr, "isotope-ext: The update service is not available (isotope-updated).")
+		fmt.Fprintln(stderr, "isotope ext: The update service is not available (isotope-updated).")
 		return exitError
 	}
 	defer c.Close()
@@ -203,7 +203,7 @@ func cmdExt(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		code := extFollow(c, func() error { return c.SetExtensionEnabled(arg, on, *force) }, stdout, stderr)
 		if code == exitConflict {
-			fmt.Fprintf(stderr, "To enable it anyway, run `isotope-ext enable %s --force`.\n", arg)
+			fmt.Fprintf(stderr, "To enable it anyway, run `isotope ext enable %s --force`.\n", arg)
 			code = exitError
 		}
 		return code
@@ -219,7 +219,7 @@ func cmdExt(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 }
 
-const forceWarning = "Warning: --force enables the extension even when it puts other copies over files the system has. Programs that use those files may stop working; `isotope-ext disable` undoes it."
+const forceWarning = "Warning: --force enables the extension even when it puts other copies over files the system has. Programs that use those files may stop working; `isotope ext disable` undoes it."
 
 func extState(x InstalledExt) string {
 	switch {
@@ -239,7 +239,7 @@ func extList(c extClient, stdout, stderr io.Writer) int {
 		return extFail(stderr, "", err)
 	}
 	if len(list) == 0 {
-		fmt.Fprintln(stdout, "No system extensions are installed. Run `isotope-ext browse` to see what the catalogs offer.")
+		fmt.Fprintln(stdout, "No system extensions are installed. Run `isotope ext browse` to see what the catalogs offer.")
 		return exitOK
 	}
 	w := 4
@@ -319,7 +319,7 @@ func extInfo(c extClient, name string, stdout, stderr io.Writer) int {
 		if cerr != nil {
 			return extFail(stderr, "could not read the catalogs: ", cerr)
 		}
-		fmt.Fprintf(stderr, "isotope-ext: no catalog offers %q, and it is not installed.\n", name)
+		fmt.Fprintf(stderr, "isotope ext: no catalog offers %q, and it is not installed.\n", name)
 		return exitError
 	}
 	fmt.Fprintf(stdout, "Name:        %s\n", name)
@@ -355,7 +355,7 @@ func extInstall(c extClient, arg string, force, yes bool, in *bufio.Reader, stdo
 	}
 	if arg == "-" {
 		if !st.Advanced {
-			fmt.Fprintln(stderr, "isotope-ext: advanced mode is off; only extensions from the catalogs can be installed.")
+			fmt.Fprintln(stderr, "isotope ext: advanced mode is off; only extensions from the catalogs can be installed.")
 			return exitUsage
 		}
 		fmt.Fprint(stdout, "Extension URL or path: ")
@@ -370,12 +370,12 @@ func extInstall(c extClient, arg string, force, yes bool, in *bufio.Reader, stdo
 		ref, version, _ = strings.Cut(arg, "@")
 	}
 	if err := checkExtRef(ref); err != nil {
-		fmt.Fprintln(stderr, "isotope-ext:", err)
+		fmt.Fprintln(stderr, "isotope ext:", err)
 		return exitUsage
 	}
 	if isExtReference(ref) {
 		if !st.Advanced {
-			fmt.Fprintln(stderr, "isotope-ext: advanced mode is off; only extensions from the catalogs can be installed.")
+			fmt.Fprintln(stderr, "isotope ext: advanced mode is off; only extensions from the catalogs can be installed.")
 			return exitUsage
 		}
 		fmt.Fprintf(stdout, "Extension:   %s\n", ref)
@@ -400,11 +400,11 @@ func extInstall(c extClient, arg string, force, yes bool, in *bufio.Reader, stdo
 			}
 		}
 		if entry == nil {
-			fmt.Fprintf(stderr, "isotope-ext: no catalog offers %q for this machine; run `isotope-ext browse` to see what they offer.\n", ref)
+			fmt.Fprintf(stderr, "isotope ext: no catalog offers %q for this machine; run `isotope ext browse` to see what they offer.\n", ref)
 			return exitError
 		}
 		if entry.Installed {
-			fmt.Fprintf(stderr, "isotope-ext: %s is already installed.\n", ref)
+			fmt.Fprintf(stderr, "isotope ext: %s is already installed.\n", ref)
 			return exitError
 		}
 		fmt.Fprintf(stdout, "Extension:   %s\nDescription: %s\nVersion:     %s\nCatalog:     %s\n",
@@ -421,7 +421,7 @@ func extInstall(c extClient, arg string, force, yes bool, in *bufio.Reader, stdo
 	code := extFollow(c, func() error { return c.InstallExtension(ref, version, force) }, stdout, stderr)
 	if code == exitConflict {
 		fmt.Fprintln(stderr, "It was removed again; nothing changed. To install it anyway, run")
-		fmt.Fprintf(stderr, "`isotope-ext install %s --force`.\n", arg)
+		fmt.Fprintf(stderr, "`isotope ext install %s --force`.\n", arg)
 		code = exitError
 	}
 	return code
@@ -437,7 +437,7 @@ const exitConflict = -1
 func extFollow(c extClient, start func() error, stdout, stderr io.Writer) int {
 	events, stop, err := c.Watch()
 	if err != nil {
-		fmt.Fprintln(stderr, "isotope-ext:", err)
+		fmt.Fprintln(stderr, "isotope ext:", err)
 		return exitError
 	}
 	defer stop()
@@ -464,15 +464,15 @@ func extFollow(c extClient, start func() error, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stdout, ev.Status.ExtDetail)
 			return exitOK
 		case extResultConflict:
-			fmt.Fprintln(stderr, "isotope-ext: refused:", ev.Status.ExtDetail)
+			fmt.Fprintln(stderr, "isotope ext: refused:", ev.Status.ExtDetail)
 			return exitConflict
 		case extResultFailed:
-			fmt.Fprintln(stderr, "isotope-ext: failed:", ev.Status.ExtDetail)
+			fmt.Fprintln(stderr, "isotope ext: failed:", ev.Status.ExtDetail)
 			return exitError
 		}
-		fmt.Fprintln(stderr, "isotope-ext: lost the extension job: the update service restarted.")
+		fmt.Fprintln(stderr, "isotope ext: lost the extension job: the update service restarted.")
 		return exitError
 	}
-	fmt.Fprintln(stderr, "isotope-ext: lost the connection to the update service before the change finished.")
+	fmt.Fprintln(stderr, "isotope ext: lost the connection to the update service before the change finished.")
 	return exitError
 }

@@ -1,0 +1,12 @@
+[Unit]
+Description=Isotope scheduled backup, once a day
+Documentation=https://github.com/kairos-community/isotope
+
+[Timer]
+OnCalendar=daily
+# A machine that was off at midnight backs up soon after it starts.
+Persistent=true
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target

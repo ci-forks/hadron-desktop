@@ -222,10 +222,20 @@ RUN rm -f /usr/bin/isotope-clipboard /usr/bin/clipnotify && \
 # No system extensions. An appliance must not take root code from a menu: the
 # isotope-ext command goes (isotope-menu and isotope-help hide it then), and so
 # do its catalog list and the setting that merges unsigned extensions. Their
-# polkit action went with the policy file above, and `isotope-update ext`
+# polkit action went with the policy file above, and `isotope ext`
 # refuses on the agent flavor.
 RUN rm -f /usr/bin/isotope-ext /etc/isotope/extensions.conf /etc/kairos/90_isotope_extensions.yaml /system/oem/93_isotope_extensions.yaml && \
     ! test -e /usr/bin/isotope-ext
 # No recovery key manager either: it talks to the update service, which the
 # agent does not have, and isotope-menu hides its entry without the command.
 RUN rm -f /usr/bin/isotope-recovery && ! test -e /usr/bin/isotope-recovery
+# No backups: the appliance keeps no user files worth a backup, and a backup of
+# what an agent did would keep the secrets it handled. Without restic,
+# `isotope backup` and `isotope restore` say they are not available, and
+# isotope-menu hides its entry.
+RUN rm -f /usr/bin/restic /usr/lib/systemd/system/isotope-backup.service \
+      /usr/lib/systemd/system/isotope-backup.timer \
+      /usr/lib/systemd/system/isotope-restore-finish.service \
+      /etc/systemd/system/timers.target.wants/isotope-backup.timer \
+      /etc/systemd/system/multi-user.target.wants/isotope-restore-finish.service && \
+    ! test -e /usr/bin/restic

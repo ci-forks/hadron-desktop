@@ -1,15 +1,15 @@
 #!/bin/sh
 # The Isotope menu, on Super+Escape in every variant: one place to reach the
 # apps, the first-run app picker, Wi-Fi, Bluetooth, audio, screenshots,
-# emoji, the night light, clipboard history, updates, system extensions, the
-# shortcut sheet and the power actions. The picker is isotope-pick (fuzzel on Wayland, dmenu on
+# emoji, the night light, clipboard history, updates, system extensions,
+# backups, the shortcut sheet and the power actions. The picker is isotope-pick (fuzzel on Wayland, dmenu on
 # i3). Each entry opens what the variant already uses for it: the isotope-*
 # menus on sway and i3, Noctalia's panels on niri, COSMIC Settings and
 # cosmic-osd on COSMIC. Emoji opens isotope-emoji on every variant.
 #
-# Updates and system extensions go through isotope-update in a terminal, as
-# the update icon does: the update service and polkit decide who may install
-# (the admin group).
+# Updates, system extensions and backups go through the isotope command in a
+# terminal, as the update icon does: the update service and polkit, or sudo
+# for backups, decide who may (the admin group).
 
 # DESKTOP_NAME (Sway, i3, niri, COSMIC) and TERMINAL_EXEC, the terminal to
 # run a command in, split on spaces.
@@ -85,25 +85,25 @@ Install the latest release"
 Restart into the previous system"
     what=$(printf '%s\n' "$items" | pick Update 3) || exit 0
     case "$what" in
-        Check*)   term "isotope-update status; $pause" ;;
-        Install*) term "isotope-update upgrade --pause-on-error" ;;
-        Restart*) term "isotope-update rollback || { $pause; }" ;;
+        Check*)   term "isotope status; $pause" ;;
+        Install*) term "isotope upgrade --pause-on-error" ;;
+        Restart*) term "isotope rollback || { $pause; }" ;;
     esac
 }
 
 # extensions: the catalogs' system extensions, ✓ on the installed ones.
-# Picking one installs or removes it in a terminal, where isotope-ext shows
+# Picking one installs or removes it in a terminal, where isotope ext shows
 # what it is and asks first. The tray's "Extensions…" opens this entry.
 extensions() {
     pause='printf "\nPress Enter to close."; read -r _'
     # Without the service or the network, show why in a terminal.
-    list=$(isotope-ext browse --menu 2>/dev/null) || { term "isotope-ext browse; $pause"; exit 0; }
-    [ -n "$list" ] || { term "isotope-ext browse; $pause"; exit 0; }
+    list=$(isotope ext browse --menu 2>/dev/null) || { term "isotope ext browse; $pause"; exit 0; }
+    [ -n "$list" ] || { term "isotope ext browse; $pause"; exit 0; }
     n=$(printf '%s\n' "$list" | wc -l)
     [ "$n" -le 12 ] || n=12
     sel=$(printf '%s\n' "$list" | pick Extensions "$n") || exit 0
     case "$sel" in
-        "Install from a URL…") term "isotope-ext install -; $pause"; exit 0 ;;
+        "Install from a URL…") term "isotope ext install -; $pause"; exit 0 ;;
     esac
     # "✓ name — description" or "  name — description". The name is checked
     # before it reaches the shell command: the catalog could hold anything.
@@ -112,8 +112,19 @@ extensions() {
         ''|-*|*[!A-Za-z0-9._+-]*) exit 0 ;;
     esac
     case "$sel" in
-        ✓*) term "isotope-ext remove $name; $pause" ;;
-        *)  term "isotope-ext install $name; $pause" ;;
+        ✓*) term "isotope ext remove $name; $pause" ;;
+        *)  term "isotope ext install $name; $pause" ;;
+    esac
+}
+
+# backup: back up now, or see where and when backups go. The first time,
+# say how to choose a target: that needs a path or URL typed in a terminal.
+backup() {
+    pause='printf "\nPress Enter to close."; read -r _'
+    what=$(printf '%s\n' "Back up now" "Backup status" | pick Backup 2) || exit 0
+    case "$what" in
+        "Back up now") term "isotope backup || { $pause; exit; }; $pause" ;;
+        *)             term "isotope backup status; echo; isotope backup help | sed -n '/^Commands:/,\$p'; $pause" ;;
     esac
 }
 
@@ -168,6 +179,9 @@ entries="$entries
 Update${tab}󰚰"
 command -v isotope-ext >/dev/null 2>&1 && entries="$entries
 Extensions${tab}󰏓"
+# Backups need restic, which the agent image does not have.
+command -v restic >/dev/null 2>&1 && entries="$entries
+Backup${tab}󰁯"
 # The disk recovery key, on an encrypted disk: the installer's marker, or a
 # Trusted Boot system, whose disk is always sealed to the TPM. The agent image
 # ships no isotope-recovery (Dockerfile.agent removes it).
@@ -197,7 +211,8 @@ case "$sel" in
     Clipboard) exec isotope-clipboard ;;
     Update)    update ;;
     Extensions) extensions ;;
-    "Recovery key") term "isotope-recovery; printf '\nPress Enter to close.'; read -r _" ;;
+    Backup)    backup ;;
+    "Recovery key") term "isotope recovery; printf '\nPress Enter to close.'; read -r _" ;;
     Help)      help_sheet ;;
     Power)     power ;;
 esac

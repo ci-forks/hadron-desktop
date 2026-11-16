@@ -8,9 +8,9 @@
 #
 # Runs itself in an alpine container (it writes /etc/isotope/session),
 # with fakes for isotope-ext, isotope-pick and the terminal (foot). It checks:
-#   1. a catalog entry without ✓ runs `isotope-ext install NAME` in a terminal,
-#      one with ✓ runs `isotope-ext remove NAME`, and "Install from a URL…"
-#      runs `isotope-ext install -`;
+#   1. a catalog entry without ✓ runs `isotope ext install NAME` in a terminal,
+#      one with ✓ runs `isotope ext remove NAME`, and "Install from a URL…"
+#      runs `isotope ext install -`;
 #   2. a cancelled pick runs nothing, and a picked line whose name is not a
 #      plain extension name never reaches the shell;
 #   3. when isotope-ext cannot list the catalogs, a terminal shows why;
@@ -40,11 +40,13 @@ PATH="$B:$PATH"
 printf 'DESKTOP_NAME=Sway\n' > /etc/isotope/session
 
 fake() { printf '#!/bin/sh\n%s\n' "$2" > "$B/$1"; chmod +x "$B/$1"; }
-# isotope-ext browse --menu prints $T/list, or fails without it.
-fake isotope-ext 'echo "isotope-ext $*" >> "$T/ext.log"
-[ "$1 $2" = "browse --menu" ] || exit 0
+# isotope ext browse --menu prints $T/list, or fails without it. The menu
+# and isotope-help show the entry only when the isotope-ext link exists.
+fake isotope 'echo "isotope $*" >> "$T/ext.log"
+[ "$1 $2 $3" = "ext browse --menu" ] || exit 0
 [ -f "$T/list" ] || exit 1
 cat "$T/list"'
+fake isotope-ext 'exec isotope ext "$@"'
 # isotope-pick: prints line $T/choice of its input, or cancels.
 fake isotope-pick 'cat > "$T/pick.in"
 [ -f "$T/choice" ] || exit 1
@@ -62,31 +64,31 @@ menu() {
 
 printf '  tailscale — VPN\n✓ gpg — GnuPG\n  bad;rm — x\nInstall from a URL…\n' > "$T/list"
 echo 1 > "$T/choice"
-expect "a new extension is installed in a terminal" "$(menu)" "isotope-ext install tailscale"
+expect "a new extension is installed in a terminal" "$(menu)" "isotope ext install tailscale"
 expect "the picker gets the catalog lines" "$(head -n 2 "$T/pick.in")" "  tailscale — VPN
 ✓ gpg — GnuPG"
 echo 2 > "$T/choice"
-expect "an installed extension is removed in a terminal" "$(menu)" "isotope-ext remove gpg"
+expect "an installed extension is removed in a terminal" "$(menu)" "isotope ext remove gpg"
 echo 4 > "$T/choice"
-expect "Install from a URL asks in a terminal" "$(menu)" "isotope-ext install -"
+expect "Install from a URL asks in a terminal" "$(menu)" "isotope ext install -"
 echo 3 > "$T/choice"
 expect "a name with shell characters runs nothing" "$(menu)" ""
 rm "$T/choice"
 expect "a cancelled pick runs nothing" "$(menu)" ""
 rm "$T/list"
-expect "no catalog: a terminal shows why" "$(menu)" "isotope-ext browse"
+expect "no catalog: a terminal shows why" "$(menu)" "isotope ext browse"
 
 # --- isotope-help ------------------------------------------------------------
 printf '# x\nBasics\tSuper + F1\tThis help\n' > "$T/sheet"
-expect "isotope-help lists isotope-ext" "$(ISOTOPE_SHORTCUTS="$T/sheet" "$repo/rootfs/usr/bin/isotope-help" --text | grep -c 'isotope-ext')" 2
+expect "isotope-help lists isotope ext" "$(ISOTOPE_SHORTCUTS="$T/sheet" "$repo/rootfs/usr/bin/isotope-help" --text | grep -c 'isotope ext')" 2
 rm "$B/isotope-ext"
-expect "isotope-help hides isotope-ext without it (agent)" "$(ISOTOPE_SHORTCUTS="$T/sheet" "$repo/rootfs/usr/bin/isotope-help" --text | grep -c 'isotope-ext')" 0
-expect "isotope-help still ends with the update rows" "$(ISOTOPE_SHORTCUTS="$T/sheet" "$repo/rootfs/usr/bin/isotope-help" --text | tail -n 1 | grep -c 'isotope-update upgrade')" 1
+expect "isotope-help hides isotope ext without it (agent)" "$(ISOTOPE_SHORTCUTS="$T/sheet" "$repo/rootfs/usr/bin/isotope-help" --text | grep -c 'isotope ext')" 0
+expect "isotope-help still ends with the update rows" "$(ISOTOPE_SHORTCUTS="$T/sheet" "$repo/rootfs/usr/bin/isotope-help" --text | tail -n 1 | grep -c 'isotope upgrade')" 1
 
 # --- wiring -----------------------------------------------------------------
-# Every stage that installs isotope-update (the desktop and the server) links
+# Every stage that installs isotope (the desktop and the server) links
 # isotope-ext to it.
-expect "the image links isotope-ext to isotope-update" "$(grep -c '^RUN ln -sf isotope-update /usr/bin/isotope-ext$' /src/Dockerfile)" "$(grep -c '^COPY --from=update-build /out/isotope-update /usr/bin/isotope-update$' /src/Dockerfile)"
+expect "the image links isotope-ext to isotope" "$(grep -c '^RUN ln -sf isotope /usr/bin/isotope-ext$' /src/Dockerfile)" "$(grep -c '^COPY --from=update-build /out/isotope /usr/bin/isotope$' /src/Dockerfile)"
 expect "the polkit file declares the extensions action" "$(grep -c '<action id="io.kairos.isotope-update.extensions">' /src/rootfs/usr/share/polkit-1/actions/io.kairos.isotope-update.policy)" 1
 expect "the Kairos config ignores extension signatures" "$(grep -c '^  ignore_signatures: true$' /src/rootfs/etc/kairos/90_isotope_extensions.yaml)" 1
 expect "the default catalog list names hadron-layers" "$(grep -c '^catalog=https://kairos-io.github.io/hadron-layers/releases.json$' /src/rootfs/etc/isotope/extensions.conf)" 1

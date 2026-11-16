@@ -188,7 +188,7 @@ func TestExtCLIConflictSuggestsForce(t *testing.T) {
 	f.script = extDone(extResultConflict, "it replaces files ...: /usr/lib/libgcrypt.so.20")
 	useExt(t, f)
 	code, _, errOut := runCLI("", "ext", "install", "tailscale", "--yes")
-	if code != exitError || !strings.Contains(errOut, "refused: it replaces") || !strings.Contains(errOut, "`isotope-ext install tailscale --force`") {
+	if code != exitError || !strings.Contains(errOut, "refused: it replaces") || !strings.Contains(errOut, "`isotope ext install tailscale --force`") {
 		t.Fatalf("conflict: %d %q", code, errOut)
 	}
 	f.script = extDone(extResultOK, "ok")
@@ -197,7 +197,7 @@ func TestExtCLIConflictSuggestsForce(t *testing.T) {
 		t.Fatalf("forced: %d %q %q", code, out, f.calls)
 	}
 	f.script = extDone(extResultConflict, "it replaces files")
-	if code, _, errOut := runCLI("", "ext", "enable", "gpg"); code != exitError || !strings.Contains(errOut, "`isotope-ext enable gpg --force`") {
+	if code, _, errOut := runCLI("", "ext", "enable", "gpg"); code != exitError || !strings.Contains(errOut, "`isotope ext enable gpg --force`") {
 		t.Fatalf("enable conflict: %d %q", code, errOut)
 	}
 	f.script = extDone(extResultFailed, "pull failed")

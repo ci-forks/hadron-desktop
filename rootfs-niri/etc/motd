@@ -2,5 +2,6 @@ Welcome to Isotope: niri and Noctalia on Wayland, built from source on Kairos.
 
   Containers : docker run …   ·   distrobox enter
   Apps       : flatpak search <name>   ·   flatpak install flathub <id>
-  Updates    : tray icon   ·   isotope-update   ·   isotope-update upgrade
+  Updates    : tray icon   ·   isotope   ·   isotope upgrade
+  Backups    : isotope backup init <dir>   ·   isotope backup
   Shortcuts  : Super+F1

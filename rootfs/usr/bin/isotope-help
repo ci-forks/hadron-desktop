@@ -23,14 +23,18 @@ fi
 software() {
     printf 'Software\t%s\t%s\n' \
         "flatpak install flathub <app>" "install a desktop app" \
-        "distrobox create / enter" "a mutable Linux to tinker in" \
-        "isotope-update" "check for a new Isotope release" \
-        "isotope-update upgrade" "install it (applies on the next boot)"
-    # System extensions; the agent image has none (Dockerfile.agent).
+        "distrobox create / enter" "a mutable Linux to tinker in"
+    # System extensions and backups; the agent image has neither
+    # (Dockerfile.agent).
     command -v isotope-ext >/dev/null 2>&1 && printf 'Software\t%s\t%s\n' \
-        "isotope-ext browse" "host software (VPN, firmware) from the catalogs" \
-        "isotope-ext install <name>" "add it to /usr, checked first (admin only)"
-    return 0
+        "isotope ext browse" "host software (VPN, firmware) from the catalogs" \
+        "isotope ext install <name>" "add it to /usr, checked first (admin only)"
+    command -v restic >/dev/null 2>&1 && printf 'Software\t%s\t%s\n' \
+        "isotope backup init <dir>" "back up to a USB disk or server (admin only)" \
+        "isotope restore --from <dir>" "bring a whole machine back on a new install"
+    printf 'Software\t%s\t%s\n' \
+        "isotope" "check for a new Isotope release" \
+        "isotope upgrade" "install it (applies on the next boot)"
 }
 
 rows() { { grep -v '^#' "$sheet"; software; }; }
