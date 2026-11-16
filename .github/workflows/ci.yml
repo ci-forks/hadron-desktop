@@ -43,6 +43,17 @@ jobs:
         working-directory: install-ui
         run: go vet ./... && go test ./...
 
+      # A rename that moves a file but not the links to it leaves the link
+      # dangling, and systemd then refuses the unit with no build error.
+      # Absolute targets resolve in the image, not here, so skip them.
+      - name: No dangling relative symlinks
+        run: |
+          bad=$(find . -path ./.git -prune -o -type l -print | while read -r l; do
+            case "$(readlink "$l")" in /*) continue ;; esac
+            [ -e "$l" ] || echo "$l -> $(readlink "$l")"
+          done)
+          if [ -n "$bad" ]; then echo "dangling symlinks:"; echo "$bad"; exit 1; fi
+
       - name: Hadron pins agree
         run: scripts/bump-hadron.sh --check
 
