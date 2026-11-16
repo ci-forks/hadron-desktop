@@ -1,6 +1,7 @@
 Welcome to Isotope Server, the headless edition of Isotope, built from source on Kairos.
 
   Network    : nmcli device status   ·   sudo nmcli connection modify …
-  Updates    : isotope-update   ·   isotope-update upgrade
-  Extensions : isotope-ext list   ·   isotope-ext browse
+  Updates    : isotope   ·   isotope upgrade
+  Extensions : isotope ext list   ·   isotope ext browse
+  Backups    : isotope backup init <dir>   ·   isotope backup
   Containers : docker ps   ·   docker run --rm hello-world

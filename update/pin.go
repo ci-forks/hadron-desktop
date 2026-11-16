@@ -95,7 +95,7 @@ func AdvancedEnabled() bool {
 		// The file is there but unreadable: the admin set something, and
 		// off is the reading that installs nothing unexpected.
 		logBadAdvanced("unreadable: "+err.Error(), func() {
-			fmt.Fprintf(os.Stderr, "isotope-update: cannot read %s: %v; advanced mode is off\n", confFile(), err)
+			fmt.Fprintf(os.Stderr, "isotope: cannot read %s: %v; advanced mode is off\n", confFile(), err)
 		})
 		return false
 	}
@@ -113,7 +113,7 @@ func AdvancedEnabled() bool {
 		default:
 			enabled = false
 			logBadAdvanced(v, func() {
-				fmt.Fprintf(os.Stderr, "isotope-update: %s: advanced=%q is not true or false; advanced mode is off\n", confFile(), v)
+				fmt.Fprintf(os.Stderr, "isotope: %s: advanced=%q is not true or false; advanced mode is off\n", confFile(), v)
 			})
 		}
 	}

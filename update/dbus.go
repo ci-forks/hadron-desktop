@@ -474,7 +474,7 @@ func newService(d *Daemon, a Authorizer) *service {
 // install an image or reboot.
 func (s *service) authorize(sender dbus.Sender, action string) *dbus.Error {
 	if s.credsOf == nil {
-		fmt.Fprintf(os.Stderr, "isotope-update: refusing %s for %s: no way to look up the caller\n", action, sender)
+		fmt.Fprintf(os.Stderr, "isotope: refusing %s for %s: no way to look up the caller\n", action, sender)
 		return errNotAuthorized
 	}
 	creds, err := s.credsOf(sender)
@@ -482,20 +482,20 @@ func (s *service) authorize(sender dbus.Sender, action string) *dbus.Error {
 		defer creds.close()
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "isotope-update: refusing %s for %s: %v\n", action, sender, err)
+		fmt.Fprintf(os.Stderr, "isotope: refusing %s for %s: %v\n", action, sender, err)
 		return errNotAuthorized
 	}
 	if sb, err := sandboxed(creds); sb {
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "isotope-update: refusing %s for %s: %v\n", action, sender, err)
+			fmt.Fprintf(os.Stderr, "isotope: refusing %s for %s: %v\n", action, sender, err)
 			return errNotAuthorized
 		}
-		fmt.Fprintf(os.Stderr, "isotope-update: refusing %s for %s: it runs in a Flatpak sandbox\n", action, sender)
+		fmt.Fprintf(os.Stderr, "isotope: refusing %s for %s: it runs in a Flatpak sandbox\n", action, sender)
 		return errSandboxed
 	}
 	ok, err := s.auth.Allowed(sender, action)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "isotope-update: refusing %s for %s: %v\n", action, sender, err)
+		fmt.Fprintf(os.Stderr, "isotope: refusing %s for %s: %v\n", action, sender, err)
 		return errNotAuthorized
 	}
 	if !ok {
@@ -669,13 +669,13 @@ func serve(conn *dbus.Conn, d *Daemon, a Authorizer) error {
 	d.OnChange(func(st Status) {
 		s.touch()
 		if err := conn.Emit(busPath, busInterface+".StateChanged", statusDict(st)); err != nil {
-			fmt.Fprintln(os.Stderr, "isotope-update: emitting StateChanged:", err)
+			fmt.Fprintln(os.Stderr, "isotope: emitting StateChanged:", err)
 		}
 	})
 	d.OnProgress(func(line string) {
 		s.touch()
 		if err := conn.Emit(busPath, busInterface+".Progress", line); err != nil {
-			fmt.Fprintln(os.Stderr, "isotope-update: emitting Progress:", err)
+			fmt.Fprintln(os.Stderr, "isotope: emitting Progress:", err)
 		}
 	})
 
@@ -727,25 +727,25 @@ func cmdDaemon(args []string, stderr io.Writer) int {
 		return exitUsage
 	}
 	if fs.NArg() > 0 {
-		fmt.Fprintf(stderr, "isotope-update daemon: unexpected argument %q\n", fs.Arg(0))
+		fmt.Fprintf(stderr, "isotope daemon: unexpected argument %q\n", fs.Arg(0))
 		return exitUsage
 	}
 	// It runs kairos-agent and reboots; as any other user it could do
 	// neither, and would only mislead clients by owning the name.
 	if needRoot() {
-		fmt.Fprintln(stderr, "isotope-update daemon: must run as root; D-Bus activation starts it through isotope-updated.service.")
+		fmt.Fprintln(stderr, "isotope daemon: must run as root; D-Bus activation starts it through isotope-updated.service.")
 		return exitError
 	}
 	conn, err := dbus.ConnectSystemBus()
 	if err != nil {
-		fmt.Fprintln(stderr, "isotope-update daemon: cannot connect to the system bus:", err)
+		fmt.Fprintln(stderr, "isotope daemon: cannot connect to the system bus:", err)
 		return exitError
 	}
 	defer conn.Close()
 	d := NewDaemon(kairosBackend{})
 	d.inhibitor = logindInhibitor{conn: conn}
 	if err := serve(conn, d, polkitAuthorizer{conn: conn}); err != nil {
-		fmt.Fprintln(stderr, "isotope-update daemon:", err)
+		fmt.Fprintln(stderr, "isotope daemon:", err)
 		return exitError
 	}
 	return exitOK

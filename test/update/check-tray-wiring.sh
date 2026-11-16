@@ -103,6 +103,8 @@ if [ "$FLAVOR" = agent ]; then
         "! { $(lines "$ALL_SESSION"); } | grep -q 'isotope-update'"
     check "agent: the session does not start snixembed" \
         "! { $(lines "$ALL_SESSION"); } | grep -q 'snixembed'"
+    check "agent: no restic and no backup timer" \
+        'test ! -e $R/usr/bin/restic && test ! -e $R/etc/systemd/system/timers.target.wants/isotope-backup.timer'
     echo
     [ "$fail" -eq 0 ] && echo "tray-wiring ($FLAVOR): ALL PASS" || echo "tray-wiring ($FLAVOR): FAILURES"
     exit "$fail"
@@ -114,13 +116,16 @@ for f in $SYSTEM_FILES; do
 done
 check "D-Bus activation starts isotope-updated.service" \
     'grep -qx "SystemdService=isotope-updated.service" $R/usr/share/dbus-1/system-services/io.kairos.IsotopeUpdate1.service'
-check_image "isotope-update is installed" 'test -x /usr/bin/isotope-update'
+check_image "isotope is installed, and isotope-update links to it" 'test -x /usr/bin/isotope && test "$(readlink /usr/bin/isotope-update)" = isotope'
 check "the polkit policy declares the extensions action" \
     'grep -q "<action id=\"io.kairos.isotope-update.extensions\">" $R/usr/share/polkit-1/actions/io.kairos.isotope-update.policy'
-check_image "isotope-ext is a link to isotope-update" 'test "$(readlink /usr/bin/isotope-ext)" = isotope-update'
+check_image "isotope-ext is a link to isotope" 'test "$(readlink /usr/bin/isotope-ext)" = isotope'
 check "the polkit policy declares the recovery action" \
     'grep -q "<action id=\"io.kairos.isotope-update.recovery\">" $R/usr/share/polkit-1/actions/io.kairos.isotope-update.policy'
-check_image "isotope-recovery is a link to isotope-update" 'test "$(readlink /usr/bin/isotope-recovery)" = isotope-update'
+check_image "isotope-recovery is a link to isotope" 'test "$(readlink /usr/bin/isotope-recovery)" = isotope'
+# Backups: restic and the daily timer of `isotope backup --scheduled`.
+check_image "restic runs" '/usr/bin/restic version | grep -q "^restic "'
+check "isotope-backup.timer is enabled" 'test -L $R/etc/systemd/system/timers.target.wants/isotope-backup.timer && test -f $R/usr/lib/systemd/system/isotope-backup.service'
 
 # polkitd answers the daemon's checks. It is D-Bus activated, so it needs its
 # activation file and unit, not an enable link.

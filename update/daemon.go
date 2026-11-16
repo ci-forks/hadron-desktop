@@ -126,7 +126,7 @@ func (d *Daemon) setLatestLocked(tag string) {
 	}
 	d.latest = tag
 	if err := writeRunFile(latestFile(), tag+"\n"); err != nil {
-		fmt.Fprintln(os.Stderr, "isotope-update: could not record the newest release:", err)
+		fmt.Fprintln(os.Stderr, "isotope: could not record the newest release:", err)
 	}
 }
 
@@ -561,10 +561,10 @@ func (d *Daemon) run(ctx context.Context, j *job, r ImageRef, ref, digest string
 		// system that runs now, and a second install would push the
 		// never-booted image over it. The marker stays, and so does
 		// reboot-pending, on every failure.
-		fmt.Fprintf(os.Stderr, "isotope-update: the upgrade to %s failed: %v (last line: %q)\n", source, err, d.lastLine())
+		fmt.Fprintf(os.Stderr, "isotope: the upgrade to %s failed: %v (last line: %q)\n", source, err, d.lastLine())
 		if werr := writeRebootMarker(pendingFailed, source); werr != nil {
 			// The marker still says started: reboot-pending all the same.
-			fmt.Fprintln(os.Stderr, "isotope-update: could not record the failure in the marker:", werr)
+			fmt.Fprintln(os.Stderr, "isotope: could not record the failure in the marker:", werr)
 		}
 		d.mu.Lock()
 		defer d.mu.Unlock()
@@ -576,7 +576,7 @@ func (d *Daemon) run(ctx context.Context, j *job, r ImageRef, ref, digest string
 	if werr := writeRebootMarker(pendingInstalled, source); werr != nil {
 		// The marker still says started; a restarted daemon words the
 		// state as interrupted. The install itself succeeded.
-		fmt.Fprintln(os.Stderr, "isotope-update: could not record the finished install in the marker:", werr)
+		fmt.Fprintln(os.Stderr, "isotope: could not record the finished install in the marker:", werr)
 	}
 
 	var notes []string
@@ -612,7 +612,7 @@ func (d *Daemon) inhibitShutdown() (release func()) {
 	}
 	release, err := d.inhibitor.Inhibit()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "isotope-update: could not block shutdown during the upgrade:", err)
+		fmt.Fprintln(os.Stderr, "isotope: could not block shutdown during the upgrade:", err)
 		return func() {}
 	}
 	return release

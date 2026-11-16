@@ -2058,6 +2058,20 @@ RUN wget -qO- https://github.com/sentriz/cliphist/archive/refs/tags/v${CLIPHIST_
     [ "$(/cliphist/usr/bin/cliphist version 2>&1 | awk '$1 == "version" { print $2 }')" = "${CLIPHIST_VERSION}" ]
 
 
+# restic — the backup engine of `isotope backup` and `isotope restore`:
+# encrypted, deduplicated snapshots to a directory (a USB disk), SFTP, a REST
+# server or S3. Static Go binary, like cliphist. In every desktop and the
+# server; Dockerfile.agent removes it. restic 0.19 needs Go 1.25.8 or later,
+# newer than the other Go stages.
+FROM golang:1.25.8-alpine3.22 AS restic
+# renovate: datasource=github-tags depName=restic/restic extractVersion=^v(?<version>\d+(\.\d+)*)$
+ARG RESTIC_VERSION=0.19.1
+WORKDIR /src
+RUN wget -qO- https://github.com/restic/restic/archive/refs/tags/v${RESTIC_VERSION}.tar.gz | tar -xz --strip-components=1 && \
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /restic/usr/bin/restic ./cmd/restic && \
+    [ "$(/restic/usr/bin/restic version | awk '{ print $2 }')" = "${RESTIC_VERSION}" ]
+
+
 # slurp — region selection (pairs with grim)
 FROM toolchain AS slurp
 COPY --from=wayland /wayland /
@@ -4684,6 +4698,8 @@ COPY rootfs/etc/isotope/extensions.conf /etc/isotope/extensions.conf
 COPY rootfs/usr/lib/systemd/system/isotope-updated.service /usr/lib/systemd/system/isotope-updated.service
 COPY rootfs/usr/share/dbus-1/ /usr/share/dbus-1/
 COPY rootfs/usr/share/polkit-1/ /usr/share/polkit-1/
+# Backups: the daily timer of `isotope backup --scheduled`.
+COPY rootfs/usr/lib/systemd/system/isotope-backup.service rootfs/usr/lib/systemd/system/isotope-backup.timer /usr/lib/systemd/system/
 # Docker: its units, and the boot stage that persists /var/lib/docker and
 # starts the daemon on the installed system only.
 COPY rootfs/usr/lib/systemd/system/docker.service rootfs/usr/lib/systemd/system/docker.socket /usr/lib/systemd/system/
@@ -4742,8 +4758,8 @@ COPY update/go.mod update/go.sum ./
 RUN go mod download
 COPY update/ ./
 RUN CGO_ENABLED=0 go test ./... \
-    && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/isotope-update . \
-    && { /out/isotope-update --nonsense >/dev/null 2>&1; [ $? -eq 2 ]; }
+    && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/isotope . \
+    && { /out/isotope --nonsense >/dev/null 2>&1; [ $? -eq 2 ]; }
 
 
 FROM ${BASE_IMAGE} AS desktop-default
@@ -4968,13 +4984,19 @@ RUN chmod 1777 /tmp; \
 # system. (The shell installer it replaces lived in /usr/local/bin and only
 # worked because the installer runs in the live environment.)
 COPY --from=install-ui-build /out/isotope-install-ui /usr/bin/isotope-install-ui
-# Update checker + upgrade CLI. /usr/bin for the same /usr/local reason.
-COPY --from=update-build /out/isotope-update /usr/bin/isotope-update
-# isotope-ext is the same binary: run under that name it is `isotope-update ext`
-# (system extensions, see update/ext.go).
-RUN ln -sf isotope-update /usr/bin/isotope-ext
-# And isotope-recovery, the disk recovery key (`isotope-update recovery`).
-RUN ln -sf isotope-update /usr/bin/isotope-recovery
+# The isotope command: updates, system extensions, the disk's recovery key,
+# backups. /usr/bin for the same /usr/local reason. isotope-update,
+# isotope-ext and isotope-recovery are its older names, kept as links: run as
+# isotope-ext it is `isotope ext`, as isotope-recovery `isotope recovery`.
+COPY --from=update-build /out/isotope /usr/bin/isotope
+RUN ln -sf isotope /usr/bin/isotope-update
+RUN ln -sf isotope /usr/bin/isotope-ext
+RUN ln -sf isotope /usr/bin/isotope-recovery
+# Backups: restic, and the daily timer that runs `isotope backup --scheduled`
+# (it does nothing until `isotope backup schedule` turns it on).
+COPY --from=restic /restic/ /
+RUN systemctl enable isotope-backup.timer && \
+    test -L /etc/systemd/system/timers.target.wants/isotope-backup.timer
 
 
 # The server edition's image. Keep the binaries at the end in step with
@@ -5018,9 +5040,13 @@ RUN chmod 1777 /tmp; \
     systemctl enable NetworkManager.service; \
     test -L /etc/systemd/system/multi-user.target.wants/NetworkManager.service
 COPY --from=install-ui-build /out/isotope-install-ui /usr/bin/isotope-install-ui
-COPY --from=update-build /out/isotope-update /usr/bin/isotope-update
-RUN ln -sf isotope-update /usr/bin/isotope-ext
-RUN ln -sf isotope-update /usr/bin/isotope-recovery
+COPY --from=update-build /out/isotope /usr/bin/isotope
+RUN ln -sf isotope /usr/bin/isotope-update
+RUN ln -sf isotope /usr/bin/isotope-ext
+RUN ln -sf isotope /usr/bin/isotope-recovery
+COPY --from=restic /restic/ /
+RUN systemctl enable isotope-backup.timer && \
+    test -L /etc/systemd/system/timers.target.wants/isotope-backup.timer
 
 # The image the kairos stage turns bootable: the desktop for sway, i3, cosmic
 # and niri, the server edition for server.

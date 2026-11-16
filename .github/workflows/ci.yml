@@ -27,7 +27,15 @@ jobs:
           go-version-file: update/go.mod
           cache: false
 
-      - name: isotope-update tests
+      # The backup test that runs the real restic needs it on PATH: the
+      # version the Dockerfile pins, so the test and the image agree.
+      - name: restic for the backup test
+        run: |
+          v=$(sed -n 's/^ARG RESTIC_VERSION=//p' Dockerfile)
+          go install "github.com/restic/restic/cmd/restic@v$v"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: isotope tests
         working-directory: update
         run: go vet ./... && go test ./...
 

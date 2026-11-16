@@ -50,7 +50,7 @@ kairos-init from the Kairos monorepo (`ghcr.io/kairos-io/kairos/kairos-init:mast
 - **Server edition** (`DESKTOP=server`): no desktop at all. The kernel,
   network card firmware and CPU microcode, NetworkManager and nmcli, the
   OpenSSH server, a console login, the Isotope installer with disk encryption,
-  `isotope-update` and `isotope-ext`, and Docker (no Distrobox). It is built from its own Dockerfile
+  `isotope` (updates, extensions, backups), and Docker (no Distrobox). It is built from its own Dockerfile
   stage (`server-default`), so no graphics, audio or Flatpak stage is built.
   The table in AGENTS.md lists what it has and lacks.
 - **Login:** on Sway, i3 and niri, `ly` runs on `tty1`. It launches Sway directly for
@@ -135,13 +135,13 @@ kept under `build/sway-desktop/` and `build/i3-desktop/`.
   pins. Everything the icon does is also in the terminal:
 
   ```sh
-  isotope-update                 # installed vs latest release (same as `status`)
-  isotope-update upgrade         # install the latest; asks, then offers a reboot
-  isotope-update upgrade --version v0.1.2   # a specific release (also rolls back)
-  isotope-update switch <flavor> # move to another flavor's image line
-  isotope-update switch --gpu vm # move to the VM image (--gpu full: back)
-  isotope-update reboot          # reboot into the installed upgrade
-  isotope-update rollback        # boot the previous system once (no download)
+  isotope                        # installed vs latest release (same as `status`)
+  isotope upgrade                # install the latest; asks, then offers a reboot
+  isotope upgrade --version v0.1.2   # a specific release (also rolls back)
+  isotope switch <flavor>        # move to another flavor's image line
+  isotope switch --gpu vm        # move to the VM image (--gpu full: back)
+  isotope reboot                 # reboot into the installed upgrade
+  isotope rollback               # boot the previous system once (no download)
   ```
 
   Installing and rebooting go through a root service, `isotope-updated`, and
@@ -154,7 +154,7 @@ kept under `build/sway-desktop/` and `build/i3-desktop/`.
   is kept as the fallback boot entry.
 
   Advanced mode is on by default: it lets you install any OCI image, not only
-  an Isotope release (`isotope-update upgrade --image REF`, or "Install
+  an Isotope release (`isotope upgrade --image REF`, or "Install
   an image..." in the tray menu). To allow releases only, put `advanced=false`
   in `/etc/isotope/update.conf`. An image you install on purpose is
   pinned (`/var/lib/isotope-update/pin`): the tray shows it as pinned and stops
@@ -163,6 +163,15 @@ kept under `build/sway-desktop/` and `build/i3-desktop/`.
   `io.kairos.isotope.{flavor,version,hadron-version,gpu,firmware}`, which the
   updater uses to recognise an Isotope image. The agent flavor has no
   tray and no service; its CLI keeps the direct `sudo` path.
+- **Backups:** `isotope backup` and `isotope restore`, through sudo for the
+  `admin` group, with restic (built in the Dockerfile's `restic` stage).
+  `/var/lib/isotope-backup/` holds the target, the schedule and the result
+  (`config`), the repository password (`password`, 0600) and the credentials
+  of a remote target (`env`). `isotope-backup.timer` runs
+  `isotope backup --scheduled` every day; it does nothing until
+  `isotope backup schedule daily|weekly`, and skips a directory target that
+  holds no repository (an unplugged disk). The agent image has none of it.
+  See `docs/superpowers/specs/2026-11-16-isotope-cli-backup-design.md`.
 
 ## Boot splash
 
@@ -535,7 +544,7 @@ isotope/
   cloud-config.yaml   # example Kairos install config (creates the desktop user)
   rootfs/             # shared OS, installer and service overlay
   install-ui/         # Go TUI installer (-> /usr/bin/isotope-install-ui)
-  update/             # update checker / notifier / upgrade CLI (-> /usr/bin/isotope-update)
+  update/             # the isotope command: updates, tray, extensions, recovery key, backups (-> /usr/bin/isotope)
   scripts/            # release manifest, Hadron pin bump
   rootfs-sway/        # Wayland/Sway session config and native tools
   rootfs-i3/          # XLibre/i3 session config and native tools

@@ -58,10 +58,12 @@ check "the admin rule answers the update service" \
 check "polkitd user exists" "getent passwd polkitd"
 check "the update service is D-Bus activated" \
     "test -f /usr/share/dbus-1/system-services/io.kairos.IsotopeUpdate1.service && test -f /usr/lib/systemd/system/isotope-updated.service"
-check "isotope-update and isotope-ext run" \
-    "isotope-update help | grep -q upgrade && test \"\$(readlink /usr/bin/isotope-ext)\" = isotope-update"
-check "isotope-recovery links to isotope-update" \
-    "test \"\$(readlink /usr/bin/isotope-recovery)\" = isotope-update"
+check "isotope runs, and isotope-update and isotope-ext link to it" \
+    "isotope help | grep -q upgrade && test \"\$(readlink /usr/bin/isotope-update)\" = isotope && test \"\$(readlink /usr/bin/isotope-ext)\" = isotope"
+check "isotope-recovery links to isotope" \
+    "test \"\$(readlink /usr/bin/isotope-recovery)\" = isotope"
+check "backups: restic runs and the timer is enabled" \
+    "restic version | grep -q '^restic ' && test -L /etc/systemd/system/timers.target.wants/isotope-backup.timer && test -f /usr/lib/systemd/system/isotope-backup.service"
 check "the installer's groups exist" \
     "for g in admin audio video render input bluetooth seat docker; do getent group \$g || exit 1; done"
 check "the installer is wired" "grep -q /usr/bin/isotope-install-ui /system/oem/90_desktop_installer.yaml"

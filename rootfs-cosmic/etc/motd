@@ -2,4 +2,5 @@ Welcome to Isotope — COSMIC on Wayland, built from source on Kairos.
 
   Apps       : COSMIC Store, or flatpak install flathub <id>
   Containers : docker run …   ·   distrobox enter
-  Updates    : tray icon   ·   isotope-update   ·   isotope-update upgrade
+  Updates    : tray icon   ·   isotope   ·   isotope upgrade
+  Backups    : isotope backup init <dir>   ·   isotope backup
