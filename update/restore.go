@@ -17,26 +17,36 @@ import (
 
 const restoreUsage = `Usage: isotope restore [SNAPSHOT] [flags]
 
-Restore a backup onto this machine: the files of each user, the saved
-network connections, the Flatpak apps and the system extensions. SNAPSHOT is
-an ID from "isotope backup list"; the default is the latest. Runs as root
-through sudo.
+Restore a backup onto this machine. SNAPSHOT is an ID from "isotope backup
+list"; the default is the latest. Runs as root through sudo.
+
+By default the whole machine comes back: the users and their passwords,
+the hostname, every home, the SSH keys, the system extensions and the
+settings, then the machine restarts. Files that are only on this machine
+stay. Do it right after installing Isotope, before you use the new system.
+The disk must be encrypted the same way as the one that was backed up.
+
+With --only, only some parts, into the users this machine already has:
+  homes                the files of each user, into the home of the local
+                       user of the same name (or --user)
+  apps                 the Flatpak apps, installed again from Flathub
+  extensions           the system extensions, installed again
 
 Flags:
-  --from TARGET        restore from TARGET (a directory or a restic URL)
-                       instead of this machine's backup target; asks for
-                       its password
-  --only LIST          only some of homes,network,apps,extensions
-  --user OLD=NEW       restore the files of user OLD into NEW's home; may
-                       be given more than once. Without it each user goes
-                       to the local user of the same name
+  --from TARGET        restore from TARGET instead of this machine's backup
+                       target: a directory, a restic URL, or a file that
+                       "isotope backup --export" wrote; asks for its password
+  --only LIST          only some of homes,apps,extensions
+  --user OLD=NEW       with --only homes: restore the files of user OLD into
+                       NEW's home; may be given more than once
   --host NAME          the machine whose latest backup to restore, when
                        several back up to the same target
   --yes                do not ask for confirmation
 `
 
-// restoreParts are what a restore can do, in the order it does them.
-var restoreParts = []string{"homes", "network", "apps", "extensions"}
+// restoreParts are what a restore with --only can do, in the order it does
+// them.
+var restoreParts = []string{"homes", "apps", "extensions"}
 
 // userMap is the --user flag.
 type userMap map[string]string
@@ -87,19 +97,20 @@ func cmdRestore(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(rest) == 1 {
 		snap = rest[0]
 	}
-	parts := map[string]bool{}
-	for _, x := range restoreParts {
-		parts[x] = *only == ""
+	var parts map[string]bool // nil: the whole machine
+	if *only != "" {
+		parts = map[string]bool{}
+		for _, x := range strings.Split(*only, ",") {
+			if !contains(restoreParts, x) {
+				fmt.Fprintf(stderr, "isotope restore: --only: %q is not one of %s\n", x, strings.Join(restoreParts, ","))
+				return exitUsage
+			}
+			parts[x] = true
+		}
 	}
-	for _, x := range strings.Split(*only, ",") {
-		if x == "" {
-			continue
-		}
-		if _, ok := parts[x]; !ok {
-			fmt.Fprintf(stderr, "isotope restore: --only: %q is not one of %s\n", x, strings.Join(restoreParts, ","))
-			return exitUsage
-		}
-		parts[x] = true
+	if len(users) > 0 && !parts["homes"] && !parts["apps"] {
+		fmt.Fprintln(stderr, "isotope restore: --user goes with --only homes (a whole-machine restore brings the users back as they were)")
+		return exitUsage
 	}
 	r := restorer{p: defaultBackupPaths(), snap: snap, host: *host, users: users, parts: parts,
 		in: bufio.NewReader(stdin), stdout: stdout, stderr: stderr}
@@ -115,11 +126,13 @@ type restorer struct {
 	target, pass   string
 	snap, host     string
 	users          userMap
-	parts          map[string]bool
+	parts          map[string]bool // nil: the whole machine
 	in             *bufio.Reader
 	stdout, stderr io.Writer
 	failed         []string // what could not be restored, said at the end
 }
+
+func (r *restorer) whole() bool { return r.parts == nil }
 
 func (r *restorer) restic(args ...string) error {
 	cmd, err := resticCmd(r.p, r.target, r.pass, args...)
@@ -139,12 +152,13 @@ func (r *restorer) ask(q string) bool {
 
 // plan is a restore read from a snapshot's manifest.
 type plan struct {
-	release string
-	homes   map[string]string // backed-up user -> local user
-	skipped []string          // backed-up users with no local user
-	conns   int
-	apps    []appLine
-	exts    []extLine
+	release, hostname string
+	encryption        string            // the backed-up disk's, "none" when not
+	users             []string          // every user the backup has
+	homes             map[string]string // backed-up user -> local user (--only homes)
+	skipped           []string          // backed-up users with no local user
+	apps              []appLine
+	exts              []extLine
 }
 
 type appLine struct{ user, id, origin string } // user "" is a system app
@@ -159,8 +173,9 @@ func (r *restorer) run(from string, yes bool) error {
 		return err
 	}
 	r.target, r.pass = cfg.Target, r.p.password()
-	// The temporary password and the staged files go, whatever ends the
-	// restore: an error, or Ctrl-C during a long restic run.
+	// The temporary password, an unpacked export and the staged files go,
+	// whatever ends the restore: an error, or Ctrl-C during a long restic
+	// run.
 	var cleanup []func()
 	stop := onInterrupt(func() {
 		for _, f := range cleanup {
@@ -191,6 +206,23 @@ func (r *restorer) run(from string, yes bool) error {
 		}
 		pass := r.pass
 		cleanup = append(cleanup, func() { _ = os.Remove(pass) })
+		// A file from `isotope backup --export`: unpack it into a directory
+		// only root can enter, next to it when that is possible.
+		if fi, err := os.Stat(from); err == nil && fi.Mode().IsRegular() {
+			dir, err := os.MkdirTemp(filepath.Dir(from), ".isotope-import-")
+			if err != nil {
+				dir, err = os.MkdirTemp(r.p.State, "import-")
+			}
+			if err != nil {
+				return err
+			}
+			cleanup = append(cleanup, func() { _ = os.RemoveAll(dir) })
+			fmt.Fprintf(r.stdout, "Unpacking %s...\n", from)
+			if err := unpackFile(from, dir); err != nil {
+				return err
+			}
+			r.target = dir
+		}
 	}
 	if r.target == "" {
 		return errors.New("there is no backup target; give one with --from")
@@ -199,8 +231,6 @@ func (r *restorer) run(from string, yes bool) error {
 		return fmt.Errorf("there is no backup in %s. Is the disk plugged in?", r.target)
 	}
 
-	// The restore is staged under /home, on the same file system as the
-	// homes, so moving the files into place is a rename and not a copy.
 	stage := r.p.stage()
 	if err := os.RemoveAll(stage); err != nil {
 		return err
@@ -223,8 +253,84 @@ func (r *restorer) run(from string, yes bool) error {
 	if err != nil {
 		return err
 	}
+	if r.whole() {
+		return r.runWhole(stage, pl, yes)
+	}
+	return r.runParts(stage, pl, yes)
+}
+
+// runWhole puts the backed-up /usr/local and /oem back, then restarts.
+func (r *restorer) runWhole(stage string, pl plan, yes bool) error {
+	if here := encryptionMode(r.p); pl.encryption != here {
+		return fmt.Errorf("the backup is of a disk with encryption %q, and this disk has %q. "+
+			"Its /oem would not unlock this disk. Install with the same encryption, or restore "+
+			"only the files with --only homes,apps,extensions", pl.encryption, here)
+	}
+	if pl.release != "" {
+		fmt.Fprintf(r.stdout, "This backup was made on %s", pl.release)
+		if pl.hostname != "" {
+			fmt.Fprintf(r.stdout, ", on %s", pl.hostname)
+		}
+		fmt.Fprintln(r.stdout, ".")
+	}
+	fmt.Fprintln(r.stdout, "It brings this whole machine back as it was:")
+	fmt.Fprintf(r.stdout, "  the users (%s) and their passwords, and the hostname\n", strings.Join(pl.users, ", "))
+	fmt.Fprintln(r.stdout, "  every home, the SSH keys, the system extensions and the settings")
+	if len(pl.apps) > 0 {
+		fmt.Fprintf(r.stdout, "  %d Flatpak apps, installed again from Flathub\n", len(pl.apps))
+	}
+	fmt.Fprintln(r.stdout, "A file in the backup replaces the same file here; other files stay.")
+	fmt.Fprintln(r.stdout, "The machine restarts at the end.")
+	if !yes && !r.ask("Restore it?") {
+		fmt.Fprintln(r.stdout, "Nothing changed.")
+		return nil
+	}
+	args := []string{"restore", r.snap, "--target", stage, "--include", r.p.Persist}
+	args = append(args, "--include", r.p.OEM)
+	if err := r.restic(args...); err != nil {
+		return fmt.Errorf("restic restore: %w", err)
+	}
+	// Docker writes under its storage while it runs.
+	_ = sysCommand("systemctl", "stop", "docker.socket", "docker.service").Run()
+	// The persistent partition: one file system with the stage, so the
+	// files are renamed into place, with descriptors that never follow a
+	// link (a user's home is on it). The owners are the backup's: /oem
+	// brings back the same users with the same IDs at the next boot.
+	if src := filepath.Join(stage, r.p.Persist); exists(src) {
+		if err := mergeMove(src, r.p.Persist); err != nil {
+			r.failed = append(r.failed, "some files of "+r.p.Persist+": "+err.Error())
+		}
+	}
+	// /oem: another partition, only root's, with a few small files.
+	if src := filepath.Join(stage, r.p.OEM); exists(src) {
+		if err := copyTree(src, r.p.OEM); err != nil {
+			r.failed = append(r.failed, r.p.OEM+": "+err.Error())
+		}
+	}
+	// The backup holds no password; keep the one typed for it, so the
+	// restored backup target works.
+	if !exists(r.p.password()) && r.pass != r.p.password() {
+		if b, err := os.ReadFile(r.pass); err == nil {
+			_ = writeSecret(r.p.password(), strings.TrimSpace(string(b)))
+		}
+	}
+	for _, a := range pl.apps {
+		r.restoreApp(a)
+	}
+	if err := r.report(); err != nil {
+		return err
+	}
+	if yes || r.ask("Restart now? Users and passwords come back with the restart.") {
+		return rebootCommand().Run()
+	}
+	fmt.Fprintln(r.stdout, "Restart before you use the machine.")
+	return nil
+}
+
+// runParts restores the parts --only names, into this machine's users.
+func (r *restorer) runParts(stage string, pl plan, yes bool) error {
 	r.showPlan(pl)
-	if len(pl.homes) == 0 && pl.conns == 0 && len(pl.apps) == 0 && len(pl.exts) == 0 {
+	if len(pl.homes) == 0 && len(pl.apps) == 0 && len(pl.exts) == 0 {
 		fmt.Fprintln(r.stdout, "Nothing to restore.")
 		return nil
 	}
@@ -232,14 +338,10 @@ func (r *restorer) run(from string, yes bool) error {
 		fmt.Fprintln(r.stdout, "Nothing changed.")
 		return nil
 	}
-
-	if len(pl.homes) > 0 || pl.conns > 0 {
+	if len(pl.homes) > 0 {
 		args := []string{"restore", r.snap, "--target", stage}
 		for old := range pl.homes {
-			args = append(args, "--include", filepath.Join(r.p.Home, old))
-		}
-		if pl.conns > 0 {
-			args = append(args, "--include", r.p.NetConn)
+			args = append(args, "--include", filepath.Join(r.p.homeState(), old))
 		}
 		if err := r.restic(args...); err != nil {
 			return fmt.Errorf("restic restore: %w", err)
@@ -250,42 +352,56 @@ func (r *restorer) run(from string, yes bool) error {
 			r.failed = append(r.failed, fmt.Sprintf("the files of %s: %v", old, err))
 		}
 	}
-	if pl.conns > 0 {
-		r.restoreNetwork(stage)
-	}
 	for _, a := range pl.apps {
 		r.restoreApp(a)
 	}
 	for _, x := range pl.exts {
 		r.restoreExt(x)
 	}
+	return r.report()
+}
 
-	if len(r.failed) > 0 {
-		fmt.Fprintln(r.stdout, "Restored, except:")
-		for _, f := range r.failed {
-			fmt.Fprintln(r.stdout, "  -", f)
-		}
-	} else {
+func (r *restorer) report() error {
+	if len(r.failed) == 0 {
 		fmt.Fprintln(r.stdout, "Restored.")
+		return nil
 	}
-	if from != "" && from != cfg.Target && r.ask("Back up this machine to "+from+" from now on?") {
-		b, err := os.ReadFile(r.pass)
-		if err == nil {
-			err = writeSecret(r.p.password(), strings.TrimSpace(string(b)))
-		}
+	fmt.Fprintln(r.stdout, "Restored, except:")
+	for _, f := range r.failed {
+		fmt.Fprintln(r.stdout, "  -", f)
+	}
+	return errors.New("some parts were not restored")
+}
+
+// copyTree copies the files under src over the same paths in dst, keeping
+// their modes. For /oem, which only root can write.
+func copyTree(src, dst string) error {
+	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		cfg.Target, cfg.Last, cfg.Result = from, 0, ""
-		if err := saveBackupConfig(r.p, cfg); err != nil {
+		rel, _ := filepath.Rel(src, path)
+		to := filepath.Join(dst, rel)
+		info, err := d.Info()
+		if err != nil {
 			return err
 		}
-		fmt.Fprintln(r.stdout, "Done. Run `isotope backup schedule daily` to back up every day.")
-	}
-	if len(r.failed) > 0 {
-		return errors.New("some parts were not restored")
-	}
-	return nil
+		switch {
+		case d.IsDir():
+			return os.MkdirAll(to, info.Mode().Perm())
+		case info.Mode().IsRegular():
+			b, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			tmp := to + ".isotope-restore"
+			if err := os.WriteFile(tmp, b, info.Mode().Perm()); err != nil {
+				return err
+			}
+			return os.Rename(tmp, to)
+		}
+		return nil
+	})
 }
 
 func readSecretLine(in *bufio.Reader) (string, error) {
@@ -309,55 +425,56 @@ func readSecretLine(in *bufio.Reader) (string, error) {
 }
 
 func (r *restorer) readPlan(dir string) (plan, error) {
-	pl := plan{homes: map[string]string{}}
+	pl := plan{homes: map[string]string{}, encryption: "none"}
 	if rel, err := LoadRelease(filepath.Join(dir, "release")); err == nil {
 		pl.release = "Isotope " + rel.Version + " (" + rel.Flavor + ")"
 	}
-	// The users are matched for the apps too: a user's apps go to the same
-	// local user as their files, even with --only apps.
+	read := func(name string) string {
+		b, _ := os.ReadFile(filepath.Join(dir, name))
+		return strings.TrimSpace(string(b))
+	}
+	pl.hostname = read("hostname")
+	if e := read("encryption"); e != "" {
+		pl.encryption = e
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "users"))
+	if err != nil {
+		return pl, fmt.Errorf("the backup has no list of users: %w", err)
+	}
+	// Into which local user each backed-up user's files and apps go: the
+	// same name, or --user. A whole-machine restore brings the users back
+	// themselves.
 	local := map[string]string{}
-	if r.parts["homes"] || r.parts["apps"] {
-		b, err := os.ReadFile(filepath.Join(dir, "users"))
-		if err != nil {
-			return pl, fmt.Errorf("the backup has no list of users: %w", err)
+	for _, line := range strings.Split(string(b), "\n") {
+		f := strings.Fields(line)
+		if len(f) == 0 {
+			continue
 		}
-		for _, line := range strings.Split(string(b), "\n") {
-			f := strings.Fields(line)
-			if len(f) == 0 {
-				continue
-			}
-			old := f[0]
-			nw := old
-			if m, ok := r.users[old]; ok {
-				nw = m
-			}
-			if _, _, err := lookupUser(nw); err != nil {
-				pl.skipped = append(pl.skipped, old)
-				continue
-			}
-			local[old] = nw
+		old := f[0]
+		pl.users = append(pl.users, old)
+		if r.whole() {
+			local[old] = old
+			continue
 		}
-		for old := range r.users {
-			if _, ok := local[old]; !ok && !contains(pl.skipped, old) {
-				return pl, fmt.Errorf("--user %s=...: the backup has no user %s", old, old)
-			}
+		nw := old
+		if m, ok := r.users[old]; ok {
+			nw = m
 		}
-		if r.parts["homes"] {
-			pl.homes = local
+		if _, _, err := lookupUser(nw); err != nil {
+			pl.skipped = append(pl.skipped, old)
+			continue
+		}
+		local[old] = nw
+	}
+	for old := range r.users {
+		if !contains(pl.users, old) {
+			return pl, fmt.Errorf("--user %s=...: the backup has no user %s", old, old)
 		}
 	}
-	if r.parts["network"] {
-		// The manifest lists the connection files, so the plan can count
-		// them before the files are restored.
-		if b, err := os.ReadFile(filepath.Join(dir, "connections")); err == nil {
-			for _, line := range strings.Split(string(b), "\n") {
-				if strings.TrimSpace(line) != "" {
-					pl.conns++
-				}
-			}
-		}
+	if r.parts["homes"] {
+		pl.homes = local
 	}
-	if r.parts["apps"] {
+	if r.whole() || r.parts["apps"] {
 		entries, _ := os.ReadDir(dir)
 		for _, e := range entries {
 			name := e.Name()
@@ -365,8 +482,7 @@ func (r *restorer) readPlan(dir string) (plan, error) {
 			switch {
 			case name == "flatpak-system":
 			case strings.HasPrefix(name, "flatpak-user-"):
-				u = strings.TrimPrefix(name, "flatpak-user-")
-				nw, ok := local[u]
+				nw, ok := local[strings.TrimPrefix(name, "flatpak-user-")]
 				if !ok {
 					continue // its user is not restored
 				}
@@ -374,20 +490,17 @@ func (r *restorer) readPlan(dir string) (plan, error) {
 			default:
 				continue
 			}
-			b, _ := os.ReadFile(filepath.Join(dir, name))
-			for _, line := range strings.Split(string(b), "\n") {
-				f := strings.Fields(line)
-				if len(f) == 2 {
+			for _, line := range strings.Split(read(name), "\n") {
+				if f := strings.Fields(line); len(f) == 2 {
 					pl.apps = append(pl.apps, appLine{user: u, id: f[0], origin: f[1]})
 				}
 			}
 		}
 	}
+	// A whole-machine restore brings the extensions back as files.
 	if r.parts["extensions"] {
-		b, _ := os.ReadFile(filepath.Join(dir, "extensions"))
-		for _, line := range strings.Split(string(b), "\n") {
-			f := strings.Fields(line)
-			if len(f) == 3 {
+		for _, line := range strings.Split(read("extensions"), "\n") {
+			if f := strings.Fields(line); len(f) == 3 {
 				pl.exts = append(pl.exts, extLine{file: f[0], source: f[1], enabled: f[2] == "true"})
 			}
 		}
@@ -418,9 +531,6 @@ func (r *restorer) showPlan(pl plan) {
 	for _, s := range pl.skipped {
 		fmt.Fprintf(r.stdout, "  not the files of %s: there is no user %s here (use --user %s=NAME)\n", s, s, s)
 	}
-	if pl.conns > 0 {
-		fmt.Fprintf(r.stdout, "  %d network connections\n", pl.conns)
-	}
 	if len(pl.apps) > 0 {
 		fmt.Fprintf(r.stdout, "  %d apps, installed again from Flathub\n", len(pl.apps))
 	}
@@ -443,14 +553,14 @@ func (r *restorer) restoreHome(stage, old, nw string) error {
 	if err != nil {
 		return err
 	}
-	src := filepath.Join(stage, r.p.Home, old)
+	src := filepath.Join(stage, r.p.homeState(), old)
 	if !exists(src) {
 		return errors.New("not in the backup")
 	}
 	if err := chownTree(src, uid, gid); err != nil {
 		return err
 	}
-	dst := filepath.Join(r.p.Home, nw)
+	dst := filepath.Join(r.p.homeState(), nw)
 	if err := os.Mkdir(dst, 0o700); err == nil {
 		if err := os.Lchown(dst, uid, gid); err != nil {
 			return err
@@ -582,33 +692,6 @@ func (r *restorer) resolveSnapshot() (string, error) {
 		}
 	}
 	return newest.ID, nil
-}
-
-func (r *restorer) restoreNetwork(stage string) {
-	src := filepath.Join(stage, r.p.NetConn)
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		r.failed = append(r.failed, "the network connections: "+err.Error())
-		return
-	}
-	if err := os.MkdirAll(r.p.NetConn, 0o700); err != nil {
-		r.failed = append(r.failed, "the network connections: "+err.Error())
-		return
-	}
-	for _, e := range entries {
-		if !e.Type().IsRegular() {
-			continue
-		}
-		b, err := os.ReadFile(filepath.Join(src, e.Name()))
-		if err == nil {
-			// A new file, so it is root's and 0600, as NetworkManager wants.
-			err = writeSecret(filepath.Join(r.p.NetConn, e.Name()), strings.TrimSuffix(string(b), "\n"))
-		}
-		if err != nil {
-			r.failed = append(r.failed, "the connection "+e.Name()+": "+err.Error())
-		}
-	}
-	_ = sysCommand("nmcli", "connection", "reload").Run()
 }
 
 // flathubRepo is where a user's flathub remote comes from when it is missing.

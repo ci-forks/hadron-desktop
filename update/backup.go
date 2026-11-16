@@ -1,8 +1,11 @@
 package main
 
-// Backup and restore of a whole machine: the homes, the saved network
-// connections, and lists of the Flatpak apps and system extensions to
-// install again. The backups are restic repositories. See
+// Backup and restore of a whole machine. On Kairos everything that survives
+// a reboot is on the persistent partition, mounted at /usr/local (each
+// persistent path is a bind mount of /usr/local/.state/<path>.bind), and in
+// /oem (the installer's users, hostname and keyboard). A backup is those
+// two, without caches, logs and, unless asked, container storage. The
+// backups are restic repositories. See
 // docs/superpowers/specs/2026-11-16-isotope-cli-backup-design.md.
 
 import (
@@ -28,34 +31,58 @@ import (
 // backupPaths are the places a backup reads and a restore writes. A struct,
 // so tests can point every one of them into a temporary directory.
 type backupPaths struct {
-	State   string // /var/lib/isotope-backup: config, password, env, manifest
-	Run     string // /run/isotope-backup: a restore's typed password (tmpfs)
-	Home    string // /home
-	NetConn string // NetworkManager's saved connections
-	Release string // /etc/isotope/release
-	ExtDir  string // where each extension came from (extStateDir)
+	Persist    string // /usr/local: the persistent partition
+	OEM        string // /oem: the installer's cloud-config
+	State      string // /usr/local/isotope-backup: config, password, env, manifest
+	Run        string // /run/isotope-backup: a restore's typed password (tmpfs)
+	Release    string // /etc/isotope/release
+	Encryption string // /etc/isotope/encryption, the installer's marker
+	ExtDir     string // where each extension came from (extStateDir)
 }
 
-// defaultBackupPaths is a variable so tests can move every path.
+// defaultBackupPaths is a variable so tests can move every path. State is on
+// the persistent partition itself: /var is rebuilt at every boot.
 var defaultBackupPaths = func() backupPaths {
 	return backupPaths{
-		State:   "/var/lib/isotope-backup",
-		Run:     "/run/isotope-backup",
-		Home:    "/home",
-		NetConn: "/etc/NetworkManager/system-connections",
-		Release: releaseFile(),
-		ExtDir:  extStateDir(),
+		Persist:    "/usr/local",
+		OEM:        "/oem",
+		State:      "/usr/local/isotope-backup",
+		Run:        "/run/isotope-backup",
+		Release:    releaseFile(),
+		Encryption: "/etc/isotope/encryption",
+		ExtDir:     extStateDir(),
 	}
 }
+
+// bindDir is where Kairos keeps a persistent path: /home is
+// /usr/local/.state/home.bind, /var/lib/docker .state/var-lib-docker.bind.
+func (p backupPaths) bindDir(path string) string {
+	name := strings.ReplaceAll(strings.Trim(path, "/"), "/", "-")
+	return filepath.Join(p.Persist, ".state", name+".bind")
+}
+
+// homeState is /home as the persistent partition has it. A restore moves
+// files there, not into /home: /home is another mount of it, and a rename
+// cannot cross mounts.
+func (p backupPaths) homeState() string { return p.bindDir("/home") }
 
 func (p backupPaths) config() string   { return filepath.Join(p.State, "config") }
 func (p backupPaths) password() string { return filepath.Join(p.State, "password") }
 func (p backupPaths) envFile() string  { return filepath.Join(p.State, "env") }
 func (p backupPaths) manifest() string { return filepath.Join(p.State, "manifest") }
 
-// stage is where a restore puts the files first: under /home, on the same
-// file system as the homes, so moving them into place is a rename.
-func (p backupPaths) stage() string { return filepath.Join(p.Home, ".isotope-restore") }
+// stage is where a restore puts the files first: on the persistent
+// partition, so moving them into place is a rename. Root's, mode 0700.
+func (p backupPaths) stage() string { return filepath.Join(p.Persist, ".isotope-restore") }
+
+// onPersist maps a path the user sees (/home/anna/x) to where it is on the
+// persistent partition, for the paths the backup reads by that name.
+func (p backupPaths) onPersist(path string) string {
+	if path == "/home" || strings.HasPrefix(path, "/home/") {
+		return p.homeState() + strings.TrimPrefix(path, "/home")
+	}
+	return path
+}
 
 // restic is the backup engine. ISOTOPE_RESTIC replaces it, so a test can
 // record what would have been run.
@@ -67,7 +94,7 @@ func restic() string {
 }
 
 // sysCommand builds every command a backup or restore runs (restic,
-// flatpak, nmcli, runuser). A variable so tests can see them.
+// flatpak, runuser, systemctl). A variable so tests can see them.
 var sysCommand = exec.Command
 
 // flatpakPresent says whether this edition has Flatpak (the server has not).
@@ -79,22 +106,29 @@ var backupNow = time.Now
 // Snapshots older than this many backups are forgotten after each backup.
 var keepPolicy = []string{"--keep-daily", "7", "--keep-weekly", "4", "--keep-monthly", "12"}
 
-// The parts of /home that are caches or can be downloaded again.
+// The parts of a home that are caches or can be downloaded again. Flatpak
+// apps are installed again from the manifest.
 var homeExcludes = []string{
 	".cache",
 	".local/share/Trash",
 	".local/share/flatpak",
-	".local/share/containers",
 	".var/app/*/cache",
 }
+
+// Container storage: large, and not consistent while it runs. In the backup
+// only with --with-containers.
+var containerBinds = []string{"/var/lib/docker", "/var/lib/containerd"}
+
+const homeContainers = ".local/share/containers"
 
 // backupConfig is /var/lib/isotope-backup/config. It holds no secret, so
 // `isotope status` can read it as any user.
 type backupConfig struct {
-	Target   string
-	Schedule string // off, daily, weekly
-	Last     int64  // Unix time of the last successful backup
-	Result   string // ok, or the error of the last attempt
+	Target     string
+	Schedule   string // off, daily, weekly
+	Containers bool   // also Docker's and Podman's storage
+	Last       int64  // Unix time of the last successful backup
+	Result     string // ok, or the error of the last attempt
 }
 
 func loadBackupConfig(p backupPaths) (backupConfig, error) {
@@ -118,6 +152,8 @@ func loadBackupConfig(p backupPaths) (backupConfig, error) {
 			if v == "daily" || v == "weekly" || v == "off" {
 				c.Schedule = v
 			}
+		case "containers":
+			c.Containers = v == "true"
 		case "last":
 			c.Last, _ = strconv.ParseInt(v, 10, 64)
 		case "result":
@@ -131,8 +167,8 @@ func saveBackupConfig(p backupPaths, c backupConfig) error {
 	if err := os.MkdirAll(p.State, 0o755); err != nil {
 		return err
 	}
-	s := fmt.Sprintf("target=%s\nschedule=%s\nlast=%d\nresult=%s\n",
-		c.Target, c.Schedule, c.Last, oneLine(c.Result))
+	s := fmt.Sprintf("target=%s\nschedule=%s\ncontainers=%t\nlast=%d\nresult=%s\n",
+		c.Target, c.Schedule, c.Containers, c.Last, oneLine(c.Result))
 	tmp := p.config() + ".tmp"
 	if err := os.WriteFile(tmp, []byte(s), 0o644); err != nil {
 		return err
@@ -214,15 +250,21 @@ func resticCmd(p backupPaths, target, passFile string, args ...string) (*exec.Cm
 	return c, nil
 }
 
-const backupUsage = `Usage: isotope backup [command]
+const backupUsage = `Usage: isotope backup [command] [flags]
 
-Back up this machine: every home in /home (without caches), the saved
-network connections, and the lists of Flatpak apps and system extensions.
+Back up this machine: everything that survives a reboot, which is the
+persistent partition (/usr/local: the homes, SSH keys, system extensions,
+settings) and /oem (users, hostname, keyboard), without caches, logs and
+Flatpak apps (the list of apps is kept; a restore installs them again).
 The backup is encrypted. Runs as root through sudo; only members of the
 admin group may use it.
 
 Commands:
-  now                    back up now (default)
+  now                    back up now to the target (default)
+      --export FILE      instead, write the backup to one file, to copy or
+                         keep anywhere; needs no target. "isotope restore
+                         --from FILE" restores it
+      --with-containers  also Docker's and Podman's images and volumes
   status                 the target, the schedule and the last backup
   init TARGET            back up to TARGET from now on: a directory, such as
                          a folder on a USB disk, or a restic URL (sftp:...,
@@ -230,6 +272,7 @@ Commands:
                          new password, which is shown once
       --password-stdin   read the password instead: for a backup that
                          already exists, or a password of your own
+      --with-containers  include Docker's and Podman's storage from now on
   list                   the backups in the target
   schedule daily|weekly|off
                          back up automatically. A USB disk that is not
@@ -269,6 +312,8 @@ func cmdBackup(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := newFlags("backup "+sub, stderr)
 	passStdin := fs.Bool("password-stdin", false, "")
 	scheduled := fs.Bool("scheduled", false, "")
+	export := fs.String("export", "", "")
+	containers := fs.Bool("with-containers", false, "")
 	rest, err := parseInterspersed(fs, args)
 	if err != nil {
 		return exitUsage
@@ -279,12 +324,15 @@ func cmdBackup(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		if len(rest) != 0 {
 			break
 		}
-		return backupRun(p, *scheduled, stdout, stderr)
+		if *export != "" {
+			return backupExport(p, *export, *containers, *passStdin, in, stdout, stderr)
+		}
+		return backupRun(p, *scheduled, *containers, stdout, stderr)
 	case "init":
 		if len(rest) != 1 {
 			break
 		}
-		return backupInit(p, rest[0], *passStdin, in, stdout, stderr)
+		return backupInit(p, rest[0], *passStdin, *containers, in, stdout, stderr)
 	case "list":
 		if len(rest) != 0 {
 			break
@@ -393,7 +441,7 @@ func scheduledSkip(c backupConfig) string {
 	return ""
 }
 
-func backupRun(p backupPaths, scheduled bool, stdout, stderr io.Writer) int {
+func backupRun(p backupPaths, scheduled, containers bool, stdout, stderr io.Writer) int {
 	c, err := loadBackupConfig(p)
 	if err != nil {
 		fmt.Fprintln(stderr, "isotope:", err)
@@ -414,7 +462,7 @@ func backupRun(p backupPaths, scheduled bool, stdout, stderr io.Writer) int {
 			return exitError
 		}
 	}
-	err = backupOnce(p, c.Target, stdout, stderr)
+	err = backupOnce(p, c.Target, p.password(), c.Containers || containers, true, stdout, stderr)
 	switch {
 	case errors.Is(err, errPartial):
 		c.Result, c.Last = "partial: "+err.Error(), backupNow().Unix()
@@ -438,26 +486,49 @@ func backupRun(p backupPaths, scheduled bool, stdout, stderr io.Writer) int {
 	return exitOK
 }
 
-func backupOnce(p backupPaths, target string, stdout, stderr io.Writer) error {
+// backupArgs are restic's arguments for one backup of this machine.
+func backupArgs(p backupPaths, target string, containers bool) []string {
+	host, _ := os.Hostname()
+	args := []string{"backup", "--tag", "isotope", "--host", host, "--exclude-caches"}
+	ex := func(path string) { args = append(args, "--exclude", path) }
+	for _, x := range homeExcludes {
+		ex(filepath.Join(p.homeState(), "*", x))
+	}
+	if !containers {
+		ex(filepath.Join(p.homeState(), "*", homeContainers))
+		for _, b := range containerBinds {
+			ex(p.bindDir(b))
+		}
+	}
+	ex(p.bindDir("/var/log"))
+	ex(filepath.Join(p.Persist, "lost+found"))
+	// What a backup must not hold: its own cache and secrets, a restore's
+	// staging directory, and a target or export on this disk, which would
+	// otherwise be backed up into itself.
+	for _, f := range []string{"cache", "password", "password.new", "env", "export"} {
+		ex(filepath.Join(p.State, f))
+	}
+	ex(p.stage())
+	if !isURLTarget(target) {
+		ex(p.onPersist(target))
+	}
+	args = append(args, p.Persist)
+	if exists(p.OEM) {
+		args = append(args, p.OEM)
+	}
+	return args
+}
+
+// backupOnce writes the manifest and backs up to target. prune forgets the
+// old snapshots of this host afterwards.
+func backupOnce(p backupPaths, target, passFile string, containers, prune bool, stdout, stderr io.Writer) error {
+	if !exists(p.homeState()) {
+		return fmt.Errorf("%s is missing: this is not an installed Isotope system", p.homeState())
+	}
 	if err := writeManifest(p); err != nil {
 		return fmt.Errorf("writing the manifest: %w", err)
 	}
-	host, _ := os.Hostname()
-	args := []string{"backup", "--tag", "isotope", "--host", host, "--exclude-caches"}
-	for _, x := range homeExcludes {
-		args = append(args, "--exclude", filepath.Join(p.Home, "*", x))
-	}
-	// A restore's staging directory, and a target inside /home, which would
-	// otherwise be backed up into itself.
-	args = append(args, "--exclude", p.stage())
-	if !isURLTarget(target) && strings.HasPrefix(target, p.Home+"/") {
-		args = append(args, "--exclude", target)
-	}
-	args = append(args, p.Home, p.manifest())
-	if exists(p.NetConn) {
-		args = append(args, p.NetConn)
-	}
-	cmd, err := resticCmd(p, target, p.password(), args...)
+	cmd, err := resticCmd(p, target, passFile, backupArgs(p, target, containers)...)
 	if err != nil {
 		return err
 	}
@@ -472,8 +543,12 @@ func backupOnce(p backupPaths, target string, stdout, stderr io.Writer) error {
 		}
 		partial = errPartial
 	}
+	if !prune {
+		return partial
+	}
+	host, _ := os.Hostname()
 	forget := append([]string{"forget", "--tag", "isotope", "--host", host, "--prune"}, keepPolicy...)
-	if cmd, err = resticCmd(p, target, p.password(), forget...); err != nil {
+	if cmd, err = resticCmd(p, target, passFile, forget...); err != nil {
 		return err
 	}
 	cmd.Stdout, cmd.Stderr = io.Discard, stderr
@@ -520,6 +595,21 @@ func fileUID(info fs.FileInfo) int {
 	return -1
 }
 
+// encryptionMode is the mode= of the installer's encryption marker, or
+// "none".
+func encryptionMode(p backupPaths) string {
+	b, err := os.ReadFile(p.Encryption)
+	if err != nil {
+		return "none"
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(line), "mode="); ok && v != "" {
+			return v
+		}
+	}
+	return "none"
+}
+
 // writeManifest writes what a restore needs to know besides the files.
 func writeManifest(p backupPaths) error {
 	dir := p.manifest()
@@ -534,7 +624,7 @@ func writeManifest(p backupPaths) error {
 			return err
 		}
 	}
-	users, err := homeUsers(p.Home)
+	users, err := homeUsers(p.homeState())
 	if err != nil {
 		return err
 	}
@@ -558,17 +648,15 @@ func writeManifest(p backupPaths) error {
 			}
 		}
 	}
-	// The names of the saved connections, so a restore can count them.
-	var cb strings.Builder
-	if entries, err := os.ReadDir(p.NetConn); err == nil {
-		for _, e := range entries {
-			if e.Type().IsRegular() {
-				fmt.Fprintln(&cb, e.Name())
-			}
-		}
-	}
-	if err := os.WriteFile(filepath.Join(dir, "connections"), []byte(cb.String()), 0o644); err != nil {
+	// How the disk is encrypted: a whole-machine restore brings back /oem,
+	// which must match the new disk's encryption.
+	if err := os.WriteFile(filepath.Join(dir, "encryption"), []byte(encryptionMode(p)+"\n"), 0o644); err != nil {
 		return err
+	}
+	if host, err := os.Hostname(); err == nil {
+		if err := os.WriteFile(filepath.Join(dir, "hostname"), []byte(host+"\n"), 0o644); err != nil {
+			return err
+		}
 	}
 	// The extensions: the file name, where it came from, and whether it is
 	// enabled at boot.
@@ -629,24 +717,15 @@ func writeSecret(path, s string) error {
 	return os.Rename(tmp, path)
 }
 
-func backupInit(p backupPaths, target string, passStdin bool, in *bufio.Reader, stdout, stderr io.Writer) int {
+func backupInit(p backupPaths, target string, passStdin, containers bool, in *bufio.Reader, stdout, stderr io.Writer) int {
 	target, err := normalizeTarget(target)
 	if err != nil {
 		fmt.Fprintln(stderr, "isotope:", err)
 		return exitError
 	}
 	if !isURLTarget(target) {
-		// Only the last directory is created: a missing parent is most likely
-		// a USB disk that is not mounted, and creating its mount point would
-		// put the backup on the internal disk.
-		if !exists(filepath.Dir(target)) {
-			fmt.Fprintf(stderr, "isotope: %s does not exist. Is the disk plugged in?\n", filepath.Dir(target))
-			return exitError
-		}
-		// /run/media/anna exists while another disk is mounted; without the
-		// disk, the folder would go on the tmpfs and vanish at the reboot.
-		if onTmpfs(filepath.Dir(target)) {
-			fmt.Fprintf(stderr, "isotope: %s is not on a disk (it is in memory, and empty after a reboot). Is the disk plugged in?\n", filepath.Dir(target))
+		if err := checkOnDisk(filepath.Dir(target)); err != nil {
+			fmt.Fprintln(stderr, "isotope:", err)
 			return exitError
 		}
 		if err := os.Mkdir(target, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
@@ -656,31 +735,13 @@ func backupInit(p backupPaths, target string, passStdin bool, in *bufio.Reader, 
 	}
 	var password string
 	existing := targetPresent(target) && !isURLTarget(target)
-	if passStdin {
-		line, err := in.ReadString('\n')
-		password = strings.TrimSpace(line)
-		if password == "" {
-			if err == nil {
-				err = errors.New("the password is empty")
-			}
-			fmt.Fprintln(stderr, "isotope: no password on stdin:", err)
-			return exitError
-		}
-	} else {
-		if existing {
-			fmt.Fprintf(stderr, "isotope: %s already holds a backup; give its password with --password-stdin.\n", target)
-			return exitError
-		}
-		key, err := newBackupKey()
-		if err != nil {
-			fmt.Fprintln(stderr, "isotope:", err)
-			return exitError
-		}
-		if !confirmBackupKey(key, in, stdout) {
-			fmt.Fprintln(stderr, "isotope: the password was not confirmed; nothing changed.")
-			return exitError
-		}
-		password = key
+	if existing && !passStdin {
+		fmt.Fprintf(stderr, "isotope: %s already holds a backup; give its password with --password-stdin.\n", target)
+		return exitError
+	}
+	if password, err = newPassword(passStdin, in, stdout); err != nil {
+		fmt.Fprintln(stderr, "isotope:", err)
+		return exitError
 	}
 
 	// The password goes to a new file first: an init that fails must not
@@ -722,6 +783,7 @@ func backupInit(p backupPaths, target string, passStdin bool, in *bufio.Reader, 
 	}
 	c, _ := loadBackupConfig(p)
 	c.Target, c.Last, c.Result = target, 0, ""
+	c.Containers = c.Containers || containers
 	if err := saveBackupConfig(p, c); err != nil {
 		fmt.Fprintln(stderr, "isotope:", err)
 		return exitError
@@ -735,6 +797,46 @@ func backupInit(p backupPaths, target string, passStdin bool, in *bufio.Reader, 
 		fmt.Fprintf(stdout, "Credentials for %s go in %s, one NAME=value per line.\n", target, p.envFile())
 	}
 	return exitOK
+}
+
+// checkOnDisk refuses a directory where a backup would not be safe. Only
+// the last component of a target is created: a missing parent is most
+// likely a USB disk that is not mounted, and creating its mount point would
+// put the backup on the internal disk. And /run/media/anna exists while
+// another disk is mounted; without the disk, the folder would go on the
+// tmpfs and vanish at the reboot.
+func checkOnDisk(dir string) error {
+	if !exists(dir) {
+		return fmt.Errorf("%s does not exist. Is the disk plugged in?", dir)
+	}
+	if onTmpfs(dir) {
+		return fmt.Errorf("%s is not on a disk (it is in memory, and empty after a reboot). Is the disk plugged in?", dir)
+	}
+	return nil
+}
+
+// newPassword is the password of a new backup: read from stdin, or made
+// here, shown once and confirmed.
+func newPassword(passStdin bool, in *bufio.Reader, stdout io.Writer) (string, error) {
+	if passStdin {
+		line, err := in.ReadString('\n')
+		pw := strings.TrimSpace(line)
+		if pw == "" {
+			if err == nil {
+				err = errors.New("the password is empty")
+			}
+			return "", fmt.Errorf("no password on stdin: %w", err)
+		}
+		return pw, nil
+	}
+	key, err := newBackupKey()
+	if err != nil {
+		return "", err
+	}
+	if !confirmBackupKey(key, in, stdout) {
+		return "", errors.New("the password was not confirmed; nothing changed")
+	}
+	return key, nil
 }
 
 // newBackupKey makes the password of a new backup. A variable for the tests.

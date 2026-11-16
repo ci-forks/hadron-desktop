@@ -164,10 +164,16 @@ kept under `build/sway-desktop/` and `build/i3-desktop/`.
   updater uses to recognise an Isotope image. The agent flavor has no
   tray and no service; its CLI keeps the direct `sudo` path.
 - **Backups:** `isotope backup` and `isotope restore`, through sudo for the
-  `admin` group, with restic (built in the Dockerfile's `restic` stage).
-  `/var/lib/isotope-backup/` holds the target, the schedule and the result
+  `admin` group, with restic (built in the Dockerfile's `restic` stage). A
+  backup is everything that survives a reboot: the persistent partition
+  (`/usr/local`, where `/home` is `.state/home.bind` and every other
+  persistent path a `.state/<path>.bind`) and `/oem`, without caches, logs and,
+  unless `--with-containers`, Docker's and Podman's storage.
+  `/usr/local/isotope-backup/` holds the target, the schedule and the result
   (`config`), the repository password (`password`, 0600) and the credentials
-  of a remote target (`env`). `isotope-backup.timer` runs
+  of a remote target (`env`); not `/var/lib`, which Kairos rebuilds at every
+  boot. `isotope backup --export FILE` writes one file: a tar of a restic
+  repository made for it. `isotope-backup.timer` runs
   `isotope backup --scheduled` every day; it does nothing until
   `isotope backup schedule daily|weekly`, and skips a directory target that
   holds no repository (an unplugged disk). The agent image has none of it.

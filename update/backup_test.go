@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/tar"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,21 +16,24 @@ func backupSetup(t *testing.T) backupPaths {
 	t.Helper()
 	root := t.TempDir()
 	p := backupPaths{
-		State:   filepath.Join(root, "state"),
-		Run:     filepath.Join(root, "run"),
-		Home:    filepath.Join(root, "home"),
-		NetConn: filepath.Join(root, "nm"),
-		Release: filepath.Join(root, "release"),
-		ExtDir:  filepath.Join(root, "extstate"),
+		Persist:    filepath.Join(root, "usr-local"),
+		OEM:        filepath.Join(root, "oem"),
+		State:      filepath.Join(root, "usr-local", "isotope-backup"),
+		Run:        filepath.Join(root, "run"),
+		Release:    filepath.Join(root, "release"),
+		Encryption: filepath.Join(root, "encryption"),
+		ExtDir:     filepath.Join(root, "extstate"),
 	}
-	for _, d := range []string{p.Home + "/anna/Documents", p.Home + "/anna/.cache/big", p.NetConn} {
+	home := p.homeState()
+	for _, d := range []string{home + "/anna/Documents", home + "/anna/.cache/big", p.OEM, p.bindDir("/etc/ssh")} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	write(t, p.Home+"/anna/Documents/thesis.txt", "chapter one\n")
-	write(t, p.Home+"/anna/.cache/big/blob", "cache\n")
-	write(t, p.NetConn+"/Home WiFi.nmconnection", "[wifi]\nssid=home\n")
+	write(t, home+"/anna/Documents/thesis.txt", "chapter one\n")
+	write(t, home+"/anna/.cache/big/blob", "cache\n")
+	write(t, p.bindDir("/etc/ssh")+"/ssh_host_ed25519_key", "host key\n")
+	write(t, p.OEM+"/90_custom.yaml", "users: [anna]\n")
 	write(t, p.Release, "FLAVOR=sway\nVERSION=v1.2.0\nIMAGE_REPO=ghcr.io/x/isotope\nGITHUB_REPO=x/isotope\n")
 	t.Setenv("ISOTOPE_UPDATE_EXT_DIR", filepath.Join(root, "ext"))
 	t.Setenv("ISOTOPE_UPDATE_EXT_STATE", p.ExtDir)
@@ -108,10 +112,15 @@ func TestBackupRunsResticWithTheExcludes(t *testing.T) {
 	if len(calls) != 2 {
 		t.Fatalf("restic calls: %q", calls)
 	}
+	home := p.homeState()
 	for _, w := range []string{usb + " | backup --tag isotope", "--exclude-caches",
-		"--exclude " + p.Home + "/*/.cache", "--exclude " + p.Home + "/*/.local/share/flatpak",
-		"--exclude " + p.Home + "/.isotope-restore",
-		" " + p.Home + " ", p.State + "/manifest", p.NetConn} {
+		"--exclude " + home + "/*/.cache", "--exclude " + home + "/*/.local/share/flatpak",
+		"--exclude " + home + "/*/.local/share/containers",
+		"--exclude " + p.Persist + "/.state/var-lib-docker.bind",
+		"--exclude " + p.Persist + "/.state/var-log.bind",
+		"--exclude " + p.Persist + "/.isotope-restore",
+		"--exclude " + p.State + "/password ", "--exclude " + p.State + "/cache ",
+		" " + p.Persist + " " + p.OEM} {
 		if !strings.Contains(calls[0], w) {
 			t.Errorf("backup call lacks %q: %s", w, calls[0])
 		}
@@ -127,9 +136,9 @@ func TestBackupRunsResticWithTheExcludes(t *testing.T) {
 	if !strings.HasPrefix(string(users), "anna ") {
 		t.Errorf("manifest users: %q", users)
 	}
-	conns, _ := os.ReadFile(p.State + "/manifest/connections")
-	if string(conns) != "Home WiFi.nmconnection\n" {
-		t.Errorf("manifest connections: %q", conns)
+	enc, _ := os.ReadFile(p.State + "/manifest/encryption")
+	if string(enc) != "none\n" {
+		t.Errorf("manifest encryption: %q", enc)
 	}
 }
 
@@ -306,7 +315,7 @@ func TestBackupWithUnreadableFilesIsKept(t *testing.T) {
 func TestBackupTargetInsideHomeIsExcluded(t *testing.T) {
 	p := backupSetup(t)
 	log := fakeRestic(t)
-	target := p.Home + "/anna/backup"
+	target := p.homeState() + "/anna/backup"
 	os.MkdirAll(target, 0o700)
 	write(t, target+"/config", "restic")
 	saveBackupConfig(p, backupConfig{Target: target})
@@ -427,17 +436,21 @@ func TestMergeMove(t *testing.T) {
 	}
 }
 
-// TestBackupAndRestoreWithRestic runs the real restic: back up, lose the
-// files, restore them from the target as on a new machine.
-func TestBackupAndRestoreWithRestic(t *testing.T) {
+func needRealRestic(t *testing.T) {
+	t.Helper()
 	bin, err := exec.LookPath("restic")
 	if err != nil {
 		t.Skip("restic is not on PATH")
 	}
-	p := backupSetup(t)
 	t.Setenv("ISOTOPE_RESTIC", bin)
-	target := filepath.Join(t.TempDir(), "isotope")
+}
 
+// TestRestoreFilesWithRestic runs the real restic: back up, then restore one
+// user's files into another user's home with --only homes.
+func TestRestoreFilesWithRestic(t *testing.T) {
+	needRealRestic(t)
+	p := backupSetup(t)
+	target := filepath.Join(t.TempDir(), "isotope")
 	if code, _, errOut := runCLI("pw-123\n", "backup", "init", target, "--password-stdin"); code != exitOK {
 		t.Fatalf("init: %d %s", code, errOut)
 	}
@@ -448,40 +461,148 @@ func TestBackupAndRestoreWithRestic(t *testing.T) {
 		t.Fatalf("list: %d %q %s", code, out, errOut)
 	}
 
-	// A new machine: the same user under another name, no connections, and
-	// no backup configuration.
-	os.RemoveAll(p.Home)
-	os.RemoveAll(p.NetConn)
+	// A new machine: the same user under another name, and no backup
+	// configuration.
+	home := p.homeState()
+	os.RemoveAll(home)
 	os.RemoveAll(p.State)
-	os.MkdirAll(p.Home+"/ben/Documents", 0o755)
-	write(t, p.Home+"/ben/Documents/thesis.txt", "empty")
-	write(t, p.Home+"/ben/notes.txt", "kept")
+	os.MkdirAll(home+"/ben/Documents", 0o755)
+	write(t, home+"/ben/Documents/thesis.txt", "empty")
+	write(t, home+"/ben/notes.txt", "kept")
 
-	code, out, errOut := runCLI("pw-123\ny\nn\n", "restore", "--from", target, "--user", "anna=ben")
+	code, out, errOut := runCLI("pw-123\ny\n", "restore", "--from", target, "--only", "homes", "--user", "anna=ben")
 	if code != exitOK {
 		t.Fatalf("restore: %d %q %s", code, out, errOut)
 	}
-	for _, w := range []string{"Isotope v1.2.0 (sway)", "the files of anna, into the home of ben", "1 network connections", "Restored."} {
+	for _, w := range []string{"Isotope v1.2.0 (sway)", "the files of anna, into the home of ben", "Restored."} {
 		if !strings.Contains(out, w) {
 			t.Errorf("restore output lacks %q: %s", w, out)
 		}
 	}
 	for path, want := range map[string]string{
-		p.Home + "/ben/Documents/thesis.txt":  "chapter one\n",
-		p.Home + "/ben/notes.txt":             "kept",
-		p.NetConn + "/Home WiFi.nmconnection": "[wifi]\nssid=home\n",
+		home + "/ben/Documents/thesis.txt": "chapter one\n",
+		home + "/ben/notes.txt":            "kept",
 	} {
 		if b, _ := os.ReadFile(path); string(b) != want {
 			t.Errorf("%s: %q, want %q", path, b, want)
 		}
 	}
-	if exists(p.Home + "/ben/.cache/big/blob") {
+	if exists(home + "/ben/.cache/big/blob") {
 		t.Error("the cache was backed up")
 	}
-	if exists(p.Home + "/.isotope-restore") {
+	if exists(p.stage()) {
 		t.Error("the staging directory is left behind")
 	}
 	if exists(p.password()) {
-		t.Error("the --from password was kept after answering no")
+		t.Error("an --only restore kept the --from password")
+	}
+}
+
+// TestExportAndWholeMachineRestoreWithRestic exports the machine to one
+// file, then restores all of it onto a fresh install.
+func TestExportAndWholeMachineRestoreWithRestic(t *testing.T) {
+	needRealRestic(t)
+	p := backupSetup(t)
+	rebooted := false
+	old := rebootCommand
+	rebootCommand = func() *exec.Cmd { rebooted = true; return exec.Command("true") }
+	t.Cleanup(func() { rebootCommand = old })
+
+	file := filepath.Join(t.TempDir(), "laptop.isotope")
+	code, out, errOut := runCLI("pw-123\n", "backup", "--export", file, "--password-stdin")
+	if code != exitOK || !strings.Contains(out, "Wrote "+file) {
+		t.Fatalf("export: %d %q %s", code, out, errOut)
+	}
+	if entries, _ := os.ReadDir(filepath.Dir(file)); len(entries) != 1 {
+		t.Fatalf("the export left files behind: %v", entries)
+	}
+	if code, _, _ := runCLI("pw\n", "backup", "--export", file, "--password-stdin"); code != exitError {
+		t.Fatal("export over an existing file")
+	}
+
+	// A fresh install: a new /oem and an empty home with one new file.
+	os.RemoveAll(p.Persist)
+	os.RemoveAll(p.OEM)
+	os.MkdirAll(p.homeState()+"/anna", 0o755)
+	write(t, p.homeState()+"/anna/new.txt", "made after the install")
+	os.MkdirAll(p.OEM, 0o755)
+	write(t, p.OEM+"/90_custom.yaml", "users: [new]\n")
+
+	code, out, errOut = runCLI("pw-123\ny\n", "restore", "--from", file, "--yes")
+	if code != exitOK {
+		t.Fatalf("restore: %d %q %s", code, out, errOut)
+	}
+	for path, want := range map[string]string{
+		p.homeState() + "/anna/Documents/thesis.txt":    "chapter one\n",
+		p.homeState() + "/anna/new.txt":                 "made after the install",
+		p.bindDir("/etc/ssh") + "/ssh_host_ed25519_key": "host key\n",
+		p.OEM + "/90_custom.yaml":                       "users: [anna]\n",
+		p.password():                                    "pw-123\n",
+	} {
+		if b, _ := os.ReadFile(path); string(b) != want {
+			t.Errorf("%s: %q, want %q", path, b, want)
+		}
+	}
+	if exists(p.homeState() + "/anna/.cache/big/blob") {
+		t.Error("the cache was backed up")
+	}
+	if exists(p.stage()) {
+		t.Error("the staging directory is left behind")
+	}
+	if entries, _ := os.ReadDir(filepath.Dir(file)); len(entries) != 1 {
+		t.Errorf("the unpacked export is left behind: %v", entries)
+	}
+	if !rebooted {
+		t.Error("no restart after a whole-machine restore")
+	}
+}
+
+func TestWholeRestoreNeedsTheSameEncryption(t *testing.T) {
+	needRealRestic(t)
+	p := backupSetup(t)
+	file := filepath.Join(t.TempDir(), "laptop.isotope")
+	if code, _, errOut := runCLI("pw\n", "backup", "--export", file, "--password-stdin"); code != exitOK {
+		t.Fatalf("export: %d %s", code, errOut)
+	}
+	write(t, p.Encryption, "mode=passphrase\n")
+	write(t, p.OEM+"/90_custom.yaml", "kcrypt: {method: passphrase}\n")
+	code, _, errOut := runCLI("pw\n", "restore", "--from", file, "--yes")
+	if code != exitError || !strings.Contains(errOut, "--only homes,apps,extensions") {
+		t.Fatalf("exit %d, err %q", code, errOut)
+	}
+	if b, _ := os.ReadFile(p.OEM + "/90_custom.yaml"); !strings.Contains(string(b), "kcrypt") {
+		t.Fatal("the restore replaced /oem")
+	}
+}
+
+func TestUnpackRefusesEscapes(t *testing.T) {
+	dir := t.TempDir()
+	for name, body := range map[string]func(*tar.Writer){
+		"climb": func(w *tar.Writer) {
+			w.WriteHeader(&tar.Header{Name: "../evil", Typeflag: tar.TypeReg, Mode: 0o644, Size: 1})
+			w.Write([]byte("x"))
+		},
+		"absolute": func(w *tar.Writer) {
+			w.WriteHeader(&tar.Header{Name: "/etc/evil", Typeflag: tar.TypeReg, Mode: 0o644, Size: 1})
+			w.Write([]byte("x"))
+		},
+		"link": func(w *tar.Writer) {
+			w.WriteHeader(&tar.Header{Name: "data", Typeflag: tar.TypeSymlink, Linkname: "/etc"})
+		},
+	} {
+		f := filepath.Join(t.TempDir(), name+".isotope")
+		out, _ := os.Create(f)
+		w := tar.NewWriter(out)
+		body(w)
+		w.Close()
+		out.Close()
+		into := filepath.Join(dir, name)
+		os.Mkdir(into, 0o700)
+		if err := unpackFile(f, into); err == nil {
+			t.Errorf("%s: unpacked", name)
+		}
+	}
+	if exists(filepath.Join(dir, "evil")) {
+		t.Fatal("an entry climbed out")
 	}
 }

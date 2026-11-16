@@ -131,23 +131,29 @@ signed with [cosign](https://github.com/sigstore/cosign).
 ## Backups
 
 An update cannot break the system, but a disk can die and a laptop can get
-lost. `isotope backup` copies the files of every user, the saved Wi-Fi and
-VPN connections, and the list of your apps and system extensions to a USB
-disk or a server. The backup is encrypted, and after the first one only the
-changes are copied. It uses [restic](https://restic.net).
+lost. `isotope backup` saves everything that survives a reboot: every
+user's files, the users and their passwords, the hostname, SSH keys,
+system extensions and settings. Flatpak apps are not copied; the backup
+keeps their list and a restore installs them again. The backup is
+encrypted, and after the first one only the changes are copied. It uses
+[restic](https://restic.net).
 
 ```sh
 isotope backup init /run/media/$USER/MyDisk/isotope   # shows the password once
 isotope backup                       # back up now
 isotope backup schedule daily        # or weekly; an unplugged disk is skipped
 isotope backup list                  # the backups you can restore
+isotope backup --export ~/laptop.isotope   # or: the whole backup in one file
 ```
 
 Write the password down and keep it away from the computer: without it the
-backup cannot be restored. On a new machine, install Isotope, sign in and run
-`isotope restore --from /run/media/$USER/MyDisk/isotope`. Your files go back
-into your home, and the apps and extensions are installed again. Caches,
-containers and Docker data are not in the backup.
+backup cannot be restored. On a new machine, install Isotope with the same
+disk encryption choice, then run
+`isotope restore --from /run/media/$USER/MyDisk/isotope` (or `--from` the
+exported file). The machine comes back as it was and restarts. To restore
+only your files into a different user, use
+`isotope restore --only homes --user old=new`. Caches, logs, and Docker and
+Podman storage are not in the backup unless you add `--with-containers`.
 
 ## Server edition
 
@@ -161,7 +167,7 @@ server network cards. Log in on the console or over SSH:
 isotope                        # installed version and latest release
 isotope upgrade                # install the latest server release
 isotope ext list               # system extensions
-isotope backup                 # back up /home and the connections
+isotope backup                 # back up the whole machine
 sudo nmcli device status      # the network
 docker run --rm hello-world   # containers, kept on the persistent partition
 ```

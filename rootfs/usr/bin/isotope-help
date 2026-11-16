@@ -31,7 +31,7 @@ software() {
         "isotope ext install <name>" "add it to /usr, checked first (admin only)"
     command -v restic >/dev/null 2>&1 && printf 'Software\t%s\t%s\n' \
         "isotope backup init <dir>" "back up to a USB disk or server (admin only)" \
-        "isotope restore --from <dir>" "restore files, Wi-Fi, apps on a new install"
+        "isotope restore --from <dir>" "bring a whole machine back on a new install"
     printf 'Software\t%s\t%s\n' \
         "isotope" "check for a new Isotope release" \
         "isotope upgrade" "install it (applies on the next boot)"
