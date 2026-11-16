@@ -3248,7 +3248,7 @@ ENV CARGO_HOME=/usr/local/cargo \
     CARGO_INCREMENTAL=0
 # renovate: datasource=crate depName=just
 ARG JUST_VERSION=1.43.0
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     cargo install just --version ${JUST_VERSION} --locked --root /usr/local
 COPY tools/cosmic-build.sh /usr/local/bin/cosmic-build
 WORKDIR /build
@@ -3258,7 +3258,7 @@ WORKDIR /build
 FROM cosmic-build AS greetd
 # renovate: datasource=github-tags depName=kennylevinsen/greetd
 ARG GREETD_VERSION=0.10.3
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     curl --retry-all-errors -fsSL --retry 5 https://github.com/kennylevinsen/greetd/archive/refs/tags/${GREETD_VERSION}.tar.gz | tar -xz && \
     cd greetd-${GREETD_VERSION} && cargo build --release --locked && \
     install -Dm755 target/release/greetd /greetd/usr/bin/greetd && \
@@ -3268,7 +3268,7 @@ RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry
 FROM cosmic-build AS pop-launcher
 # renovate: datasource=github-tags depName=pop-os/cosmic-session extractVersion=^epoch-(?<version>\d+(\.\d+)*)$
 ARG COSMIC_VERSION=1.11.0
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     curl --retry-all-errors -fsSL --retry 5 https://github.com/pop-os/launcher/archive/refs/tags/epoch-${COSMIC_VERSION}.tar.gz | tar -xz && \
     cd launcher-epoch-${COSMIC_VERSION} && just build-release --locked && \
     just rootdir=/pop-launcher install && \
@@ -3291,45 +3291,45 @@ FROM cosmic-build AS cosmic-shell
 ARG COSMIC_VERSION=1.11.0
 ENV COSMIC_VERSION=${COSMIC_VERSION} COSMIC_OUT=/cosmic
 ENV CARGO_TARGET_DIR=/cargo-target
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-comp
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-session
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-settings-daemon
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-panel && rm -rf /cargo-target/*
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-applets && rm -rf /cargo-target/*
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-bg && rm -rf /cargo-target/*
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-osd && rm -rf /cargo-target/*
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-notifications && rm -rf /cargo-target/*
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-launcher && rm -rf /cargo-target/*
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-app-library && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-comp
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-session
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-settings-daemon
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-panel && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-applets && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-bg && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-osd && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-notifications && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-launcher && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-app-library && rm -rf /cargo-target/*
 # cosmic-workspaces installs with make, not just.
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked \
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked \
     mkdir -p /build/ws && curl --retry-all-errors -fsSL --retry 5 https://github.com/pop-os/cosmic-workspaces-epoch/archive/refs/tags/epoch-${COSMIC_VERSION}.tar.gz | tar -xz --strip-components=1 -C /build/ws && \
     cd /build/ws && cargo build --release --locked --bin cosmic-workspaces && \
     make install DESTDIR=/cosmic CARGO_TARGET_DIR=/cargo-target && \
     ! ldd /cosmic/usr/bin/cosmic-workspaces | grep 'not found' && \
     cd /build && rm -rf /build/ws /cargo-target/*
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-idle && rm -rf /cargo-target/*
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-randr && rm -rf /cargo-target/*
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-screenshot && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-idle && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-randr && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-screenshot && rm -rf /cargo-target/*
 FROM cosmic-build AS cosmic-apps
 # renovate: datasource=github-tags depName=pop-os/cosmic-session extractVersion=^epoch-(?<version>\d+(\.\d+)*)$
 ARG COSMIC_VERSION=1.11.0
 ENV COSMIC_VERSION=${COSMIC_VERSION} COSMIC_OUT=/cosmic
 ENV CARGO_TARGET_DIR=/cargo-target
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build xdg-desktop-portal-cosmic && rm -rf /cargo-target/*
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-settings && rm -rf /cargo-target/*
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked COSMIC_CARGO_ARGS="--package cosmic-files --package cosmic-files-applet --package cosmic-files-thumbnailer" cosmic-build cosmic-files && rm -rf /cargo-target/*
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-term && rm -rf /cargo-target/*
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-edit && rm -rf /cargo-target/*
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-store && rm -rf /cargo-target/*
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked COSMIC_CARGO_ARGS="--all" cosmic-build cosmic-greeter && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build xdg-desktop-portal-cosmic && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-settings && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked COSMIC_CARGO_ARGS="--package cosmic-files --package cosmic-files-applet --package cosmic-files-thumbnailer" cosmic-build cosmic-files && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-term && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-edit && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked cosmic-build cosmic-store && rm -rf /cargo-target/*
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked COSMIC_CARGO_ARGS="--all" cosmic-build cosmic-greeter && rm -rf /cargo-target/*
 # cosmic-initial-setup reads the system locale from systemd-localed
 # (org.freedesktop.locale1), which Hadron builds without, and gives up on the
 # whole language page when it is absent: an empty list and no way past it. The
 # sed makes a missing localed mean "no system locale set", so the page still
 # lists the languages `locale -a` reports. Its crabtime macros also insist the
 # target dir is named `target`, hence the nested CARGO_TARGET_DIR.
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked \
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=cosmic-target,target=/cargo-target,sharing=locked \
     mkdir -p /build/is && curl --retry-all-errors -fsSL --retry 5 https://github.com/pop-os/cosmic-initial-setup/archive/refs/tags/epoch-${COSMIC_VERSION}.tar.gz | tar -xz --strip-components=1 -C /build/is && \
     cd /build/is && \
     sed -i 's/\.wrap_err("could not get locale from locale1")?/.unwrap_or_default()/' src/page/language.rs && \
@@ -3694,12 +3694,12 @@ FROM niri-build AS librsvg
 ARG CARGO_C_VERSION=0.10.26
 # renovate: datasource=gitlab-tags depName=GNOME/librsvg registryUrl=https://gitlab.gnome.org extractVersion=^(?<version>\d+(\.\d+)*)$
 ARG LIBRSVG_VERSION=2.63.4
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     cargo install cargo-c --version ${CARGO_C_VERSION} --locked --features vendored-openssl --root /usr/local
 RUN curl --retry-all-errors -fL --retry 5 https://download.gnome.org/sources/librsvg/${LIBRSVG_VERSION%.*}/librsvg-${LIBRSVG_VERSION}.tar.xz -o r.tar.xz && tar -xf r.tar.xz && mv librsvg-* src
 WORKDIR /build/src
 RUN pip3 install meson ninja
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     meson setup buildDir ${COMMON_MESON_FLAGS} -Dintrospection=disabled -Dpixbuf=disabled -Dpixbuf-loader=disabled \
       -Drsvg-convert=disabled -Ddocs=disabled -Dvala=disabled -Dtests=false -Davif=disabled && \
     DESTDIR=/librsvg ninja -C buildDir install && \
@@ -3712,7 +3712,7 @@ FROM niri-build AS niri
 # renovate: datasource=github-tags depName=YaLTeR/niri extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG NIRI_VERSION=26.04
 ENV CARGO_TARGET_DIR=/cargo-target
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=niri-target,target=/cargo-target,sharing=locked \
     curl --retry-all-errors -fsSL --retry 5 https://github.com/YaLTeR/niri/archive/refs/tags/v${NIRI_VERSION}.tar.gz | tar -xz && \
     cd niri-${NIRI_VERSION} && \
@@ -3733,7 +3733,7 @@ FROM niri-build AS xwayland-satellite
 # renovate: datasource=github-tags depName=Supreeeme/xwayland-satellite extractVersion=^v(?<version>\d+(\.\d+)*)$
 ARG XWAYLAND_SATELLITE_VERSION=0.8.3
 ENV CARGO_TARGET_DIR=/cargo-target
-RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry \
+RUN --mount=type=cache,id=cosmic-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=niri-target,target=/cargo-target,sharing=locked \
     curl --retry-all-errors -fsSL --retry 5 https://github.com/Supreeeme/xwayland-satellite/archive/refs/tags/v${XWAYLAND_SATELLITE_VERSION}.tar.gz | tar -xz && \
     cd xwayland-satellite-${XWAYLAND_SATELLITE_VERSION} && \
